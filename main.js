@@ -851,13 +851,11 @@ function makeAlien() { // chibi grey alien: huge spherical head (~37% of height)
   const gun = mk(0x5a636e, { roughness: 0.48, metalness: 0.28, emissive: 0x141820, emissiveIntensity: 0.08 });
   const gunD = mk(0x3c434c, { roughness: 0.52, metalness: 0.24 });
   const purp = mk(0x6a3a9a, { roughness: 0.42, metalness: 0.22, emissive: 0x2a1055, emissiveIntensity: 0.35 });
-  const eyeM = mk(0x05060a, { roughness: 0.05, metalness: 0.78, emissive: 0x140818, emissiveIntensity: 0.28 });
+  const eyeM = new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
   const lip = mk(0x5a6268, { roughness: 0.48 });
   const glove = mk(0x8b959e, { roughness: 0.5, metalness: 0.12 });
   const cyan = mk(0x3ae8ff, { roughness: 0.22, metalness: 0.35, emissive: 0x14c8e6, emissiveIntensity: 1.15 });
   const cyanG = new THREE.MeshBasicMaterial({ color: 0x48f2ff, toneMapped: false });
-  const hlA = new THREE.MeshBasicMaterial({ color: 0x8aa0ff, toneMapped: false });
-  const hlB = new THREE.MeshBasicMaterial({ color: 0xc4b8ff, toneMapped: false });
   const pink = mk(0xff4f9e, { roughness: 0.6 }), pinkD = mk(0xd93a82, { roughness: 0.6 });
   const CAP = (r, len, cs = 12, rs = 24) => new THREE.CapsuleGeometry(r, len, cs, rs);
   const root = new THREE.Group(); root.name = 'monkey';
@@ -902,10 +900,9 @@ function makeAlien() { // chibi grey alien: huge spherical head (~37% of height)
   const eggPts = [[0.022, 0.008], [0.048, 0.028], [0.095, 0.055], [0.14, 0.09], [0.172, 0.125], [0.186, 0.162], [0.188, 0.2], [0.178, 0.24], [0.155, 0.278], [0.118, 0.312], [0.058, 0.338], [0.001, 0.352]].map(p => new THREE.Vector2(p[0], p[1]));
   const egg = part(head, new THREE.LatheGeometry(eggPts, 64), skin);
   egg.geometry.computeVertexNormals();
-  // 1dcb401 rounded ellipsoid eyes (smooth black almonds, outer corners tilted up).
-  // Same grape / tilt / highlights as 1dcb401; vertices that would poke past the head
-  // outline are pulled back onto a thin shell just outside the egg so the 3D bulge
-  // stays but the far eye no longer floats outside the silhouette.
+  // Rounded almond eyes (same grape and outer-corner tilt as 1dcb401), but completely
+  // black and flush: no highlights, unlit black material, every vertex projected onto a
+  // thin shell just outside the head lathe so they sit in the face with no bulge.
   const eggR = y => {
     if (y <= eggPts[0].y) return eggPts[0].x;
     if (y >= eggPts[eggPts.length - 1].y) return eggPts[eggPts.length - 1].x;
@@ -917,34 +914,33 @@ function makeAlien() { // chibi grey alien: huge spherical head (~37% of height)
     }
     return eggPts[eggPts.length - 1].x;
   };
-  const pullEyeIn = (mesh, pad) => {
+  const conformEye = (mesh, pad, thick) => {
     mesh.updateMatrix();
     const mat = mesh.matrix.clone();
     const inv = mat.clone().invert();
     const pos = mesh.geometry.attributes.position;
-    const v = new THREE.Vector3();
+    const v = new THREE.Vector3(), local = new THREE.Vector3();
+    const rGeo = 0.07;
     for (let i = 0; i < pos.count; i++) {
-      v.fromBufferAttribute(pos, i).applyMatrix4(mat);
-      const R = eggR(v.y) + pad;
+      local.fromBufferAttribute(pos, i);
+      const nz = THREE.MathUtils.clamp(local.z / rGeo, -1, 1);
+      v.copy(local).applyMatrix4(mat);
       const r = Math.hypot(v.x, v.z);
-      if (r > R && r > 1e-8) {
-        const k = R / r;
-        v.x *= k;
-        v.z *= k;
-        v.applyMatrix4(inv);
-        pos.setXYZ(i, v.x, v.y, v.z);
-      }
+      if (r < 1e-8) continue;
+      const target = eggR(v.y) + pad - (1 - nz) * 0.5 * thick;
+      const k = target / r;
+      v.x *= k; v.z *= k;
+      v.applyMatrix4(inv);
+      pos.setXYZ(i, v.x, v.y, v.z);
     }
     pos.needsUpdate = true;
     mesh.geometry.computeVertexNormals();
   };
   for (const sd of [-1, 1]) {
-    part(head, S(0.055, 24, 18), skinD, 0.114 * sd, 0.166, 0.16, 1.32, 0.76, 0.38);
-    const eye = part(head, S(0.07, 40, 32), eyeM, 0.116 * sd, 0.167, 0.195, 1.42, 0.72, 0.58);
+    const eye = part(head, S(0.07, 40, 32), eyeM, 0.116 * sd, 0.167, 0.195, 1.42, 0.72, 0.14);
     eye.name = 'alienEye'; eye.rotation.z = 0.36 * sd; eye.rotation.y = -0.18 * sd;
-    pullEyeIn(eye, 0.042);
-    part(eye, S(0.018, 16, 14), hlA, -0.006, 0.018, 0.052);
-    part(eye, S(0.008, 10, 8), hlB, 0.016, -0.01, 0.055);
+    eye.renderOrder = 1;
+    conformEye(eye, 0.003, 0.008);
   }
   part(head, S(0.006, 8, 6), skinD, -0.012, 0.108, 0.156, 0.7, 1.1, 0.4);
   part(head, S(0.006, 8, 6), skinD, 0.012, 0.108, 0.156, 0.7, 1.1, 0.4);
@@ -1186,22 +1182,44 @@ function tickZoom(dt) {
 }
 function toggleView() { st.fp = !st.fp; }
 function toggleFs() { const d = document; if (!d.fullscreenElement) d.documentElement.requestFullscreen?.().catch(() => {}); else d.exitFullscreen?.(); }
+function cabinetScreenUp() {
+  if (document.body.classList.contains('ingame')) return true;
+  const w = document.getElementById('gvWatchOv');
+  if (w && w.classList.contains('on')) return true;
+  const p = window.__arcade && window.__arcade.play;
+  return !!(p && p.mode === 'game');
+}
 function updateTurn() {
   const el = document.getElementById('turnHint'); if (!el) return;
   const portrait = MOBILE && innerHeight > innerWidth * 1.08;
-  el.classList.toggle('on', portrait);
+  el.classList.toggle('on', portrait && !cabinetScreenUp());   // hide the rotate-to-landscape hint while a cabinet game or Watch is up
 }
-function wantWide() {
-  if (!MOBILE) { st.orientLock = 'desktop'; updateTurn(); return; }
+function lockOrient(mode) {
+  st.orientWant = mode;
+  updateTurn();
+  if (!MOBILE) { st.orientLock = 'desktop'; return; }
   st.orientTried = true;
   const root = document.documentElement, fs = root.requestFullscreen || root.webkitRequestFullscreen;
   if (fs && !document.fullscreenElement) Promise.resolve(fs.call(root)).catch(() => {});
   const o = screen.orientation;
   if (o && typeof o.lock === 'function') {
-    Promise.resolve(o.lock('landscape')).then(() => { st.orientLock = 'ok'; updateTurn(); }).catch(() => { st.orientLock = 'failed'; updateTurn(); });
+    Promise.resolve(o.lock(mode)).then(() => { st.orientLock = 'ok'; updateTurn(); }).catch(() => { st.orientLock = 'failed'; updateTurn(); });
   } else { st.orientLock = 'unsupported'; updateTurn(); }
 }
-window.__wantWide = wantWide;
+function wantWide() { lockOrient('landscape'); }   // walking the arcade floor (Dave: keep this sideways)
+function wantTall() { lockOrient('portrait'); }    // cabinet play / watch: upright, then wantWide() again on the way out
+window.__wantWide = wantWide; window.__wantTall = wantTall;
+function hookWatchOrient() {
+  const hook = el => {
+    const sync = () => { if (el.classList.contains('on')) wantTall(); else if (!cabinetScreenUp()) wantWide(); };
+    new MutationObserver(sync).observe(el, { attributes: true, attributeFilter: ['class'] });
+  };
+  const el = document.getElementById('gvWatchOv');
+  if (el) { hook(el); return; }
+  const mo = new MutationObserver(() => { const n = document.getElementById('gvWatchOv'); if (n) { mo.disconnect(); hook(n); } });
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+}
+hookWatchOrient();
 document.getElementById('bView').onclick = toggleView;
 document.getElementById('bFs').onclick = toggleFs;
 if (matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) document.getElementById('bFs').style.display = 'none';
@@ -1730,7 +1748,7 @@ const opts = setupOpts({ play, kiosk, shield, st, monkey, setFloor, getFloor: ()
 requestAnimationFrame(frame);
 
 // hooks for tests / future art work
-window.__arcade = { powerSave: PS, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, joyFrom, joyClear, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow) };
+window.__arcade = { powerSave: PS, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, wantTall, joyFrom, joyClear, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow) };
 const mp = setupMP({ scene, camera, monkey, makeMonkey, makeAlien, st, play, getTp: () => tp, HALF, Z2, HALL_L, WX: 80 }); window.__arcade.mp = mp;   // multiplayer step 1: public room, 10 players
 // after the first room frames: pull in the shop, then the window scenery, off the critical path
 { const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 1500 }) : setTimeout(f, 200));
