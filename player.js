@@ -11,30 +11,35 @@
   var FUR = [['brown', 0x4e2a14, 0xd9a779], ['gold', 0xb7862a, 0xf3d79a], ['silver', 0x8d939c, 0xe4e7ec], ['black', 0x1c1a1c, 0x8a7a70], ['white', 0xeeeae2, 0xffe0cf], ['ginger', 0xc4561c, 0xf6c08a], ['pink', 0xe86aa8, 0xffd0e4], ['blue', 0x3a6ad8, 0xc8dcff]];
   var SHOE = [['red', 0x8a1e2c, 0xf1e8d6], ['blue', 0x1f4fbf, 0xeaf0ff], ['black', 0x1a1a1e, 0x4a4a52], ['white', 0xf2f2f4, 0xd03040], ['green', 0x1f9a3a, 0xe8ffe8], ['pink', 0xff5fb4, 0xffffff], ['gold', 0xd9a51c, 0x2a1a08], ['purple', 0x6a24c4, 0x00e5ff]];
   var GLAS = [['none', '✕'], ['shades', '<svg viewBox="0 0 40 20" width="34" height="17"><path d="M2 5h36" stroke="#ccc" stroke-width="2"/><ellipse cx="11" cy="10" rx="9" ry="6" fill="#111" stroke="#ccc" stroke-width="1.5"/><ellipse cx="29" cy="10" rx="9" ry="6" fill="#111" stroke="#ccc" stroke-width="1.5"/></svg>'], ['round', '<svg viewBox="0 0 40 20" width="34" height="17"><circle cx="11" cy="10" r="7" fill="#cfeeff44" stroke="#ffc640" stroke-width="2.2"/><circle cx="29" cy="10" r="7" fill="#cfeeff44" stroke="#ffc640" stroke-width="2.2"/><path d="M18 9h4" stroke="#ffc640" stroke-width="2"/></svg>'], ['visor', '<svg viewBox="0 0 40 20" width="34" height="17"><rect x="2" y="4" width="36" height="12" rx="6" fill="#00e5ff" stroke="#fff" stroke-width="1.5"/></svg>']];
-  var BACK = [['none', '✕']];
+  var BACK = [['none', '✕']], HAND = [['none', '✕']];
+  // t746u alien SUIT COLOUR: [id, suit main, darker trim, zip lining, gloves]; grey = his original suit (free, default). Alien only.
+  var SUIT = [['suitgrey', 0x5a636e, 0x3c434c, 0x6a3a9a, 0x8b959e]];   // t741u: HAND row (held items): the laser pistol
   // shop-only items (t606u): bought for tickets in the in-game wardrobe (shop's wardrobe corner), never listed on the start screen.
   // Each entry: [id, icon(, hex1, hex2 for hoodies)]; price per row in PRICE. Ownership: 'galacticarcade.wardrobeOwned' = ["hat:tophat", ...].
   var NEW = { hat: [['tophat', '🎩'], ['wizard', '🧙'], ['viking', '🛡️'], ['chef', '👨\u200d🍳'], ['bunny', '🐰'], ['propeller', '🚁']],
-    glasses: [['monocle', '🧐'], ['heart', '💗'], ['star', '⭐'], ['3d', '<b style="font:900 13px Arial"><span style="color:#ff3030">3</span><span style="color:#30c8ff">D</span></b>'], ['mustache', '🥸'], ['mask', '🥷']],
+    glasses: [['monocle', '🧐'], ['heart', '💗'], ['star', '⭐'], ['3d', '<b style="font:900 13px Arial"><span style="color:#ff3030">3</span><span style="color:#30c8ff">D</span></b>'], ['mustache', '🥸'], ['mask', '🥷'], ['skull', '<svg viewBox="0 0 40 44" width="34" height="37"><path d="M20 2C9 2 3 10 3 19c0 6 3 10 7 12v6c0 2 2 4 4 4h12c2 0 4-2 4-4v-6c4-2 7-6 7-12C37 10 31 2 20 2z" fill="#efe5c9" stroke="#2a221c" stroke-width="2"/><path d="M9 18c1-4 5-6 9-4 1 3-1 8-5 8-3 0-4-2-4-4zM31 18c-1-4-5-6-9-4-1 3 1 8 5 8 3 0 4-2 4-4z" fill="#0c0910"/><path d="M20 23l-3 6h6z" fill="#0c0910"/><path d="M12 33h16M15 31v5M20 31v5M25 31v5" stroke="#2a221c" stroke-width="1.6"/></svg>']],
     back: [['jetpack', '🚀'], ['cape', '🦸'], ['wings', '🪽'], ['batwings', '🦇']],
+    suit: [['suitred', 0xb3222f, 0x6a121a, 0x2b1a3e, 0xd8d0c8], ['suitgold', 0xc9971f, 0x7a5a10, 0x6a3a9a, 0xe8e2d0], ['suitteal', 0x138a8a, 0x0b4f52, 0x6a3a9a, 0xa9c4c8], ['suitwhite', 0xdfe4ea, 0x9aa4b0, 0x6a3a9a, 0xf2f4f6], ['suitblack', 0x22252b, 0x101215, 0x8a3ad0, 0x3a3f47]],   // t746u: 5 alien suits, 5 tickets each
+    hand: [['pistol', '<svg viewBox="0 0 44 28" width="36" height="23"><rect x="4" y="5" width="26" height="10" rx="2" fill="#3a4558"/><rect x="26" y="7" width="9" height="6" fill="#1a2028"/><rect x="35" y="7.5" width="6" height="5" rx="1.5" fill="#48f2ff"/><rect x="8" y="2" width="12" height="4" fill="#247888"/><path d="M9 15h8l-2 11H7z" fill="#1a2028"/><circle cx="41" cy="10" r="3.4" fill="#48f2ff" opacity=".45"/></svg>']],
     hoodie: [['galaxy', 0x2a1470, 0x160a40], ['lime', 0x86e02a, 0x4a8a10], ['maroon', 0x6e1430, 0x3c0818], ['sky', 0x6cc8ff, 0x2a7ab8]] };
-  var PRICE = { hat: 5, glasses: 5, back: 5, hoodie: 5 }, OKEY = 'galacticarcade.wardrobeOwned', MIGKEY = 'galacticarcade.wardrobeMig';
+  var PRICE = { hat: 5, glasses: 5, back: 5, hoodie: 5, hand: 5, suit: 5 }, OKEY = 'galacticarcade.wardrobeOwned', MIGKEY = 'galacticarcade.wardrobeMig';
   var BASE = { hat: HATS, glasses: GLAS, hoodie: HOOD, fur: FUR, shoes: SHOE }, OPTS = {};
   var START = { hat: [HATS[0], HATS[1]], hoodie: [HOOD[0], HOOD[1], HOOD[3]] };   // + Dave: red (pink 'cap') or blue cap   // t: Dave "start screen only 3 hoodie colours, no other items" (navy default, red, green)
   var START_IDS = {}; for (var sk in START) { START_IDS[sk] = {}; START[sk].forEach(function (a) { START_IDS[sk][a[0]] = 1; }); }
-  for (var bk in BASE) OPTS[bk] = BASE[bk].concat(NEW[bk] || []); OPTS.back = BACK.concat(NEW.back);
+  for (var bk in BASE) OPTS[bk] = BASE[bk].concat(NEW[bk] || []); OPTS.back = BACK.concat(NEW.back); OPTS.hand = HAND.concat(NEW.hand); OPTS.suit = SUIT.concat(NEW.suit);
+  (function () { var G = OPTS.glasses, i = G.findIndex(function (o) { return o[0] === 'skull'; }); if (i > 1) G.splice(1, 0, G.splice(i, 1)[0]); })();   // t743u: SKULL MASK is the first glasses/face tile after ✕ (seen without scrolling)
   var HATS_ALL = OPTS.hat, GLAS_ALL = OPTS.glasses, HOOD_ALL = OPTS.hoodie;
   function isNew(k, v) { return !!(NEW[k] && NEW[k].some(function (a) { return a[0] === v; })); }
   function isStart(k, v) { return !!(START_IDS[k] && START_IDS[k][v]); }
-  function isFree(k, v) { return v === 'none' || isStart(k, v); }
+  function isFree(k, v) { return v === 'none' || isStart(k, v) || (k === 'suit' && v === 'suitgrey'); }
   function priceOf(k, v) { if (isFree(k, v)) return 0; if (isNew(k, v)) return PRICE[k]; return 1; }   /* Dave: start opts free; NEW items 5 each; other base items 1 ticket */
   function owned() { try { var a = JSON.parse(localStorage.getItem(OKEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
   function has(k, v) { return isFree(k, v) || owned().indexOf(k + ':' + v) >= 0; }
   function migrateOwned(d) { try { var o = owned(), ch = 0, add = function (k, v) { if (!v || isFree(k, v)) return; var id = k + ':' + v; if (o.indexOf(id) < 0) { o.push(id); ch = 1; } };
-    if (localStorage.getItem(MIGKEY) !== '1') { ['hat', 'hoodie', 'fur', 'shoes', 'glasses', 'back'].forEach(function (k) { add(k, d[k]); }); localStorage.setItem(MIGKEY, '1'); ch = 1; }
+    if (localStorage.getItem(MIGKEY) !== '1') { ['hat', 'hoodie', 'fur', 'shoes', 'glasses', 'back', 'hand', 'suit'].forEach(function (k) { add(k, d[k]); }); localStorage.setItem(MIGKEY, '1'); ch = 1; }
     add('fur', 'brown'); add('shoes', 'red');   /* base monkey always owned */
     if (ch) localStorage.setItem(OKEY, JSON.stringify(o)); } catch (e) {} }
-  function load() { var d = { name: '', hat: 'cap', hoodie: 'navy', fur: 'brown', shoes: 'red', glasses: 'none', back: 'none', char: 'monkey' }; try { var o = JSON.parse(localStorage.getItem(KEY) || '{}'); for (var k in d) if (typeof o[k] === 'string') d[k] = o[k]; } catch (e) {}
+  function load() { var d = { name: '', hat: 'cap', hoodie: 'navy', fur: 'brown', shoes: 'red', glasses: 'none', back: 'none', hand: 'none', suit: 'suitgrey', char: 'monkey' }; try { var o = JSON.parse(localStorage.getItem(KEY) || '{}'); for (var k in d) if (typeof o[k] === 'string') d[k] = o[k]; } catch (e) {}
     if (d.char !== 'alien') d.char = 'monkey';   /* old saves and unknown values default to the monkey */
     migrateOwned(d); for (var k2 in OPTS) if (!OPTS[k2].some(function (a) { return a[0] === d[k2]; }) || !has(k2, d[k2])) d[k2] = OPTS[k2][0][0]; d.name = clean(d.name); return d; }
   function clean(s) { return String(s || '').replace(/[\u0000-\u001f<>]/g, '').slice(0, MAXN); }
@@ -52,7 +57,7 @@
 
   // ---------- 3D look (recolour Arcade's monkey materials + our own hat meshes) ----------
   var mats = null, hatGeo = null;
-  function scanMats(root) { var m = { fur: [], tan: [], navy: [], rib: [], maroon: [], cream: [] }, H = { 0x4e2a14: 'fur', 0xd9a779: 'tan', 0x1d2452: 'navy', 0x141a3a: 'rib', 0x8a1e2c: 'maroon', 0xf1e8d6: 'cream' };
+  function scanMats(root) { var m = { fur: [], tan: [], navy: [], rib: [], maroon: [], cream: [], suit: [], suitD: [], lin: [], glove: [] }, H = { 0x4e2a14: 'fur', 0xd9a779: 'tan', 0x1d2452: 'navy', 0x141a3a: 'rib', 0x8a1e2c: 'maroon', 0xf1e8d6: 'cream', 0x5a636e: 'suit', 0x3c434c: 'suitD', 0x6a3a9a: 'lin', 0x8b959e: 'glove' };
     root.traverse(function (o) { if (o.isMesh && o.material && o.material.color) { var k = H[o.material.userData.gaOrig != null ? o.material.userData.gaOrig : o.material.color.getHex()]; if (k && m[k].indexOf(o.material) < 0) { o.material.userData.gaOrig = o.material.userData.gaOrig != null ? o.material.userData.gaOrig : o.material.color.getHex(); m[k].push(o.material); } } }); return m; }
   function capOf(root) { var c = null; root.traverse(function (o) { if (!c && o.isGroup && o.userData.gaCap) c = o; }); if (c) return c;
     root.traverse(function (o) { if (!c && o.isGroup && o.children.some(function (k) { return k.isMesh && k.material && k.material.color && k.material.color.getHex() === 0xff4f9e; })) c = o; }); if (c) c.userData.gaCap = 1; return c; }
@@ -154,6 +159,34 @@
     g = G.mustache = grp(T, head, 'gaGl_mustache'); var mu = std(T, 0x2a160a, { roughness: 0.9 }); [-1, 1].forEach(function (sd) { m = add(g, new T.SphereGeometry(0.045, 10, 6), mu, 0.045 * sd, 0.085, 0.27, 1.3, 0.45, 0.6); m.rotation.z = 0.35 * sd; });
     g = G.mask = grp(T, head, 'gaGl_mask'); var mk = std(T, 0x18181e, { roughness: 0.8, side: T.DoubleSide }); add(g, new T.CylinderGeometry(0.205, 0.205, 0.065, 20, 1, true), mk, 0, 0.17, 0);
     [-1, 1].forEach(function (sd) { m = add(g, new T.BoxGeometry(0.03, 0.12, 0.01), mk, 0.05 * sd, 0.15, -0.21); m.rotation.z = 0.4 * sd; });
+    // t743u skull mask (Dave's mockup): sculpted ivory skull face plate — cranium plate over brow/face (top fur + ears stay), brow ridges, big dark
+    // almond sockets, cheekbones, triangular nose cavity, upper/lower teeth with a stitched gap, mandible + chin, dark strap with side clips; thin
+    // dark back-face outline so it reads as a separate mask (also on the alien's round grey head). Per-character fit in applyRoot (gaSkFit).
+    g = G.skull = grp(T, head, 'gaGl_skull');
+    var bone = std(T, 0xeee4ca, { roughness: 0.5 }), boneD = std(T, 0xcfc3a4, { roughness: 0.6 }), sock = std(T, 0x0c0910, { roughness: 0.95 }),
+      edge = new T.MeshBasicMaterial({ color: 0x2a221c, side: T.BackSide }), strap = std(T, 0x23212a, { roughness: 0.8 }), clip = std(T, 0x9aa0a8, { metalness: 0.6, roughness: 0.35 });
+    var CZ = 0.012, SZ = 1.14, R = 0.205, fz = function (x, y) { var dx = x, dy = y - 0.155, q = R * R - dx * dx - dy * dy; return CZ + (q > 0 ? Math.sqrt(q) : 0) * SZ; };   // front surface depth
+    var shell = function (r, cy, cz, sz, p0, pl, t0, tl, mat, rows) { return add(g, new T.SphereGeometry(r, 32, rows || 20, p0, pl, t0, tl), mat, 0, cy, cz, 1, 1, sz); };
+    var outl = function (mesh) { var o = new T.Mesh(mesh.geometry, edge); o.position.copy(mesh.position); o.scale.copy(mesh.scale).multiplyScalar(1.035); o.renderOrder = -1; g.add(o); return o; };
+    var FRONT0 = Math.PI / 2 - 1.12, FRONTL = 2.24;   // +-64 deg around the face: monkey ears (x +-0.2) stay out
+    m = shell(R, 0.155, CZ, SZ, FRONT0, FRONTL, 0.5, 1.45, bone); outl(m);                     // cranium / face plate: forehead down to the upper teeth
+    var MY = 0.07, MZ = 0.128, MR = 0.136, MSY = 0.86, MSZ = 1.0, mz = function (x, y) { var ex = x / MR, ey = (y - MY) / (MR * MSY), q = 1 - ex * ex - ey * ey; return MZ + MR * MSZ * (q > 0 ? Math.sqrt(q) : 0); };
+    m = add(g, new T.SphereGeometry(MR, 28, 16, Math.PI / 2 - 1.35, 2.7, 0.75, 2.25), bone, 0, MY, MZ, 1, MSY, MSZ); outl(m);   // jaw / mandible plate: encloses the monkey muzzle, chin below the teeth
+    [-1, 1].forEach(function (sd) {
+      m = add(g, new T.SphereGeometry(0.06, 16, 10), bone, 0.072 * sd, 0.226, fz(0.072, 0.226) - 0.016, 1.25, 0.38, 0.45); m.rotation.z = -0.22 * sd;   // brow ridge
+      m = add(g, new T.SphereGeometry(0.056, 20, 14), sock, 0.073 * sd, 0.17, fz(0.073, 0.17) - 0.012, 1.1, 1.22, 0.5); m.rotation.z = 0.38 * sd;      // big almond socket
+      m = add(g, new T.SphereGeometry(0.036, 14, 10), bone, 0.112 * sd, 0.118, fz(0.112, 0.118) - 0.024, 1.3, 0.7, 0.5);                           // cheekbone
+      add(g, new T.SphereGeometry(0.02, 10, 8), boneD, 0.135 * sd, 0.07, fz(0.135, 0.07) - 0.012, 0.8, 1.3, 0.5);                                   // jaw hinge shadow
+      add(g, new T.BoxGeometry(0.02, 0.028, 0.034), clip, 0.176 * sd, 0.215, 0.07).name = 'gaSkClip';                                                                 // grey side clip (mockup)
+    });
+    add(g, new T.CylinderGeometry(0.175, 0.175, 0.026, 28, 1, true, 0.35, Math.PI * 2 - 0.7), new T.MeshStandardMaterial({ color: 0x23212a, roughness: 0.8, side: T.DoubleSide }), 0, 0.215, 0).name = 'gaSkStrap';   // strap round the sides + back (front gap under the plate)
+    var nose = new T.Shape(); nose.moveTo(0, 0.026); nose.lineTo(0.017, -0.006); nose.quadraticCurveTo(0.012, -0.016, 0.002, -0.01); nose.lineTo(0, -0.012); nose.lineTo(-0.002, -0.01); nose.quadraticCurveTo(-0.012, -0.016, -0.017, -0.006); nose.closePath();
+    add(g, new T.ShapeGeometry(nose), new T.MeshBasicMaterial({ color: 0x0c0910, side: T.DoubleSide }), 0, 0.122, Math.max(fz(0, 0.122), mz(0, 0.122)) + 0.002);           // triangular nose cavity
+    var tz = function (x, y) { return mz(x, y) + 0.005; };
+    for (var ti = -3; ti <= 3; ti++) { var tx = ti * 0.0205, tt = add(g, new T.BoxGeometry(0.018, 0.022, 0.014), bone, tx, 0.0885, tz(tx, 0.0885) - 0.005); tt.rotation.y = tx * 4;
+      tt = add(g, new T.BoxGeometry(0.018, 0.02, 0.014), bone, tx, 0.0655, tz(tx, 0.0655) - 0.005); tt.rotation.y = tx * 4;
+      tt = add(g, new T.BoxGeometry(0.0215, 0.05, 0.01), sock, tx, 0.077, tz(tx, 0.077) - 0.009); tt.rotation.y = tx * 4;   // dark mouth behind each tooth (follows the jaw curve)
+      tt = add(g, new T.BoxGeometry(0.0215, 0.0035, 0.012), sock, tx, 0.077, tz(tx, 0.077) + 0.0015); tt.rotation.y = tx * 4; }   // upper + lower teeth, stitched gap line
     // backs & extras: on the torso (head.parent.parent), behind the shoulders (-z)
     var torso = head.parent && head.parent.parent || head; torso.children.filter(function (o) { return /^gaBk/.test(o.name); }).forEach(function (o) { torso.remove(o); });
     var B = {}; Object.defineProperty(h, 'bk', { value: B, enumerable: false, configurable: true }); var bg = function (n) { var q = new T.Group(); q.name = 'gaBk_' + n; q.T = T; q.position.set(0, 0.3, -0.2); torso.add(q); return q; };
@@ -174,19 +207,42 @@
     [['wings', wingGeo, std(T, 0xf8f8ff, { side: T.DoubleSide, emissive: 0x303040 })], ['batwings', batGeo, std(T, 0x2a1838, { side: T.DoubleSide, roughness: 0.6 })]].forEach(function (w) {
       g = B[w[0]] = bg(w[0]); [-1, 1].forEach(function (sd) { m = add(g, w[1], w[2], 0.06 * sd, 0.05, -0.04, 1.5 * sd, 1.5, 1); m.rotation.y = -0.45 * sd; }); });
   }
+  // t741u laser pistol (HAND row): Sky Tower's blocky blaster, held in the monkey's right hand (main.js names it 'handR'); muzzle = 'gaPistolMuzzle'.
+  // The alien never holds it: his floating robot gets a red emitter ring instead ('gaBotGun') and fires the lasers (roomfire.js).
+  function pistolOf(T, root) { var hand = root.getObjectByName('handR'); if (!hand) return null; var g = hand.getObjectByName('gaPistol'); if (g) return g;
+    g = new T.Group(); g.name = 'gaPistol'; g.T = T; var metal = std(T, 0x3a4558, { metalness: 0.5, roughness: 0.4 }), dark = std(T, 0x1a2028, { roughness: 0.5 }), accent = std(T, 0x247888, { metalness: 0.3, roughness: 0.4 }),
+      glow = new T.MeshBasicMaterial({ color: 0x48f2ff, toneMapped: false });
+    add(g, new T.BoxGeometry(0.12, 0.14, 0.32), metal, 0, 0.025, 0.13); add(g, new T.BoxGeometry(0.09, 0.1, 0.16), dark, 0, 0.03, 0.32);
+    var m = add(g, new T.CylinderGeometry(0.036, 0.03, 0.22, 8), metal, 0, 0.032, 0.48); m.rotation.x = Math.PI / 2;
+    m = add(g, new T.CylinderGeometry(0.044, 0.044, 0.04, 8), accent, 0, 0.032, 0.4); m.rotation.x = Math.PI / 2;
+    m = add(g, new T.CylinderGeometry(0.038, 0.042, 0.05, 8), glow, 0, 0.032, 0.6); m.rotation.x = Math.PI / 2; m.name = 'gaPistolMuzzle';
+    add(g, new T.BoxGeometry(0.075, 0.16, 0.09), dark, 0, -0.09, 0.02); add(g, new T.BoxGeometry(0.045, 0.045, 0.07), dark, 0, -0.015, -0.07); add(g, new T.BoxGeometry(0.13, 0.04, 0.09), accent, 0, 0.105, 0.08);
+    g.position.set(0.02, -0.02, 0.06); g.rotation.set(0.78, 0, 0); g.visible = false; hand.add(g); return g; }
+  function botGunOf(T, root) { var bot = root.getObjectByName('alienBot'); if (!bot) return null; var g = bot.getObjectByName('gaBotGun'); if (g) return g;
+    g = new T.Group(); g.name = 'gaBotGun'; var red = new T.MeshBasicMaterial({ color: 0xff2a33, toneMapped: false }), dk = std(T, 0x2a2f38, { metalness: 0.6, roughness: 0.35 });
+    var r = new T.Mesh(new T.TorusGeometry(0.1, 0.014, 8, 28), red); r.position.set(0, 0.018, 0.19); g.add(r);
+    var n = new T.Mesh(new T.CylinderGeometry(0.03, 0.036, 0.07, 10), dk); n.rotation.x = Math.PI / 2; n.position.set(0, -0.12, 0.13); g.add(n);
+    var tp = new T.Mesh(new T.SphereGeometry(0.02, 8, 6), red); tp.position.set(0, -0.12, 0.17); g.add(tp);
+    g.visible = false; bot.add(g); return g; }
+  function applyHand(T, root, lk) { var on = lk.hand === 'pistol', alien = !!root.getObjectByName('alienBot'), pg = pistolOf(T, root), bg = botGunOf(T, root);
+    if (pg) pg.visible = on && !alien; if (bg) bg.visible = on && alien; }
   var HAT3D = ['capblue', 'crown', 'helmet', 'beanie', 'cowboy', 'party', 'pirate', 'halo', 'headphones'].concat(NEW.hat.map(function (a) { return a[0]; }));
+  function skFit(sk, root) { if (!sk || !sk.visible) return; var al = !!(root && root.userData && root.userData.char === 'alien'), f = al ? SKFIT.alien : SKFIT.monkey;   // t743u per-character fit
+    sk.position.set(0, f.y, f.z); sk.scale.set(f.s, f.s * f.sy, f.s); sk.children.forEach(function (c) { if (c.name === 'gaSkStrap') c.scale.set(f.band, 1, f.band); if (c.name === 'gaSkClip') c.position.x = Math.sign(c.position.x) * 0.176 * f.band; }); }
+  var SKFIT = { monkey: { y: 0, z: 0, s: 1, sy: 1, band: 1 }, alien: { y: 0.012, z: -0.02, s: 1.0, sy: 1.0, band: 1.1 } };
   function applyRoot(T, root, lk) { lk = lk || P; var cap = capOf(root); if (!cap) return; var h = hatMeshes(T, cap); cap.visible = lk.hat === 'cap';
-    HAT3D.forEach(function (k) { h[k].visible = lk.hat === k; }); for (var g in h.gl) h.gl[g].visible = lk.glasses === g; for (var b in h.bk) h.bk[b].visible = lk.back === b;
-    var bp = cap.parent.parent && cap.parent.parent.parent && cap.parent.parent.parent.getObjectByName('backpack'); if (bp) bp.visible = !lk.back || lk.back === 'none'; }   // Dave: a back item replaces Arcade's backpack (straps stay)
+    HAT3D.forEach(function (k) { h[k].visible = lk.hat === k; }); for (var g in h.gl) h.gl[g].visible = lk.glasses === g; skFit(h.gl.skull, root); for (var b in h.bk) h.bk[b].visible = lk.back === b;
+    var bp = cap.parent.parent && cap.parent.parent.parent && cap.parent.parent.parent.getObjectByName('backpack'); if (bp) bp.visible = !lk.back || lk.back === 'none'; applyHand(T, root, lk); }   // Dave: a back item replaces Arcade's backpack (straps stay)
   // for Arcade's mp.js (optional): dress any monkey root (e.g. a remote one whose materials keep userData.orig) in a look object
   function dress(root, lk) { var A = window.__arcade; if (!A || !root || !lk) return; var T = A.THREE, map = {}, ho = find(HOOD_ALL, lk.hoodie), fu = find(FUR, lk.fur), sh = find(SHOE, lk.shoes);
-    map[0x1d2452] = ho[1]; map[0x141a3a] = ho[2]; map[0x4e2a14] = fu[1]; map[0xd9a779] = fu[2]; map[0x8a1e2c] = sh[1]; map[0xf1e8d6] = sh[2];
+    map[0x1d2452] = ho[1]; map[0x141a3a] = ho[2]; map[0x4e2a14] = fu[1]; map[0xd9a779] = fu[2]; map[0x8a1e2c] = sh[1]; map[0xf1e8d6] = sh[2]; var su = find(OPTS.suit, lk.suit); map[0x5a636e] = su[1]; map[0x3c434c] = su[2]; map[0x6a3a9a] = su[3]; map[0x8b959e] = su[4];
     root.traverse(function (o) { if (!o.isMesh || !o.material || !o.material.color) return; var u = o.material.userData, or = u.orig != null ? u.orig : u.gaOrig; if (or != null && map[or] != null) o.material.color.setHex(map[or]); });
-    applyRoot(T, root, { hat: find(HATS_ALL, lk.hat)[0], glasses: find(GLAS_ALL, lk.glasses)[0], back: find(OPTS.back, lk.back)[0] }); }
+    applyRoot(T, root, { hat: find(HATS_ALL, lk.hat)[0], glasses: find(GLAS_ALL, lk.glasses)[0], back: find(OPTS.back, lk.back)[0], hand: find(OPTS.hand, lk.hand)[0] }); }
   function applyMats(L) { if (!mats) return; L = L || P; var ho = find(HOOD_ALL, L.hoodie), fu = find(FUR, L.fur), sh = find(SHOE, L.shoes);
     mats.navy.forEach(function (m) { m.color.setHex(ho[1]); }); mats.rib.forEach(function (m) { m.color.setHex(ho[2]); });
     mats.fur.forEach(function (m) { m.color.setHex(fu[1]); }); mats.tan.forEach(function (m) { m.color.setHex(fu[2]); });
-    mats.maroon.forEach(function (m) { m.color.setHex(sh[1]); }); mats.cream.forEach(function (m) { m.color.setHex(sh[2]); }); }
+    mats.maroon.forEach(function (m) { m.color.setHex(sh[1]); }); mats.cream.forEach(function (m) { m.color.setHex(sh[2]); });
+    var su = find(OPTS.suit, L.suit); mats.suit.forEach(function (m) { m.color.setHex(su[1]); }); mats.suitD.forEach(function (m) { m.color.setHex(su[2]); }); mats.lin.forEach(function (m) { m.color.setHex(su[3]); }); mats.glove.forEach(function (m) { m.color.setHex(su[4]); }); }
   var tag = null, tagName = null;
   function applyTag(T, mk) { if (!tag) { var c = document.createElement('canvas'); c.width = 256; c.height = 64; var tx = new T.CanvasTexture(c); tx.colorSpace = T.SRGBColorSpace;
       tag = new T.Sprite(new T.SpriteMaterial({ map: tx, transparent: true, depthWrite: false })); tag.scale.set(0.8, 0.2, 1); tag.position.y = 2.2; tag.name = 'gaNameTag'; tag.renderOrder = 5; mk.add(tag); }
@@ -211,7 +267,8 @@
   function mkR(cv) { var A = window.__arcade, T = A.THREE; try { prev.r = new T.WebGLRenderer({ canvas: cv, alpha: true, antialias: false, powerPreference: 'low-power' }); } catch (e) { prev.r = null; return false; }
     prev.r.setPixelRatio(Math.min(1.5, devicePixelRatio || 1)); prev.r.outputColorSpace = T.SRGBColorSpace; prev.r.toneMapping = A.renderer.toneMapping; prev.r.toneMappingExposure = A.renderer.toneMappingExposure;
     try { if (prev.r.debug) prev.r.debug.checkShaderErrors = false; } catch (e) {}   // t635u perf (Arcade): skip sync shader-error checks on the preview
-    try { if (prev.r.compileAsync && prev.scene && prev.cam) prev.r.compileAsync(prev.scene, prev.cam); } catch (e) {}
+    // t739u: compile() not compileAsync(): its 10 ms isReady() poll threw ("reading 'isReady'") once the preview renderer was freed on close
+    try { if (prev.scene && prev.cam) prev.r.compile(prev.scene, prev.cam); } catch (e) {}
     cv.addEventListener('webglcontextlost', function (e) { e.preventDefault(); prev.lost = (prev.lost || 0) + 1; setTimeout(function () { if (prev.r && prev.r.domElement === cv) remake(); }, 300); }, { once: true });
     return true; }
   function remake() { var old = prev.r && prev.r.domElement, n = document.createElement('canvas'); n.id = (old && old.id) || 'gaCv'; try { prev.r.dispose(); } catch (e) {} prev.r = null;
@@ -233,13 +290,23 @@
     for (var i = 0; i < 3; i++) { var ring = new T.Mesh(new T.TorusGeometry(0.25 + i * 0.17, 0.012, 6, 48), new T.MeshBasicMaterial({ color: i === 1 ? 0xff3cf0 : 0x00e5ff, toneMapped: false })); ring.rotation.x = Math.PI / 2; ring.position.y = 0.005; s.add(ring); }
     var beam = new T.Mesh(new T.CylinderGeometry(0.62, 0.62, 2.1, 32, 1, true), new T.MeshBasicMaterial({ color: 0x2a6cff, transparent: true, opacity: 0.08, side: T.DoubleSide, depthWrite: false, blending: T.AdditiveBlending })); beam.position.y = 1.05; s.add(beam);
     applyRoot(T, prev.root); }
+  // t738u: split ACCESSORIES view frames the player (disc to hat top) to fill the tall left column
+  // t741u: the preview monkey holds the laser pistol up and aimed (as in Dave's mockup); otherwise the right arm hangs relaxed
+  function prevPose(PL) { var h = prev.root && prev.root.getObjectByName('handR'); if (!h || !h.parent || !h.parent.parent || prev.root.getObjectByName('alienBot')) return; var el = h.parent, sh = el.parent, on = PL.hand === 'pistol';
+    sh.rotation.set(on ? -1.4 : 0, 0, on ? 0.2 : 0.08); el.rotation.set(on ? -0.08 : -0.3, 0, 0); var pg = h.getObjectByName('gaPistol'); if (pg) pg.rotation.set(on ? 1.48 : 0.78, on ? -0.25 : 0, 0); }
+  function splitCam(alien) { var T = window.__arcade.THREE, k = prev.hat + '|' + alien;
+    if (prev.bbK !== k) { prev.bbK = k; var ry = prev.root.rotation.y, bb = new T.Box3(), tb = new T.Box3(); prev.root.rotation.y = 0; prev.root.updateMatrixWorld(true);
+      prev.root.traverse(function (o) { if (!o.isMesh || !o.geometry) return; for (var q = o; q; q = q.parent) if (!q.visible) return; if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); tb.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld); bb.union(tb); });
+      prev.root.rotation.y = ry; prev.root.updateMatrixWorld(true); prev.bbTop = bb.isEmpty() ? (alien ? 2.1 : 1.9) : Math.min(3, Math.max(1.2, bb.max.y)); }
+    var top = prev.bbTop + 0.06, bot = -0.08, H = top - bot, t = Math.tan(15 * Math.PI / 180), a = prev.cam.aspect;
+    var d = Math.max(H / 0.9 / (2 * t), 1.5 / 0.94 / (2 * t * a)); prev.cam.position.set(0, bot + H / 2 + 0.22, d); prev.cam.lookAt(0, bot + H / 2, 0); }
   function frame() { prev.raf = requestAnimationFrame(frame); var wc = want(); if (!wc || !prev.scene) return; if (!prev.r || prev.r.domElement !== wc) attach(wc); if (!prev.r) return; if (prev.r.getContext().isContextLost()) { if (!prev.lostAt) prev.lostAt = performance.now(); if (performance.now() - prev.lostAt > 600) { prev.lostAt = 0; remake(); } return; } prev.lostAt = 0;
     var cv = prev.r.domElement, w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
     if (cv.width !== Math.round(w * prev.r.getPixelRatio()) || cv.height !== Math.round(h * prev.r.getPixelRatio())) { prev.r.setSize(w, h, false); }
     prev.cam.aspect = w / h; var fit = Math.max(1, 0.62 / prev.cam.aspect); var alienPrev = !!(prev.root && prev.root.getObjectByName('alienBot'));
-    prev.cam.position.set(0, alienPrev ? 1.40 : 1.3, (alienPrev ? 5.55 : 4.9) * fit); prev.cam.lookAt(0, alienPrev ? 1.18 : 1.02, 0); prev.cam.updateProjectionMatrix();
-    var PL = pLook(); if (wc.id === 'gaCv') { PL = Object.assign({}, PL, { glasses: 'none', hat: stHat ? PL.hat : 'none' }); }   // Dave: no hat until a cap is tapped   // Dave: no eyewear on the start screen (saved glasses kept for the game)
-    var pk = PL.hat + PL.glasses + PL.back + PL.hoodie + (PL.char || '') + wc.id; if (prev.hat !== pk) { prev.hat = pk; applyRoot(window.__arcade.THREE, prev.root, PL); if (W.try) applyMats(PL); }   // the preview always wears the chosen hat, however the pick or load happened
+    if (wc.id === 'gaWCv' && W.el && W.el.classList.contains('gaSplit')) splitCam(alienPrev); else { prev.cam.position.set(0, alienPrev ? 1.40 : 1.3, (alienPrev ? 5.55 : 4.9) * fit); prev.cam.lookAt(0, alienPrev ? 1.18 : 1.02, 0); } prev.cam.updateProjectionMatrix();
+    var PL = pLook();   // start screen shows the saved look; accessory picks live in wardrobe / shop
+    var pk = PL.hat + PL.glasses + PL.back + PL.hand + PL.hoodie + PL.suit + (PL.char || '') + wc.id; if (prev.hat !== pk) { prev.hat = pk; applyRoot(window.__arcade.THREE, prev.root, PL); if (W.try) applyMats(PL); prevPose(PL); }   // the preview always wears the chosen hat, however the pick or load happened
     if (prev.auto && !prev.drag) prev.want += 0.006; prev.rot += (prev.want - prev.rot) * 0.15; prev.root.rotation.y = prev.rot;
     var now = performance.now(), dt = Math.min(0.25, prev.lt ? (now - prev.lt) / 1000 : 0.016); prev.lt = now;
     var bot = prev.root.getObjectByName('alienBot'); if (bot) { var bt = now / 1000, y0 = bot.userData.baseY != null ? bot.userData.baseY : 0.52;
@@ -322,7 +389,7 @@
     + '#gaHint.gaTaken{color:#ff5a7a;font-weight:900}#gaGo[hidden]{display:none}#gaGo:not([hidden]){animation:gaPop .45s cubic-bezier(.2,1.6,.4,1) both}@keyframes gaPop{0%{opacity:0;transform:scale(.6)}100%{opacity:1;transform:scale(1)}}#gaHint{flex:none;font:700 12px system-ui;color:#ffd0fa;opacity:.85;min-height:48px;display:flex;align-items:center}#gaHint[hidden]{display:none}'
     + '#start.ga #stBtns{display:none!important}#start.ga #stBox{visibility:hidden}'
     + '#gaW{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;gap:6px;box-sizing:border-box;padding:max(10px,env(safe-area-inset-top)) 10px max(12px,env(safe-area-inset-bottom));font-family:"Courier New",monospace;color:#fff;touch-action:pan-y;overflow-y:auto;'
-    + 'background:radial-gradient(ellipse at 20% 30%,#5a1f8fcc,transparent 55%),radial-gradient(ellipse at 85% 45%,#7a2bb0aa,transparent 50%),radial-gradient(ellipse at 50% 90%,#1d2a8aaa,transparent 60%),#070214f2}#gaW[hidden]{display:none}'
+    + 'background:radial-gradient(ellipse at 20% 30%,#5a1f8fcc,transparent 55%),radial-gradient(ellipse at 85% 45%,#7a2bb0aa,transparent 50%),radial-gradient(ellipse at 50% 90%,#1d2a8aaa,transparent 60%),#070214f2}#gaW[hidden]{display:none!important}'   // t739u: !important, else #gaW.gaSplit{display:grid} beat [hidden] and the closed panel stayed on screen over the game
     + '#gaWT{flex:none;margin-top:14px;font:900 clamp(26px,8.5vw,44px)/1 "Arial Black",Impact,sans-serif;letter-spacing:.08em;color:#ffd0fa;text-shadow:0 0 6px #ff3cf0,0 0 18px #ff3cf0,0 0 34px #c000ff}'
     + '#gaWStage{position:relative;flex:1 1 auto;min-height:150px;width:100%;max-width:460px}#gaWCv{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}'
     + '#gaWDone{flex:none;font:900 clamp(22px,7vw,32px)/1 "Arial Black",Impact,sans-serif;letter-spacing:.1em;color:#dffbff;padding:12px 48px;border-radius:14px;border:3px solid #00e5ff;background:linear-gradient(#0c1a3aee,#050a1aee);text-shadow:0 0 8px #00e5ff;box-shadow:0 0 18px #00e5ffaa;cursor:pointer}'
@@ -341,20 +408,35 @@
     + '#gaHint{grid-column:2;grid-row:4;min-height:0;justify-self:center;font-size:11px}'
     + '.gaRow{padding:2px}.gaO{width:34px;height:28px;font-size:16px}.gaRow span{width:48px;font-size:10px}.gaAr{width:36px;height:44px;font-size:32px}'
     + '#gaWho{padding:2px 6px 2px;gap:3px}.gaWhoH{font-size:9px;letter-spacing:.16em;text-shadow:0 0 5px #00e5ff,0 0 10px #0090ff}'
-    + '.gaWhoRow{gap:6px}.gaWho{min-height:0;height:28px;flex-direction:row;gap:5px;padding:2px 8px;font-size:10px;max-width:150px;border-radius:8px}.gaWhoI{font-size:14px}}';
+    + '.gaWhoRow{gap:6px}.gaWho{min-height:0;height:28px;flex-direction:row;gap:5px;padding:2px 8px;font-size:10px;max-width:150px;border-radius:8px}.gaWhoI{font-size:14px}}'
+    // t738u/t739u: ACCESSORIES (shop) and WARDROBE in landscape = split view: the player as big as the height allows on the left, every row on the right,
+    // icons/labels/arrows sized by wFit() (--oh/--ow/--of/--lw/--lf/--ah) so the rows fill the column. Portrait keeps the old stack.
+    + '#gaW.gaSplit{display:grid;grid-template-columns:minmax(0,36%) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto auto;gap:6px 14px;padding:max(8px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));overflow:hidden;align-items:stretch;justify-items:stretch}'
+    + '#gaW.gaSplit #gaWT{grid-column:1;grid-row:1;margin:0;padding:0 0 0 52px;min-height:44px;display:flex;align-items:center;justify-content:center;white-space:nowrap;font-size:clamp(18px,min(3.3vw,7.5vh),34px)}'
+    + '#gaW.gaSplit #gaWX{left:max(10px,env(safe-area-inset-left));right:auto;top:max(8px,env(safe-area-inset-top))}'
+    + '#gaW.gaSplit #gaWStage{grid-column:1;grid-row:2;min-height:0;width:100%;max-width:none}'
+    + '#gaW.gaSplit .gaAr{width:52px;height:84px;font-size:62px}#gaW.gaSplit #gaWL{left:-4px}#gaW.gaSplit #gaWR{right:-4px}'
+    + '#gaW.gaSplit #gaWBuy{grid-column:1;grid-row:3;justify-self:center;max-width:100%;box-sizing:border-box;padding:5px 8px;gap:8px;font-size:13px}#gaW.gaSplit #gaWBuyB{padding:8px 12px;font-size:15px}'
+    + '#gaW.gaSplit #gaWDone{grid-column:1;grid-row:4;justify-self:center;padding:9px 46px;font-size:clamp(18px,6.5vh,30px)}'
+    + '#gaW.gaSplit #gaWBox{grid-column:2;grid-row:1 / span 4;width:100%;max-width:none;height:100%;min-height:0;box-sizing:border-box;margin:0;padding:4px 6px;display:flex;flex-direction:column;justify-content:space-evenly;overflow-y:auto;overflow-x:hidden}'
+    + '#gaW.gaSplit .gaRow{gap:8px;padding:1px 2px}#gaW.gaSplit .gaRow span{width:var(--lw,76px);font-size:var(--lf,14px)}'
+    + '#gaW.gaSplit .gaRow .gaA{width:var(--ah,40px);height:var(--oh,56px);font-size:calc(var(--ah,40px) * .9)}'
+    + '#gaW.gaSplit .gaCh{gap:9px;padding:3px 3px 7px}#gaW.gaSplit.gaTight .gaRow{padding:0 2px}#gaW.gaSplit.gaTight .gaCh{padding:1px 3px 5px}#gaW.gaSplit.gaTight .gaLk{bottom:-4px}'
+    + '#gaW.gaSplit .gaO{width:var(--ow,62px);height:var(--oh,56px);font-size:var(--of,30px);border-radius:12px;border-width:3px}'
+    + '#gaW.gaSplit .gaO svg{width:78%;height:auto;max-height:80%}#gaW.gaSplit .gaLk{font-size:max(11px,calc(var(--oh,56px) * .2));right:-4px;bottom:-6px;padding:2px 4px;border-radius:7px;border-width:2px}';
   var ov = null, stHat = false;   // start screen: cap picked this visit?
   function row(k, label, shop, list) { var h = '<div class="gaRow" data-k="' + k + '"><button class="gaA" data-step="-1" aria-label="previous">‹</button><span>' + label + '</span><div class="gaCh">';
     (list || (shop ? OPTS : START)[k]).forEach(function (o) { var ic = typeof o[1] === 'string', face = ic ? o[1] : ''; var bg = ic ? '' : 'background:#' + ('00000' + o[1].toString(16)).slice(-6) + ';';
       var need = shop && priceOf(k, o[0]) > 0; if (need) face += '<i class="gaLk">🔒' + priceOf(k, o[0]) + '</i>';
-      if (k === 'shoes') bg = 'background:linear-gradient(135deg,#' + ('00000' + o[1].toString(16)).slice(-6) + ' 55%,#' + ('00000' + o[2].toString(16)).slice(-6) + ' 55%);';
+      if (k === 'shoes' || k === 'suit') bg = 'background:linear-gradient(135deg,#' + ('00000' + o[1].toString(16)).slice(-6) + ' 55%,#' + ('00000' + o[2].toString(16)).slice(-6) + ' 55%);';
       h += '<button class="gaO' + (need ? ' gaNew' : '') + '" data-v="' + o[0] + '" title="' + o[0] + '" style="' + bg + '">' + face + '</button>'; });
     return h + '</div><button class="gaA" data-step="1" aria-label="next">›</button></div>'; }
-  function rows(shop) { if (!shop) return row('hat', 'HAT') + row('hoodie', 'HOODIE COLOUR'); return row('hat', 'HAT', shop) + row('glasses', shop ? 'GLASSES & FACE' : 'GLASSES', shop) + (shop ? row('back', 'BACK', shop) : '') + row('hoodie', 'HOODIE COLOUR', shop) + row('fur', 'FUR COLOUR', shop) + row('shoes', 'SHOES', shop); }
+  function rows(shop) { if (!shop) return row('hat', 'HAT') + row('hoodie', 'HOODIE COLOUR'); return row('hat', 'HAT', shop) + row('glasses', shop ? 'GLASSES & FACE' : 'GLASSES', shop) + (shop ? row('back', 'BACK', shop) + row('hand', 'HAND', shop) + row('suit', 'SUIT COLOUR', shop) : '') + row('hoodie', 'HOODIE COLOUR', shop) + row('fur', 'FUR COLOUR', shop) + row('shoes', 'SHOES', shop); }
   function rowsLimited() { /* room 1 WARDROBE HUD: start opts + owned only, no locked/for-sale */ var h = '', add = function (k, label) {
       var L; if (k === 'hat' || k === 'hoodie') L = OPTS[k].filter(function (o) { return isStart(k, o[0]) || (o[0] !== 'none' && has(k, o[0])); });
       else { L = OPTS[k].filter(function (o) { return has(k, o[0]); }); if (!L.some(function (o) { return o[0] !== 'none'; })) return; }
       h += row(k, label, false, L); };
-    add('hat', 'HAT'); add('hoodie', 'HOODIE COLOUR'); add('glasses', 'GLASSES & FACE'); add('back', 'BACK'); add('fur', 'FUR COLOUR'); add('shoes', 'SHOES'); return h; }
+    add('hat', 'HAT'); add('hoodie', 'HOODIE COLOUR'); add('glasses', 'GLASSES & FACE'); add('back', 'BACK'); add('hand', 'HAND'); add('suit', 'SUIT COLOUR'); add('fur', 'FUR COLOUR'); add('shoes', 'SHOES'); return h; }
   function addCss() { if (document.getElementById('gaCss')) return; var sty = document.createElement('style'); sty.id = 'gaCss'; sty.textContent = css; document.head.appendChild(sty); }
   function build() { var st = document.getElementById('start'); if (!st || ov) return; addCss();
     ov = document.createElement('div'); ov.id = 'gaP';
@@ -364,7 +446,7 @@
       + '<div class="gaBox"><div id="gaWho"><div class="gaWhoH" id="gaWhoH">SELECT PLAYER</div><div class="gaWhoRow">'
       + '<button type="button" class="gaWho" data-v="monkey"><span class="gaWhoI" aria-hidden="true">🐵</span><span class="gaWhoN">MONKEY</span></button>'
       + '<button type="button" class="gaWho" data-v="alien"><span class="gaWhoI" aria-hidden="true">👽</span><span class="gaWhoN">ALIEN</span></button>'
-      + '</div></div>' + rows() + '</div>'
+      + '</div></div></div>'
       + '<button id="gaGo" hidden>PLAY</button><div id="gaHint">Type your name to play</div>';
     st.appendChild(ov); st.classList.add('ga'); var inp = ov.querySelector('#gaIn'); inp.value = P.name;
     inp.addEventListener('input', function () { var v = clean(inp.value); if (v !== inp.value) inp.value = v; P.name = v; save(); sync(); apply(); nameCheck(); });
@@ -376,16 +458,16 @@
       if (b.classList.contains('gaNew')) { b.classList.toggle('own', has(k, b.dataset.v)); b.classList.toggle('try', !!(W.try && W.try.k === k && W.try.v === b.dataset.v)); }
       if (on && scroll) { var ch = b.parentNode; if (ch.scrollWidth > ch.clientWidth) { var br = b.getBoundingClientRect(), cr = ch.getBoundingClientRect(); ch.scrollLeft += (br.left + br.width / 2) - (cr.left + cr.width / 2); } } }); }); }
   function hideCharRows(root) { if (!root) return; var alien = P.char === 'alien';
-    [].forEach.call(root.querySelectorAll('.gaRow'), function (r) { if (r.dataset.k === 'hoodie' || r.dataset.k === 'fur' || r.dataset.k === 'shoes') r.hidden = alien && (root !== ov || r.dataset.k === 'hoodie'); });
+    [].forEach.call(root.querySelectorAll('.gaRow'), function (r) { if (r.dataset.k === 'hoodie' || r.dataset.k === 'fur' || r.dataset.k === 'shoes') r.hidden = alien && (root !== ov || r.dataset.k === 'hoodie'); if (r.dataset.k === 'suit') r.hidden = !alien; });   // t746u: SUIT COLOUR is the alien's, hoodie/fur/shoes the monkey's
     [].forEach.call(root.querySelectorAll('.gaWho'), function (b) { b.classList.toggle('sel', b.dataset.v === (P.char || 'monkey')); }); }
-  function sync(scroll) { if (W.el) { syncRows(W.el, scroll); hideCharRows(W.el); } if (!ov) return; syncRows(ov, scroll); hideCharRows(ov);
+  function sync(scroll) { if (W.el) { syncRows(W.el, scroll); hideCharRows(W.el); if (W.open) wFit(); } if (!ov) return; syncRows(ov, scroll); hideCharRows(ov);
     var free = !named() || nmFree === clean(P.name).trim().toLowerCase(), hint = ov.querySelector('#gaHint');   // unique names (names.js): PLAY waits for a free name
     ov.querySelector('#gaGo').hidden = !(named() && goOK() && free); hint.hidden = named() && (free || nmBusy); hint.textContent = named() ? (nmWhy === 'bad' ? 'Pick a different name' : 'Name taken') : 'Type your name to play'; hint.classList.toggle('gaTaken', named() && !free); }
   // unique names: debounced check as the user types; nmFree = the lower(trim) name last confirmed free
   var nmFree = null, nmBusy = true, nmT = 0, nmSeq = 0, nmWhy = '';   /* t286u: nmWhy 'bad' = blocked word (names.js isBad) */
   function nameCheck(now) { var Nm = window.__gaNames, k = clean(P.name).trim().toLowerCase(); clearTimeout(nmT); if (!Nm) { nmFree = k; sync(); return; } nmBusy = true; if (nmFree !== k) nmFree = null; sync();
     nmT = setTimeout(function () { var q = ++nmSeq; Nm.check(P.name).then(function (r) { if (q !== nmSeq) return; nmBusy = false; nmWhy = r.why; nmFree = r.free ? k : null; sync(); }); }, now ? 0 : 350); }
-  function look() { return { name: P.name, hat: P.hat, hoodie: P.hoodie, fur: P.fur, shoes: P.shoes, glasses: P.glasses, back: P.back, char: P.char || 'monkey' }; }
+  function look() { return { name: P.name, hat: P.hat, hoodie: P.hoodie, fur: P.fur, shoes: P.shoes, glasses: P.glasses, back: P.back, hand: P.hand || 'none', suit: P.suit || 'suitgrey', char: P.char || 'monkey' }; }
   function pLook() { if (!W.try || !W.open) return P; var L = Object.assign({}, P); L[W.try.k] = W.try.v; return L; }
   function setChar(v) { v = v === 'alien' ? 'alien' : 'monkey'; if (P.char === v) { sync(true); return; } P.char = v; save(); sync(true); apply();
     try { window.dispatchEvent(new CustomEvent('galacticarcade:look', { detail: look() })); } catch (e) {} }
@@ -399,7 +481,7 @@
   function balance() { var t = tk(); if (t) return t.total; return parseInt(localStorage.getItem('neonarcade.tickets'), 10) || 0; }
   function spend(n) { var t = tk(), b = balance(); if (b < n) return false; if (t) t.total -= n; try { localStorage.setItem('neonarcade.tickets', String(b - n)); } catch (e) {}
     var el = document.getElementById('tixN'); if (el) el.textContent = String(b - n); try { var A = window.__arcade; if (A.play.refresh) A.play.refresh(); } catch (e) {} return true; }
-  function nameOf(v) { return ({ tophat: 'TOP HAT', wizard: 'WIZARD HAT', viking: 'VIKING HELMET', chef: 'CHEF HAT', bunny: 'BUNNY EARS', propeller: 'PROPELLER CAP', monocle: 'MONOCLE', heart: 'HEART GLASSES', star: 'STAR GLASSES', '3d': '3D GLASSES', mustache: 'MUSTACHE', mask: 'NINJA MASK', jetpack: 'JETPACK', cape: 'HERO CAPE', wings: 'ANGEL WINGS', batwings: 'BAT WINGS' })[v] || (v.toUpperCase() + ' HOODIE'); }
+  function nameOf(v) { return ({ tophat: 'TOP HAT', wizard: 'WIZARD HAT', viking: 'VIKING HELMET', chef: 'CHEF HAT', bunny: 'BUNNY EARS', propeller: 'PROPELLER CAP', monocle: 'MONOCLE', heart: 'HEART GLASSES', star: 'STAR GLASSES', '3d': '3D GLASSES', mustache: 'MUSTACHE', mask: 'NINJA MASK', skull: 'SKULL MASK', suitgrey: 'GREY SUIT', suitred: 'CRIMSON SUIT', suitgold: 'GOLD SUIT', suitteal: 'TEAL SUIT', suitwhite: 'WHITE SUIT', suitblack: 'BLACK SUIT', pistol: 'LASER PISTOL', jetpack: 'JETPACK', cape: 'HERO CAPE', wings: 'ANGEL WINGS', batwings: 'BAT WINGS' })[v] || (v.toUpperCase() + ' HOODIE'); }
   function tryOn(k, v) { W.try = { k: k, v: v }; prev.hat = null; buyUI(); sync(); }
   function buyUI() { if (!W.el) return; var bx = W.el.querySelector('#gaWBuy'); if (!W.try) { bx.hidden = true; apply(); return; } var p = priceOf(W.try.k, W.try.v), b = balance(), btn = W.el.querySelector('#gaWBuyB');
     bx.hidden = false; W.el.querySelector('#gaWBuyT').textContent = nameOf(W.try.v) + ' · 🎟 ' + b; btn.disabled = b < p; btn.textContent = b < p ? 'Need ' + p + ' tickets' : 'BUY ' + p + ' 🎟'; }
@@ -411,20 +493,31 @@
       + '<div class="gaBox" id="gaWBox"></div><div id="gaWBuy" hidden><span id="gaWBuyT"></span><button id="gaWBuyB"></button></div><button id="gaWDone">DONE</button>';
     (document.body || document.documentElement).appendChild(d); }
   function wFill() { if (!W.el) return; W.el.querySelector('#gaWBox').innerHTML = W.shop ? rows(1) : rowsLimited(); W.el.querySelector('#gaWT').textContent = W.shop ? 'ACCESSORIES' : 'WARDROBE'; }
-  function wOpen(opts) { var A = window.__arcade; W.shop = !!(opts && opts.shop); wBuild(); wFill(); if (!W.el.isConnected) document.body.appendChild(W.el); W.el.hidden = false; W.el.classList.toggle('gaSt', onStart()); W.open = true; W.at = performance.now(); W.opens++; prev.auto = true; TP.gone = false; if (TP.st === 'out') { TP.st = 'idle'; TP.cb = null; } W.try = null; buyUI();
-    if (A && A.monkey && A.THREE) { apply(); buildScene(); } sync(true); if (!prev.raf) frame(); return true; }
-  function wClose() { if (!W.el || !W.open) return false; W.open = false; W.el.hidden = true; prev.drag = null; if (W.try) { W.try = null; apply(); prev.hat = null; }
+  function wOpen(opts) { var A = window.__arcade; W.shop = !!(opts && opts.shop); wBuild(); wFill(); if (!W.el.isConnected) document.body.appendChild(W.el); W.el.hidden = false; W.el.classList.toggle('gaSt', onStart()); W.open = true; W.at = performance.now(); W.dn = false; W.opens++; prev.auto = true; TP.gone = false; if (TP.st === 'out') { TP.st = 'idle'; TP.cb = null; } W.try = null; buyUI();
+    if (A && A.monkey && A.THREE) { apply(); buildScene(); } sync(true); wFit(); if (!prev.raf) frame(); return true; }
+  // t738u/t739u: split ACCESSORIES + WARDROBE layout in landscape; sizes the rows so every visible row fits the right column, as big as it allows
+  function wFit() { if (!W.el) return; var on = !!(W.open && innerWidth > innerHeight && innerWidth >= 560); W.el.classList.toggle('gaSplit', on); if (!on) return;
+    var box = W.el.querySelector('#gaWBox'), n = [].filter.call(box.querySelectorAll('.gaRow'), function (r) { return !r.hidden; }).length || 1;
+    var tight = n >= 7; W.el.classList.toggle('gaTight', tight);   /* 7 rows (HAND added, t741u): trim row padding so icons stay >= 44px at 390px tall */
+    var oh = Math.max(34, Math.min(76, Math.floor((box.clientHeight - 10) / n) - (tight ? 6 : 13))), cs = W.el.style;
+    cs.setProperty('--oh', oh + 'px'); cs.setProperty('--ow', Math.round(oh * (tight ? 1.14 : 1.12)) + 'px'); cs.setProperty('--of', Math.round(oh * 0.56) + 'px');
+    cs.setProperty('--ah', (oh >= 60 ? 46 : 40) + 'px'); cs.setProperty('--lw', (oh >= 60 ? 92 : 78) + 'px'); cs.setProperty('--lf', (oh >= 60 ? 17 : 14) + 'px'); }
+  addEventListener('resize', function () { if (W.open) wFit(); });
+  function wClose() { if (!W.el || !W.open) return false; W.open = false; W.el.hidden = true; W.el.classList.remove('gaSplit'); prev.drag = null; if (W.try) { W.try = null; apply(); prev.hat = null; }
     if (prev.r && prev.r.domElement.id === 'gaWCv') freeR();   // free the 2nd WebGL context for the game
     return true; }
   window.__wardrobe = { open: wOpen, close: wClose, applyRemote: function (root, lk) { dress(root, lk); }, get isOpen() { return W.open; }, get el() { return W.el; } };
   function step(k, d, shop) { var L; if (W.open && !W.shop) L = OPTS[k].filter(function (a) { return isStart(k, a[0]) || has(k, a[0]); });
-    else if (shop && !onStart()) L = OPTS[k].filter(function (a) { return has(k, a[0]); });
-    else if (shop) L = BASE[k].filter(function (a) { return has(k, a[0]); });
+    else if (shop && !onStart()) {   // t744u: Accessories ‹ › walk EVERY tile (locked ones are tried on with the BUY bar) and scroll it into view
+      L = OPTS[k]; var cur = W.try && W.try.k === k ? W.try.v : P[k], ci = 0; for (var q = 0; q < L.length; q++) if (L[q][0] === cur) ci = q;
+      var nv = L[(ci + d + L.length) % L.length][0]; if (has(k, nv)) pick(k, nv); else tryOn(k, nv);
+      try { var tb = W.el && W.el.querySelector('.gaRow[data-k="' + k + '"] .gaO[data-v="' + nv + '"]'); if (tb) tb.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch (e) {} return; }
+    else if (shop) L = (BASE[k] || OPTS[k]).filter(function (a) { return has(k, a[0]); });
     else L = START[k].filter(function (a) { return has(k, a[0]); });
     var i = 0; for (var j = 0; j < L.length; j++) if (L[j][0] === P[k]) i = j; pick(k, L[(i + d + L.length) % L.length][0]); }
   function play(fast) { if (!named() || !goOK() || TP.st === 'out' || nmFree !== clean(P.name).trim().toLowerCase()) return; try { if (window.__wantWide) window.__wantWide(); } catch (e) {} if (window.__gaNames) window.__gaNames.claim(P.name); musicStop(); P.name = clean(P.name).trim(); save(); apply(); var inp = document.getElementById('gaIn'); if (inp) inp.blur();
     var cv = ov && ov.querySelector('#gaCv'); if (prev.r && cv && prev.r.domElement === cv && cv.clientWidth && !fast && !window.__gaNoTp) { var done = 0, fin = function () { if (done++) return; TP.gone = true; go2(); }; tpStart('out', fin); setTimeout(function () { if (!done) { TP.st = 'idle'; TP.cb = null; fin(); } }, 2600); return; } go2(); }
-  function go2() { var b = document.getElementById('stStart'); if (!b) return; if (!stHat && P.hat !== 'none') { P.hat = 'none'; save(); apply(); } /* Dave: no cap picked = start hatless */ var ev; try { ev = new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerType: 'touch' }); } catch (e) { ev = new Event('pointerup', { bubbles: true, cancelable: true }); }
+  function go2() { var b = document.getElementById('stStart'); if (!b) return; var ev; try { ev = new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerType: 'touch' }); } catch (e) { ev = new Event('pointerup', { bubbles: true, cancelable: true }); }
     b.dispatchEvent(ev); window.__gaPlayer.started = (window.__gaPlayer.started || 0) + 1; }
   function opts() { var b = document.getElementById('stOpt'); if (!b) return; var ev; try { ev = new PointerEvent('pointerup', { bubbles: true, cancelable: true }); } catch (e) { ev = new Event('pointerup', { bubbles: true }); } b.dispatchEvent(ev); }
 
@@ -483,11 +576,13 @@
     if (/^key/.test(e.type)) { if (e.type === 'keydown' && (e.key === 'Escape' || e.key === 'Enter')) { if (e.cancelable) e.preventDefault(); wClose(); } return; }
     if (e.type === 'pointermove') { if (prev.drag) prev.want = prev.drag.r + (e.clientX - prev.drag.x) * 0.012; return; }
     if (!t) return; var cv = t.closest('#gaWCv');
+    if (e.type === 'pointerdown' || e.type === 'touchstart') W.dn = true;   // a press that started on the panel (t741u)
     if (e.type === 'pointerdown' && cv) { prev.drag = { x: e.clientX, r: prev.want }; prev.auto = false; try { cv.setPointerCapture(e.pointerId); } catch (x) {} if (e.cancelable) e.preventDefault(); }
     if (e.type === 'pointerup' && prev.drag) prev.drag = null;
     if (e.type === 'touchstart' && cv && e.cancelable) e.preventDefault();
     if (e.type !== 'click') return; var b;
-    if (performance.now() - (W.at || 0) < 500) return;   // the tap that opened us (its compat click lands on the panel after pointerup: hit DONE and closed at once)
+    if (performance.now() - (W.at || 0) < 500) return;
+    if (e.isTrusted && e.detail > 0 && !W.dn) return;   // a click whose press began before we opened (slow phones: ACCESSORIES tap's click landing on DONE, which the 7-row layout put right under it)   // the tap that opened us (its compat click lands on the panel after pointerup: hit DONE and closed at once)
     if (t.closest('#gaWBuyB')) buy();
     else if (t.closest('#gaWDone') || t.closest('#gaWX')) wClose();
     else if (t.closest('#gaWL')) { prev.auto = false; prev.want -= Math.PI / 4; }

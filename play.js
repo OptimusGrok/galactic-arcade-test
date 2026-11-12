@@ -83,6 +83,11 @@ export function setupPlay(A) {
       start(w) { w.__rockfall.start(); },
       scene(w) { return w.__rockfall.scene(); }, active(w) { return w.__rockfall.active(); },
       hold(w) { return w.__rockfall.hold(); }, unhold(w) { w.__rockfall.unhold(); }, overHold: 4500, scoresHold: 0 },
+    skytower: { key: 'skytower', cab: A.skyTowerCab, src: 'sky-tower-play/index.html', credits: 0, games: 0, aspect: (A.skyTowerCab && A.skyTowerCab.userData.aspect) || 16 / 9, cost: 5,   // SKY TOWER (#15, slot 2:2): 5 tickets = 1 credit = one climb of 50 platforms
+      demo(w) { w.__demo.start(); }, stopDemo(w) { w.__demo.stop(); },
+      start(w) { w.__skytower.start(); },
+      scene(w) { return w.__skytower.scene(); }, active(w) { return w.__skytower.active(); },
+      hold(w) { return w.__skytower.hold(); }, unhold(w) { w.__skytower.unhold(); }, overHold: 4500, scoresHold: 0 },
     nova: { key: 'nova', cab: A.novaCab, src: 'nova-play/index.html', credits: 0, games: 0, aspect: (A.novaCab && A.novaCab.userData.aspect) || 16 / 9, cost: 5,   // 5 tickets = 1 credit = one run
       demo(w) { w.__demo.start(); }, stopDemo(w) { w.__demo.stop(); },
       start(w) { w.__nova.start(); },
@@ -116,6 +121,7 @@ export function setupPlay(A) {
   if (!A.roadsterCab) delete MACHINES.roadster;
   if (!A.clawCab) delete MACHINES.claw;
   if (!A.rockfallCab) delete MACHINES.rockfall;
+  if (!A.skyTowerCab) delete MACHINES.skytower;
   // MARS ROADSTER: sit the monkey in the chosen bucket seat (hands on the wheel) for the zoom, stand him up behind it on the way out
   function seatMonkey(cab, on) { const u = cab.userData, s = u.seats[u.seat], mu = monkey.userData;
     if (on) { monkey.position.set(s.world.x, 0, s.world.z + 0.12); st.face = 0; monkey.rotation.y = 0; st.vel.set(0, 0, 0); st.speed = 0; st.seated = u.seat; if (monkey.userData.pack) monkey.userData.pack.visible = monkey.userData.tail.visible = false;
@@ -214,7 +220,6 @@ export function setupPlay(A) {
     P.target = e.c; P.end = e.p; curve = new THREE.CatmullRomCurve3([camera.position.clone(), head, mid, e.p]); look0.copy(m.post ? e.c : head); look1.copy(e.c); }
   function launch() {
     const f = P.frame, m = P.cur; P.mode = 'game'; document.body.dataset.cab = m ? m.key : ''; P.over = false; P.goShown = false; clearTimeout(P.holdT); P.holdT = 0; P.scene = null;
-    try { if (window.__wantTall) window.__wantTall(); } catch (e) {}   // cabinet screen upright (portrait); walking stays landscape
     const go = () => { P.sub = 'demo'; try { idle(m, f.contentWindow); } catch (e) { console.warn('demo start', e); } demoRefresh(); demoUI.classList.add('on'); f.classList.add('on'); bExit.style.display = 'block'; f.focus(); try { f.contentWindow.focus(); } catch (e) {}
       A.pause(true); P.poll = setInterval(poll, 200); showTix(); };
     if (P.loaded) go(); else f.addEventListener('load', go, { once: true });
@@ -230,12 +235,13 @@ export function setupPlay(A) {
   function exit(why) {
     if (P.mode !== 'game') return; clearInterval(P.poll); clearTimeout(P.holdT); P.holdT = 0; over.style.display = 'none';
     P.lastExit = why; P.sub = null; demoUI.classList.remove('on'); P.mode = 'zoomOut'; P.t = 0; bExit.style.display = 'none'; document.body.dataset.cab = '';
-    const f = P.frame; f.classList.remove('on'); try { f.contentWindow.document.body.style.display = 'none'; } catch (e) {} setTimeout(() => f.remove(), 500); P.frame = null;
+    const f = P.frame; f.classList.remove('on');
+    try { if (f.contentWindow && f.contentWindow.__skySnd) f.contentWindow.__skySnd.stop(); } catch (e) {}
+    try { f.contentWindow.document.body.style.display = 'none'; } catch (e) {} setTimeout(() => f.remove(), 500); P.frame = null;
     if (P.cur.onExit) P.cur.onExit();
     const m = P.cur, back = monkey.position.clone().setY(monkey.position.y + 1.25), out = back.clone().addScaledVector(m.cab.userData.inward, 2.6).setY(2.1);
     curve = new THREE.CatmullRomCurve3([camera.position.clone(), back.clone().lerp(camera.position, 0.4), back, out]); look0.copy(back); look1.copy(screenInfo(m).c);
     A.pause(false); window.focus(); showTix();
-    try { if (window.__wantWide) window.__wantWide(); } catch (e) {}   // back to landscape walking
   }
   // ---- tickets: collected inside the games (gold monkey tickets), 1 each; no time-based payout ----
   const tixN = document.getElementById('tixN'), tview = document.getElementById('tview'), tvCv = document.getElementById('tvCv'), tvCount = document.getElementById('tvCount');

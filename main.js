@@ -19,6 +19,7 @@ import { buildPipCabinet } from './pipcab.js';
 import { buildClawCabinet, CLAW } from './clawcab.js';
 import { buildBBCabinet } from './bbcab.js';
 import { buildRockfallCabinet } from './rfcab.js';
+import { buildSkyTowerCabinet } from './skytowercab.js';
 import { setupMP } from './mp.js';
 import { buildNovaCabinet } from './novacab.js';
 import { buildRoadsterCabinet, MR } from './roadstercab.js';
@@ -135,14 +136,14 @@ const ceil = new THREE.Mesh(new THREE.PlaneGeometry(HALF * 2, HALF * 2), new THR
 // wall UVs in wall space (the doorway wall is 3 merged panels: give them one continuous mapping)
 for (let i = 0; i < 4; i++) { const g = room.getObjectByName('wall' + i).geometry, P = g.attributes.position, U = g.attributes.uv;
   for (let k = 0; k < P.count; k++) U.setXY(k, (P.getX(k) + HALF) / (2 * HALF), (P.getY(k) + H / 2) / H); U.needsUpdate = true; }
-// ---------- room 1 walls option: current (default) or Viking rune panels (Options > WALLS) ----------
+// ---------- room 1 walls option: MEDIEVAL gothic (default, t341u) or current neon / Viking / portals (Options > WALLS) ----------
 const WALLS_KEY = 'neonarcade.walls';
 // FAST LOAD (t229): windows.js (jungle/beach scenery) is fetched only when a JUNGLE/BEACH window is chosen or after the first frames;
 // until then `winds` is a stub that remembers the requested mode (space = nothing to draw).
 let winds = { stub: true, want: 'space', set(v) { this.want = v; if (v === 'jungle' || v === 'beach') loadWindows(); }, update() {} }; window.__windows = winds;
 let windsP = null;
 function loadWindows() { return windsP || (windsP = import('./windows.js').then(m => { const w = m.setupWindows({ THREE, room, room2, Z2, camera, HALF, H, DOOR_W, WX: 80 }); const want = winds.want; winds = w; window.__windows = w; w.set(want); return w; })); }
-let wallsMode = 'current', vikTex = null, wallBands = [], spaceWin = null;
+let wallsMode = 'medieval', vikTex = null, wallBands = [], spaceWin = null;
 // PORTALS walls (t187, Dave: 'a wall of big and small multi colour swirling portals that are moving with the colours changing'):
 // one cheap unlit procedural shader - two layers of hashed cells (big + small), each a spiral vortex that turns, drifts, pulses and cycles hue.
 // Brightness is capped (no near-white) for the flash test.
@@ -197,7 +198,10 @@ function setWalls(mode) {
 const WINDOW_KEY = 'neonarcade.window'; let windowMode = 'space';
 function setWindow(mode) { windowMode = mode === 'jungle' || mode === 'beach' ? mode : 'space'; winds.set(windowMode); try { localStorage.setItem(WINDOW_KEY, windowMode); } catch (e) {} return windowMode; }
 window.__setWindow = setWindow;
-try { const w0 = localStorage.getItem(WINDOW_KEY); if (w0) setWindow(w0); const w = localStorage.getItem(WALLS_KEY); if (w === 'windows') { setWalls('current'); setWindow('jungle'); } else if (w === 'viking' || w === 'portals' || w === 'medieval') setWalls(w); } catch (e) {}
+// t341u default: missing or unknown neonarcade.walls -> MEDIEVAL. A saved current / viking / portals / medieval is kept. 'windows' stays the old jungle migration.
+let savedWalls; try { const w0 = localStorage.getItem(WINDOW_KEY); if (w0) setWindow(w0); savedWalls = localStorage.getItem(WALLS_KEY); } catch (e) { savedWalls = null; }
+if (savedWalls === 'windows') { setWalls('current'); setWindow('jungle'); }
+else setWalls(savedWalls === 'current' || savedWalls === 'viking' || savedWalls === 'portals' || savedWalls === 'medieval' ? savedWalls : 'medieval');
 window.__setWalls = setWalls;
 ceil.rotation.x = Math.PI / 2; ceil.position.y = H; room.add(ceil);
 // ceiling beam grid (dark industrial)
@@ -349,8 +353,8 @@ const cabinets = [], blockers = [], slots = [], spots = [], eastGhostCabs = [];
 // every wall: 5 evenly spaced slots. The north-west corner ends of the north and west rows hold STRIKE and GHOST 256
 const ROWS = [[-8, -4, 0, 4, 8], [-8, -4, 0, 4, 8], [-8, -4, 0, 4, 8], [-8, -4, 0, 4, 8]];
 const strikeCab = buildStrikeCabinet(), ghostCab = buildGhostCabinet();
-const berserkerCab = buildBerserkerCabinet(), monkeyCab = buildMonkeyCabinet(), orcCab = buildOrcCabinet(), novaCab = buildNovaCabinet(), cyberCab = buildCyberCabinet(), blasterCab = buildBlasterCabinet(), pipCab = buildPipCabinet(), clawCab = buildClawCabinet(), bbCab = buildBBCabinet(), rockfallCab = buildRockfallCabinet();
-const FEATURED = { '0:0': [strikeCab, 'strike'], '0:1': [berserkerCab, 'berserker'], '0:3': [monkeyCab, 'monkey'], '1:4': [ghostCab, 'ghost'], '1:3': [orcCab, 'orc'], '0:4': [novaCab, 'nova'], '1:2': [cyberCab, 'cyber'], '1:1': [blasterCab, 'blaster'], '1:0': [pipCab, 'pip'], '2:4': [bbCab, 'bb'], '2:3': [rockfallCab, 'rockfall'] };   // BURROW BUSTER (#13): south wall slot 2:4 (old blank G, x=-8), the corner neighbour of SUPER PIP QUEST. ROCKFALL RUSH (#14): south wall slot 2:3 (old blank F, x=-4), between blank E and BURROW BUSTER   // NOVA TETHER: north wall slot 4 (x=8), right of MONKEY CROSSING (Dave's pick)
+const berserkerCab = buildBerserkerCabinet(), monkeyCab = buildMonkeyCabinet(), orcCab = buildOrcCabinet(), novaCab = buildNovaCabinet(), cyberCab = buildCyberCabinet(), blasterCab = buildBlasterCabinet(), pipCab = buildPipCabinet(), clawCab = buildClawCabinet(), bbCab = buildBBCabinet(), rockfallCab = buildRockfallCabinet(), skyTowerCab = buildSkyTowerCabinet();
+const FEATURED = { '0:0': [strikeCab, 'strike'], '0:1': [berserkerCab, 'berserker'], '0:3': [monkeyCab, 'monkey'], '1:4': [ghostCab, 'ghost'], '1:3': [orcCab, 'orc'], '0:4': [novaCab, 'nova'], '1:2': [cyberCab, 'cyber'], '1:1': [blasterCab, 'blaster'], '1:0': [pipCab, 'pip'], '2:4': [bbCab, 'bb'], '2:3': [rockfallCab, 'rockfall'], '2:2': [skyTowerCab, 'skytower'] };   // BURROW BUSTER (#13): south wall slot 2:4 (old blank G, x=-8). ROCKFALL RUSH (#14): south wall slot 2:3 (old blank F, x=-4). SKY TOWER (#15): south wall slot 2:2 (old blank E, x=0), between MARS ROADSTER and ROCKFALL RUSH   // NOVA TETHER: north wall slot 4 (x=8), right of MONKEY CROSSING (Dave's pick)
    // ORC ATTACK: west wall slot 3 (z=-4), immediately left of GHOST 256 as you face it // north row corner end (x=-8), west row corner end (z=-8)
 // MARS ROADSTER: two-seat driving cabinet, 2 slots wide (south wall C + D = 2:0 x=8 and 2:1 x=4) and 4 cabinets long, into the room
 const roadsterCab = buildRoadsterCabinet(); FEATURED['2:0'] = [roadsterCab, 'roadster'];
@@ -457,7 +461,7 @@ function wallTubeGeo(cabList, flatEast, flatW = flatEast ? 3 : -1) {
 const wn = new THREE.Mesh(wallTubeGeo([...cabinets, ...featured, ...eastGhostCabs], false), neon(C.pink, 3.5 * PINK_K)); wn.name = 'wallNeonRun'; room.add(wn);
 const playables = [...cabinets, ...featured];   // (+ dsCab, pushed once room 2 exists)
 // ---------- dev toggles (hidden ticket menu): NUMBERS badges over game cabinets, CLIPPING (walk through walls/doors) ----------
-const LATE_NUM = { '1:1': 10, '1:0': 11, '2:4': 13, '2:3': 14 };   // games added after DEAD SIGNAL (#9) keep their own fixed number: BLASTER (blank B) = #10, SUPER PIP QUEST (blank A) = #11, BURROW BUSTER (blank G) = #13, ROCKFALL RUSH (blank F) = #14
+const LATE_NUM = { '1:1': 10, '1:0': 11, '2:4': 13, '2:3': 14, '2:2': 15 };   // games added after DEAD SIGNAL (#9) keep their own fixed number: BLASTER (blank B) = #10, SUPER PIP QUEST (blank A) = #11, BURROW BUSTER (blank G) = #13, ROCKFALL RUSH (blank F) = #14, SKY TOWER (blank E) = #15
 const DEV = { numbers: localStorage.getItem('neonarcade.dev.numbers') === '1', clip: localStorage.getItem('neonarcade.dev.clip') === '1', badges: [] };
 { // stable order: room 1 walk, north wall left->right then west wall; only cabinets with a game (blanks get no number)
   const order = ['0:0', '0:1', '0:3', '0:4', '1:2', '1:3', '1:4', '1:0', '1:1', '2:0', '2:1', '2:2', '2:3', '2:4'];
@@ -467,7 +471,7 @@ const DEV = { numbers: localStorage.getItem('neonarcade.dev.numbers') === '1', c
     badge(String(n), '#ffe000', ctr.x, b.max.y + 0.55, ctr.z, { n, key, game: F[1] }); }
   // blank cabinets: cyan LETTER badges. Room 1 (west, south rows), then room 2 (its 19 instanced slots, slot order)
   let L = 0; const AB = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', letter = k => (k >= 26 ? AB[Math.floor(k / 26) - 1] : '') + AB[k % 26];
-  const R1L = { '1:0': 0, '1:1': 1, '2:0': 2, '2:1': 3, '2:2': 4, '2:3': 5, '2:4': 6 };   // room 1 letters stay on their slot: A retired (SUPER PIP QUEST, #11), B retired (BLASTER, #10), C + D (MARS ROADSTER, #8), F retired (ROCKFALL RUSH, #14)
+  const R1L = { '1:0': 0, '1:1': 1, '2:0': 2, '2:1': 3, '2:2': 4, '2:3': 5, '2:4': 6 };   // room 1 letters stay on their slot: A retired (SUPER PIP QUEST, #11), B retired (BLASTER, #10), C + D (MARS ROADSTER, #8), E retired (SKY TOWER, #15), F retired (ROCKFALL RUSH, #14)
   for (const cab of cabinets) { cab.updateMatrixWorld(true);
     L = R1L[wallNames.indexOf(cab.userData.wall) + ':' + cab.userData.index];
     const b = new THREE.Box3().setFromObject(cab.getObjectByName('body')), ctr = b.getCenter(new THREE.Vector3());
@@ -559,7 +563,7 @@ const dsCab = buildDeadSignalStation(); dsCab.rotation.y = Math.PI; room2.add(ds
   const g2 = new THREE.Mesh(g.geometry, m2); g2.position.set(-g.position.x, g.position.y, -g.position.z); g2.rotation.y = Math.PI; g2.name = 'spaceWindow'; room2.add(g2);   // same name: windows.js hides both for JUNGLE / BEACH
   for (const f of spaceWin.frame) { const f2 = new THREE.Mesh(f.geometry, f.material); f2.position.set(-f.position.x, f.position.y, -f.position.z); f2.rotation.y = Math.PI; f2.name = 'windowFrame2'; room2.add(f2); }
 }
-// ---------- room 1 floor option: neon reflective (default) or light-grey ARCADE character carpet (Options > FLOOR) ----------
+// ---------- room 1 floor option: MEDIEVAL COBBLESTONE (default, t341u) or neon reflective / carpet / checkers / lava / ice (Options > FLOOR) ----------
 const FLOOR_KEY = 'neonarcade.floor';
 const carpetTex = new THREE.TextureLoader().load('tex/carpet.webp', () => spaceWin && floorMode === 'carpet' && spaceWin.dirty());
 carpetTex.colorSpace = THREE.SRGBColorSpace; carpetTex.wrapS = carpetTex.wrapT = THREE.RepeatWrapping;   // seamless tile (edge-cut figures removed): plain repeat, never mirrored (mirroring put copies head to head)
@@ -649,7 +653,7 @@ iceMat.emissive.setHex(0xffffff);
 const floorMats = { carpet: carpet.material, checkers: checkMat, lava: lavaMat, cobble: cobbleMat, ice: iceMat };
 for (const m of [carpet, carpet2]) m.onBeforeRender = () => { lavaU.uT.value = performance.now() / 1000 % 1000; };
 // with the carpet on, the reflector / hex overlay only cover the hallway (room 1 no longer pays for a mirror pass there)
-let floorMode = 'neon';
+let floorMode = 'cobble';   // t341u default; setFloor() below applies the saved choice (or this) once tp exists
 function setFloor(mode) {
   floorMode = floorMats[mode] ? mode : 'neon'; const c = floorMode !== 'neon';
   if (c) carpet.material = carpet2.material = floorMats[floorMode];
@@ -660,8 +664,7 @@ function setFloor(mode) {
   try { localStorage.setItem(FLOOR_KEY, floorMode); } catch (e) {}
   return floorMode;
 }
-try { const f = localStorage.getItem(FLOOR_KEY); if (floorMats[f]) setFloor(f); } catch (e) {}
-window.__setFloor = setFloor;   // the start screen's Options menu calls this
+window.__setFloor = setFloor;   // the saved/default floor is applied after setupTeleport (carpetWhite reads tp, still in its temporal dead zone here)   // the start screen's Options menu calls this
 // pre-compile the CHECKERS / LAVA shaders a few seconds after load so the first tap on those tiles doesn't stall the phone
 setTimeout(() => { try { const m0 = carpet.material, v0 = carpet.visible; carpet.visible = true;
   for (const m of [checkMat, lavaMat, cobbleMat, iceMat]) if (m !== m0) { carpet.material = m; if (renderer.compileAsync) renderer.compileAsync(scene, camera).catch(() => {}); else renderer.compile(scene, camera); }
@@ -806,7 +809,7 @@ function makeMonkey() { // "Arcade Kid": cartoon monkey, no tail, pink cap, tie-
     part(el, S(0.08, 12, 10), navy, 0, 0, 0);
     part(el, CYL(0.078, 0.068, 0.24, 14), navy, 0, -0.12, 0);
     part(el, CYL(0.066, 0.06, 0.05, 14), rib, 0, -0.26, 0);
-    const hand = part(el, S(0.058, 14, 10), tan, 0, -0.32, 0.01, 0.8, 1.05, 1);
+    const hand = part(el, S(0.058, 14, 10), tan, 0, -0.32, 0.01, 0.8, 1.05, 1); hand.name = sd > 0 ? 'handR' : 'handL';   // t741u: player.js puts the laser pistol in 'handR'
     part(hand, S(0.022, 8, 6), tan, -0.035 * sd, 0.01, 0.035, 1, 1.6, 1);   // thumb
     for (let f = 0; f < 3; f++) part(hand, CYL(0.013, 0.012, 0.06, 6), tan, (f - 1) * 0.024, -0.06, 0.012);
     arms.push({ sh, el, hand, sd });
@@ -961,7 +964,7 @@ function makeAlien() { // chibi grey alien: huge spherical head (~37% of height)
     part(el, CAP(0.07, 0.1, 12, 24), gun, 0, -0.06, 0);                    // matching forearm radius, overlaps the upper arm
     part(el, CYL(0.072, 0.072, 0.042, 18), cyanG, 0, -0.175, 0);
     part(el, CYL(0.076, 0.076, 0.012, 18), cyan, 0, -0.175, 0);
-    const hand = part(el, S(0.05, 16, 14), glove, 0, -0.24, 0.016, 1.1, 0.82, 1.15);
+    const hand = part(el, S(0.05, 16, 14), glove, 0, -0.24, 0.016, 1.1, 0.82, 1.15); hand.name = sd > 0 ? 'handR' : 'handL';
     part(hand, CAP(0.016, 0.03, 6, 10), glove, -0.04 * sd, 0.0, 0.03);    // thumb
     for (let f = 0; f < 4; f++) part(hand, CAP(0.014, 0.036, 6, 10), glove, (f - 1.5) * 0.018, -0.044, 0.014);
     arms.push({ sh, el, hand, sd });
@@ -976,20 +979,22 @@ function makeAlien() { // chibi grey alien: huge spherical head (~37% of height)
   const bot = new THREE.Group(); bot.name = 'alienBot'; bot.position.set(0.64, 0.52, -0.16); bot.userData.baseY = 0.52; torso.add(bot);
   const botShell = mk(0xe8eef4, { roughness: 0.28, metalness: 0.48, emissive: 0x2a3848, emissiveIntensity: 0.18 });
   const botDark = mk(0x10141a, { roughness: 0.22, metalness: 0.45 });
+  // t746u: the robot keeps its own grey trim (own colours, never matched by the SUIT COLOUR recolour in player.js)
+  const botTrim = mk(0x5a636f, { roughness: 0.48, metalness: 0.28, emissive: 0x141820, emissiveIntensity: 0.08 }), botTrimD = mk(0x3c434d, { roughness: 0.52, metalness: 0.24 });
   part(bot, S(0.195, 32, 24), botShell);
   const aura = part(bot, S(0.214, 20, 16), new THREE.MeshBasicMaterial({ color: 0x44e8ff, transparent: true, opacity: 0.14, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
   aura.renderOrder = 2;
   part(bot, S(0.16, 24, 18), botDark, 0, 0.014, 0.125, 0.88, 0.8, 0.5);
-  part(bot, S(0.088, 24, 18), cyanG, 0, 0.018, 0.188);
+  part(bot, S(0.088, 24, 18), cyanG, 0, 0.018, 0.188).name = 'botEye';   // t741u: the robot's lasers leave from here (roomfire.js)
   part(bot, S(0.04, 14, 12), new THREE.MeshBasicMaterial({ color: 0xd8ffff, toneMapped: false }), 0, 0.026, 0.228);
   part(bot, new THREE.TorusGeometry(0.09, 0.011, 8, 24), cyanG, 0, 0.018, 0.18);
   for (const sd of [-1, 1]) {
     const ear = part(bot, CYL(0.05, 0.05, 0.03, 16), botShell, 0.182 * sd, 0.016, 0);
     ear.rotation.z = Math.PI / 2;
-    const rim = part(bot, new THREE.TorusGeometry(0.05, 0.008, 8, 16), gunD, 0.198 * sd, 0.016, 0);
+    const rim = part(bot, new THREE.TorusGeometry(0.05, 0.008, 8, 16), botTrimD, 0.198 * sd, 0.016, 0);
     rim.rotation.y = Math.PI / 2;
   }
-  part(bot, CYL(0.012, 0.01, 0.1, 8), gun, 0, 0.25, 0);
+  part(bot, CYL(0.012, 0.01, 0.1, 8), botTrim, 0, 0.25, 0);
   part(bot, S(0.03, 12, 10), botShell, 0, 0.31, 0);
   const tail = new THREE.Group(); tail.name = 'tail'; tail.visible = false; hips.add(tail);
   root.userData = { hips, torso, neck, head, legs, arms, phone, pcv, ptex, pack, tail, bot, char: 'alien' };
@@ -1094,13 +1099,8 @@ function joyFrom(x, y) {
   knob.style.transform = show ? `translate(${st.joy.x * cl}px,${st.joy.y * cl}px)` : '';
   if (show) {
     joyLine.classList.add('on');
-    // line goes past the visible outer ring by exactly 4 dots at the current dash spacing, then stops
-    const br = document.getElementById('joyBase').getBoundingClientRect();
-    const outerR = Math.min(br.width, br.height) / 2;
-    const da = getComputedStyle(joyDash).strokeDasharray.replace(/px/gi, '').split(/[,\s]+/).map(Number);
-    const len = outerR + 4 * ((da[0] || 1.5) + (da[1] || 21.5));
     joyDash.setAttribute('x1', c.x); joyDash.setAttribute('y1', c.y);
-    joyDash.setAttribute('x2', c.x + st.joy.x * len); joyDash.setAttribute('y2', c.y + st.joy.y * len);
+    joyDash.setAttribute('x2', x); joyDash.setAttribute('y2', y);
   } else joyLine.classList.remove('on');
 }
 function joyClear() {
@@ -1182,44 +1182,22 @@ function tickZoom(dt) {
 }
 function toggleView() { st.fp = !st.fp; }
 function toggleFs() { const d = document; if (!d.fullscreenElement) d.documentElement.requestFullscreen?.().catch(() => {}); else d.exitFullscreen?.(); }
-function cabinetScreenUp() {
-  if (document.body.classList.contains('ingame')) return true;
-  const w = document.getElementById('gvWatchOv');
-  if (w && w.classList.contains('on')) return true;
-  const p = window.__arcade && window.__arcade.play;
-  return !!(p && p.mode === 'game');
-}
 function updateTurn() {
   const el = document.getElementById('turnHint'); if (!el) return;
   const portrait = MOBILE && innerHeight > innerWidth * 1.08;
-  el.classList.toggle('on', portrait && !cabinetScreenUp());   // hide the rotate-to-landscape hint while a cabinet game or Watch is up
+  el.classList.toggle('on', portrait);
 }
-function lockOrient(mode) {
-  st.orientWant = mode;
-  updateTurn();
-  if (!MOBILE) { st.orientLock = 'desktop'; return; }
+function wantWide() {
+  if (!MOBILE) { st.orientLock = 'desktop'; updateTurn(); return; }
   st.orientTried = true;
   const root = document.documentElement, fs = root.requestFullscreen || root.webkitRequestFullscreen;
   if (fs && !document.fullscreenElement) Promise.resolve(fs.call(root)).catch(() => {});
   const o = screen.orientation;
   if (o && typeof o.lock === 'function') {
-    Promise.resolve(o.lock(mode)).then(() => { st.orientLock = 'ok'; updateTurn(); }).catch(() => { st.orientLock = 'failed'; updateTurn(); });
+    Promise.resolve(o.lock('landscape')).then(() => { st.orientLock = 'ok'; updateTurn(); }).catch(() => { st.orientLock = 'failed'; updateTurn(); });
   } else { st.orientLock = 'unsupported'; updateTurn(); }
 }
-function wantWide() { lockOrient('landscape'); }   // walking the arcade floor (Dave: keep this sideways)
-function wantTall() { lockOrient('portrait'); }    // cabinet play / watch: upright, then wantWide() again on the way out
-window.__wantWide = wantWide; window.__wantTall = wantTall;
-function hookWatchOrient() {
-  const hook = el => {
-    const sync = () => { if (el.classList.contains('on')) wantTall(); else if (!cabinetScreenUp()) wantWide(); };
-    new MutationObserver(sync).observe(el, { attributes: true, attributeFilter: ['class'] });
-  };
-  const el = document.getElementById('gvWatchOv');
-  if (el) { hook(el); return; }
-  const mo = new MutationObserver(() => { const n = document.getElementById('gvWatchOv'); if (n) { mo.disconnect(); hook(n); } });
-  mo.observe(document.documentElement, { childList: true, subtree: true });
-}
-hookWatchOrient();
+window.__wantWide = wantWide;
 document.getElementById('bView').onclick = toggleView;
 document.getElementById('bFs').onclick = toggleFs;
 if (matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) document.getElementById('bFs').style.display = 'none';
@@ -1685,6 +1663,7 @@ function frame(now) {
   if (tp && !st.beamed && window.__start && window.__start.dismissed && !(window.__skipStart && !window.__beamTest)) { st.beamed = true; const b = beamSpot(); tp.beamIn(b.x, b.z); }   // t282u: once per session, first Play
   if (tp) tp.update(Math.min(gap / 1000, 0.05), !!document.querySelector('#bPack.on') && !document.querySelector('#inv.on'));
   if (window.__camOverride) { const o = window.__camOverride; camera.position.set(...o.pos); camera.lookAt(...o.at); if (!o.showMonkey) monkey.visible = false; } // screenshots / tests
+  if (window.__roomFire) window.__roomFire.update(Math.min(gap / 1000, 0.05));   // t741u laser pistol: arm pose + lasers, after the walk animation
   const draw = !PS.on || (now - PS.lastDraw) >= (1000 / Math.max(1, PS.fps)) - 0.75;   // power-save: skip GPU frames; movement above already used real dt
   camera.updateMatrixWorld();
   { // run each cabinet screen only when that cabinet is near and in view
@@ -1694,7 +1673,7 @@ function frame(now) {
     const dts = Math.min(gap / 1000, 0.1);
     if (draw) { tickStrikeDemo(demo, dts, vis(strikeCab)); tickGhostDemo(ghostDemo, dts, vis(ghostCab)); }
     const nearMs = PS.on ? PS.cabNearMs : 120;
-    if (now - (frame.attT || 0) > nearMs) { frame.attT = now; for (const c of [berserkerCab, monkeyCab, orcCab, novaCab, cyberCab, blasterCab, pipCab, roadsterCab, clawCab, bbCab, rockfallCab]) {
+    if (now - (frame.attT || 0) > nearMs) { frame.attT = now; for (const c of [berserkerCab, monkeyCab, orcCab, novaCab, cyberCab, blasterCab, pipCab, roadsterCab, clawCab, bbCab, rockfallCab, skyTowerCab]) {
       if (!(vis(c) && !(c.userData.visit && c.userData.visit.on))) continue;
       if (PS.on && camera.position.distanceTo(c.userData.centre) > PS.cabNear && (now - (c.userData._psTick || 0) < PS.cabFarMs)) continue;
       c.userData._psTick = now; c.userData.tick(now / 1000); } }
@@ -1715,9 +1694,11 @@ function frame(now) {
 }
 function stepClock(dt) { st.t += dt; }
 function arcadePause(on) { paused = on; if (!on && !rafOn) { rafOn = true; last = performance.now(); requestAnimationFrame(frame); } }
-const play = setupPlay({ camera, monkey, dsCab, roadsterCab, strikeCab, ghostCab, berserkerCab, monkeyCab, orcCab, novaCab, cyberCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, st, pause(on) { paused = on; if (!on && !rafOn) { rafOn = true; last = performance.now(); requestAnimationFrame(frame); } } });
+const play = setupPlay({ camera, monkey, dsCab, roadsterCab, strikeCab, ghostCab, berserkerCab, monkeyCab, orcCab, novaCab, cyberCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, skyTowerCab, st, pause(on) { paused = on; if (!on && !rafOn) { rafOn = true; last = performance.now(); requestAnimationFrame(frame); } } });
 shield = setupShield({ scene, play, st, monkey, HALF, DOOR_W, DOOR_H });
 tp = setupTeleport({ scene, monkey, st, HALF, H, Z2 }); window.__tp = tp;
+// t341u default: missing or unknown neonarcade.floor -> COBBLE. A saved neon / carpet / checkers / lava / cobble / ice is kept (neon is not in floorMats).
+{ let f = null; try { f = localStorage.getItem(FLOOR_KEY); } catch (e) {} setFloor(f === 'neon' || floorMats[f] ? f : 'cobble'); }
 // t282u: open floor spot near the usual spawn (0,0,5) with a small random offset (so simultaneous joiners don't overlap): not on a pad,
 // not inside a cabinet/collider (collide() must leave it unmoved), on the path when the floor is lava.
 function beamSpot() { const pads = [tp.PAD1, tp.PAD2].filter(Boolean), q = new THREE.Vector3();
@@ -1748,7 +1729,7 @@ const opts = setupOpts({ play, kiosk, shield, st, monkey, setFloor, getFloor: ()
 requestAnimationFrame(frame);
 
 // hooks for tests / future art work
-window.__arcade = { powerSave: PS, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, wantTall, joyFrom, joyClear, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow) };
+window.__arcade = { powerSave: PS, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, floorMats, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, skyTowerCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, joyFrom, joyClear, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow) };
 const mp = setupMP({ scene, camera, monkey, makeMonkey, makeAlien, st, play, getTp: () => tp, HALF, Z2, HALL_L, WX: 80 }); window.__arcade.mp = mp;   // multiplayer step 1: public room, 10 players
 // after the first room frames: pull in the shop, then the window scenery, off the critical path
 { const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 1500 }) : setTimeout(f, 200));
