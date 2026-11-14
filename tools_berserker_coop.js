@@ -10,6 +10,10 @@
 // t836u: two real phones (separate identity, real relay, staggered entry) must keep exactly one host. A late typ:'host'
 // from a joiner with a smaller id must not evict the first player; typ:'in' registers P2; guests retry typ:'join'
 // until typ:'st' arrives; a guest with no live host takes the sim back; CONTINUE re-announces the handshake.
+// t847u/v227: a guest must not steal the host sim while typ:'st' snapshots are still being applied (applySnap
+// updates snapAt; takeHostIfSilent also trusts recentHostSnap). A phone that did steal yields again when typ:'st'
+// arrives, unless it is the established slot-0 host. Guest cameras follow P2 during intro/warp so the stick is
+// not visually applied to P1. Guest joystick always moves P2 on both screens; P1 stays put.
 (function () {
   const C = window.__bzCoop = { role: 'solo', slot: 0, p2on: false, locked: false, peerAt: 0, sent: 0, recv: 0, snaps: 0, joins: 0, rejoins: 0, p2color: '#ff6e14', drawn: { p1: 0, p2: 0 }, left: 0, rejoinCost: 5, typ: {}, seen: {} };
   const I2 = { x: 0, y: 0, A: 0, D: 0, T: 0, R: 0, O: 0, since: 0, tx: null, ty: null, vx: 0, vy: 0 };
@@ -97,9 +101,14 @@
     if (role === 'guest') {
       C.p2on = true;
       C.guestAt = performance.now();
+      C.stoleHost = false;
       if (prev !== 'guest') { try { sendJoinNow(); } catch (e) {} }
     } else if (role === 'host') {
       C.hostAt = performance.now();
+      // leftover guest prediction / I2.tx would make P2 walk on its own after a role steal
+      if (prev === 'guest') {
+        I2.x = 0; I2.y = 0; I2.tx = null; I2.ty = null; I2.vx = 0; I2.vy = 0; I2.since = 0;
+      }
     }
   }
   function sendJoinNow() {
@@ -135,29 +144,41 @@
   // must take the sim back. Otherwise both Vikings freeze and typ:'st' never starts.
   function takeHostIfSilent() {
     if (C.role === 'host' || window.__DEMO) return false;
-    if (liveHostPkt()) return false;
+    // typ:'st' may be visible via others()/bzPeers even when onMsg has not stamped C.seen
+    if (liveHostPkt() || recentHostSnap()) return false;
     const now = performance.now();
     const sl = slotNow();
-    // Slot 0 (first at the cabinet) recovers quickly if both became guests.
+    // Slot 0 (first at the cabinet) recovers if both became guests, but must wait out the
+    // ~1.8s landing warp so a typ:'st' gap cannot hand the sim to the P2 phone.
     // Slot 1 must not steal during a short typ:'st' gap (host on the CONTINUE overlay).
-    const need = sl === 0 ? 1200 : 4000;
+    const need = sl === 0 ? 2500 : 4000;
     const waitFrom = Math.max(C.snapAt || 0, C.guestAt || 0);
     if (waitFrom && now - waitFrom < need) return false;
     if (!waitFrom && C.hostAt && now - C.hostAt < need) return false;
     become('host', sl != null ? sl : 0);
+    C.stoleHost = true;
     const pr = peekInPeer();
     if (pr) { if (pr.typ === 'rejoin' && pr.s) doHostRejoin(pr.s); else rejoinP2(pr.id, { fresh: pr.typ === 'join' }); }
     sendHostKeep();
     try { sendStateNow(); } catch (e) {}
     return true;
   }
+  // t847u: a late joiner who became / stole host must give the sim back when typ:'st' arrives,
+  // even if slotNow() is 0 or null (they sat first but the other phone already hosts the run).
+  function shouldYieldToHost() {
+    if (C.role !== 'host' || window.__DEMO) return false;
+    const rec = recentHostSnap();
+    const hasSt = !!(rec && rec.typ === 'st');
+    // a guest who stole the sim must give it back as soon as typ:'st' from the real host arrives
+    if (C.stoleHost && hasSt) return true;
+    // t836u: only the late cabinet slot yields on typ:'host' / typ:'st' (do not evict slot 0)
+    if (slotNow() === 1 && (hasSt || rec)) return true;
+    return false;
+  }
   function refreshRole() {
     const M = mp();
     if (C.locked) {
-      if (C.role === 'host') {
-        const sl = slotNow();
-        if (sl === 1 && cabN() >= 2 && recentHostSnap()) { become('guest', 1); return C.role; }
-      }
+      if (C.role === 'host' && shouldYieldToHost()) { become('guest', slotNow() != null ? slotNow() : 1); return C.role; }
       if (peerLive()) return C.role;
       C.role = 'solo'; C.locked = false; C.p2on = false; C.slot = 0;
       return C.role;
@@ -248,7 +269,8 @@
     dt = dt || 1 / 60;
     if (!C.p2on || C.p2out || !P2 || P2.hp <= 0) { SM.pred = null; return; }
     if (!SM.pred) SM.pred = { x: P2.x, y: P2.y };
-    if (C.role === 'guest' && typeof J !== 'undefined' && J && (J.x || J.y)) { I2.x = J.x || 0; I2.y = J.y || 0; }
+    // t847u: always copy the stick, including zeros, so a released joystick stops P2
+    if (C.role === 'guest' && typeof J !== 'undefined' && J) { I2.x = J.x || 0; I2.y = J.y || 0; }
     let mx = I2.x || 0, my = I2.y || 0;
     const m = Math.hypot(mx, my); if (m > 1) { mx /= m; my /= m; }
     const spd = (P2.spd || 120) * (1 + ((P2.b && P2.b.swift) || 0) * 0.1);
@@ -287,8 +309,13 @@
     const now = performance.now(); if (now - lastIn < 72) return;
     flushQ();
     let bits = 0; if (I2.A || BT.A) bits |= 1; if (I2.D || BT.D) bits |= 2; if (I2.T || BTL.T || BT.T) bits |= 4; if (I2.R || BTL.R || BT.R) bits |= 8; if (I2.O || BTL.O || BT.O) bits |= 16;
-    const o = { typ: 'in', k: bits, x: +((C.role === 'guest' ? (I2.x || J.x) : I2.x) || 0).toFixed(3), y: +((C.role === 'guest' ? (I2.y || J.y) : I2.y) || 0).toFixed(3) };
-    if (C.role === 'guest') { const gx = (J && (J.x || J.y)) ? J : I2; o.x = +(gx.x || 0).toFixed(3); o.y = +(gx.y || 0).toFixed(3); I2.x = gx.x; I2.y = gx.y; }
+    const o = { typ: 'in', k: bits, x: +(I2.x || 0).toFixed(3), y: +(I2.y || 0).toFixed(3) };
+    if (C.role === 'guest') {
+      // t847u: J.x||J.y used to fall back to stale I2, so typ:'in' kept the last direction after release
+      o.x = +((J && J.x) || 0).toFixed(3);
+      o.y = +((J && J.y) || 0).toFixed(3);
+      I2.x = +o.x; I2.y = +o.y;
+    }
     if (SM.pred) { o.tx = +SM.pred.x.toFixed(1); o.ty = +SM.pred.y.toFixed(1); }
     const moving = !!(o.x || o.y);
     const send = (moving && M.berserker.sendNow) ? M.berserker.sendNow : M.berserker.send;
@@ -326,6 +353,7 @@
     }
     if (s.gen != null) C.gen = s.gen;
     snap = s; C.snaps++;
+    C.snapAt = performance.now();
     if (!P2) resetP2();
     unpackPl(s.p, P); unpackPl(s.q, P2);
     { const now = performance.now(), ht = Number.isFinite(+s.ht) ? +s.ht : now, off = now - ht;
@@ -405,8 +433,8 @@
     if (!pld || pld.i === myId()) return;
     C.recv++; C.peerAt = performance.now(); noteSeen(pld); typN('r_', pld.typ || '?');
     // t836u: only the late cabinet slot yields. A typ:'host' from a smaller id must not evict slot 0.
-    if ((pld.typ === 'st' || pld.typ === 'host') && C.role === 'host' && slotNow() === 1) {
-      become('guest', 1);
+    if ((pld.typ === 'st' || pld.typ === 'host') && shouldYieldToHost()) {
+      become('guest', slotNow() != null ? slotNow() : 1);
       sendJoinNow();
     }
     if (pld.typ === 'bye') { onBye(pld); return; }
@@ -890,6 +918,7 @@
       const M = mp(), oth = M && M.berserker && M.berserker.others && M.berserker.others()[0];
       const st = (oth && oth.s && oth.s.typ === 'st') ? oth.s : ((oth && oth.st && oth.st.typ === 'st') ? oth.st : recentHostSnap());
       if (st && st.typ === 'st') applySnap(st);
+      guestPredict(1 / 60); guestPose();
       sendInput();
       return;
     }
@@ -915,6 +944,18 @@
       try { sendStateNow(); } catch (e) {}
     }
   }
+  const _camFollow = camFollow;
+  camFollow = function (dt) {
+    // t847u: during intro / landing warp the original loop calls camFollow(P) because it skips
+    // update(). On the guest that pinned the camera to P1, so the guest stick appeared to drive
+    // the P1 Viking while P2 drifted at the edge of the screen.
+    const follow = (C.role === 'guest' && P2 && !C.p2out && P2.hp > 0) ? P2
+      : (C.role === 'host' && C.p1out && P2 && P2.hp > 0) ? P2 : null;
+    if (follow && follow !== P) {
+      const sP = P; P = follow; try { return _camFollow(dt); } finally { P = sP; }
+    }
+    return _camFollow(dt);
+  };
   const _loop = loop;
   loop = function (now) {
     try {
