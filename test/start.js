@@ -47,7 +47,8 @@ const PH = process.argv[2] === 'phone', sfx = PH ? '_phone' : '';
   chk((await S()).mode === 'zoomIn', 'after the start screen, PLAY works normally');
   // reload: name remembered, PLAY shown straight away; Enter in the box starts (desktop)
   await page.reload(); await page.waitForFunction(() => window.__arcade && window.__arcade.stats.frames > 3, null, { timeout: 60000 }); await page.waitForTimeout(1000);
-  if (PH) await page.tap('#gaT'); else await page.click('#gaT'); await page.waitForTimeout(2500);   // PLAY appears 2 s after a touch (player.js)
+  if (PH) await page.tap('#gaT'); else await page.click('#gaT');
+  await page.waitForSelector('#gaGo:not([hidden])', { timeout: 8000 });   // PLAY appears 2 s after a touch (player.js); wait for it, don't assume 2500ms is enough under load
   b = await S(); chk(b.exists && b.go && await page.evaluate(() => document.getElementById('gaIn').value) === 'Astro', 'after reload the name is filled in and PLAY is shown');
   if (!PH) { await page.click('#gaIn'); await page.keyboard.press('Enter'); await page.waitForFunction(() => !document.getElementById('start') && window.__start && window.__start.dismissed, null, { timeout: 8000 }); b = await S(); chk(!b.exists && b.st.dismissed && b.mode === 'walk', 'Enter in the name box starts, and the key is not used by the game'); }
   chk(errors.length === 0, 'no page errors ' + errors.join(' | '));
