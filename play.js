@@ -161,8 +161,9 @@ export function setupPlay(A) {
     for (const [f, d] of [[988, 0], [1319, 0.08]]) { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.value = f; g.gain.setValueAtTime(0.12, t + d); g.gain.exponentialRampToValueAtTime(0.001, t + d + 0.35); o.connect(g).connect(ac.destination); o.start(t + d); o.stop(t + d + 0.4); } } catch (e) {} }
   const costOf = m => m.cost || 1;
   function refresh() { const m = near || MACHINES.strike;   // the room prompt: always PLAY (zooms into the demo)
-    bPlay.textContent = m.key === 'roadster' ? (m.cab.userData.seat === 'R' ? 'RIGHT SEAT' : 'LEFT SEAT') : 'PLAY'; P.seatShown = m.key === 'roadster' ? m.cab.userData.seat : null; credit.textContent = (costOf(m) > 1 ? costOf(m) + ' TICKETS TO PLAY  ·  ' : m.key === 'claw' ? '1 TICKET TO PLAY  ·  ' : '') + 'CREDIT ' + m.credits + '  ·  YOU HAVE ' + T.total + ' 🎟';
-    hint.textContent = coarse ? 'TAP TO PLAY' : 'ENTER / E / SPACE'; }
+    // t851u / v230: PLAY is at the bottom; the tickets/credit/you-have line under it is gone. Cost is unchanged (insertTicket still charges and toasts if short).
+    bPlay.textContent = m.key === 'roadster' ? (m.cab.userData.seat === 'R' ? 'RIGHT SEAT' : 'LEFT SEAT') : 'PLAY'; P.seatShown = m.key === 'roadster' ? m.cab.userData.seat : null;
+    if (credit) credit.textContent = ''; if (hint) hint.textContent = ''; }
   function demoRefresh() { const m = P.cur; if (!m) return; const c = costOf(m), has = T.total >= c;
     if (window.__cabDemo) { window.__cabDemo.render({ key: m.key, credits: m.credits, cost: c, tickets: T.total, coarse, board: !!m.board }); return; }
     dInsert.textContent = m.credits > 0 ? (coarse ? 'TAP TO PLAY' : 'TAP / ENTER TO PLAY') : 'INSERT CREDIT'; dInsert.classList.toggle('ready', m.credits > 0);
@@ -263,7 +264,7 @@ export function setupPlay(A) {
     P.zooms++;
     if (m.prep) { P.mode = 'prep'; P.t = 0; P.pcam = null; P.cam0 = camera.position.clone(); P.look0 = monkey.position.clone().setY(1.25); m.anim('on', 0); }   // walk-up + headset on first, then zoomIn()
     else zoomIn(m);
-    const f = P.frame = document.createElement('iframe'); f.id = 'game'; const ver = window.__GA_VER || 'v229'; f.src = m.src + (m.src.indexOf('?') >= 0 ? '&' : '?') + 'ga=' + ver; f.allow = 'autoplay; fullscreen'; f.title = m.cab.name;
+    const f = P.frame = document.createElement('iframe'); f.id = 'game'; const ver = window.__GA_VER || 'v230'; f.src = m.src + (m.src.indexOf('?') >= 0 ? '&' : '?') + 'ga=' + ver; f.allow = 'autoplay; fullscreen'; f.title = m.cab.name;
     f.addEventListener('load', () => { P.loaded = true; try { f.contentWindow.addEventListener('keydown', ev => { if (TV.open) { ev.stopImmediatePropagation(); ev.preventDefault(); if (ev.code === 'Escape') closeView(); return; } if (ev.code === 'Escape') { ev.stopImmediatePropagation(); ev.preventDefault(); exit('esc'); return; } if (P.sub === 'demo') { ev.stopImmediatePropagation(); ev.preventDefault(); if (/^(Enter|Space|KeyE)$/.test(ev.code) && !ev.repeat) tryPlay(); } }, true); } catch (e) {} });
     P.loaded = false; document.body.appendChild(f);
   }

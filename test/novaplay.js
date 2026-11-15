@@ -25,11 +25,11 @@ const PHONE = process.argv[2] === 'phone';
   chk(slot.over > 0, 'the pink wall tube still outlines the cabinet (' + slot.over + ' tube vertices over it)');
   await page.evaluate(() => { const p = window.__arcade.play; p.tickets.total = 1; localStorage.setItem('neonarcade.tickets', '1'); p.machines.nova.credits = 0; });
   await page.evaluate(PH => { window.__arcade.monkey.position.set(2, 0, 0); window.__camOverride = { pos: PH ? [6.4, 1.9, -7.4] : [5.2, 2.0, -7.6], at: [7.4, 1.25, -11.5] }; }, PHONE); await page.waitForTimeout(2500);
-  await page.screenshot({ path: 'shots/nova_cab_room' + sfx + '.png' }); await page.evaluate(() => { window.__camOverride = null; });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/nova_cab_room' + sfx + '.png' }); await page.evaluate(() => { window.__camOverride = null; });
   await H.goTo('novaCabinet'); await page.waitForFunction(() => document.getElementById('playUI').classList.contains('on'), null, { timeout: 8000 }).catch(() => {});
-  const p0 = await H.ui(); chk(p0.on && p0.txt === 'PLAY' && p0.near === 'novaCabinet' && /5 TICKETS TO PLAY/.test(p0.cr), 'PLAY prompt at NOVA TETHER with 5 TICKETS TO PLAY ' + JSON.stringify(p0));
+  const p0 = await H.ui(); chk(p0.on && p0.txt === 'PLAY' && p0.near === 'novaCabinet', 'PLAY prompt at NOVA TETHER ' + JSON.stringify(p0));
   await page.evaluate(() => { window.__camOverride = null; });
-  await page.screenshot({ path: 'shots/nova_cab_prompt' + sfx + '.png' });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/nova_cab_prompt' + sfx + '.png' });
   await H.press(); await H.zoomToDemo(); await page.waitForTimeout(2500);
   const d = await page.evaluate(W => { const w = eval(W); return { src: w.location.pathname, demo: w.__DEMO, mode: w.NV.G.mode, god: w.NV.god, muted: w.NV.Audio.muted, ins: document.getElementById('dInsert').textContent, cost: document.getElementById('dCost').textContent, t: w.NV.G.stageT }; }, W);
   chk(/nova-play/.test(d.src) && d.demo && d.mode === 'play' && d.t > 0.5 && d.ins === 'INSERT CREDIT' && d.cost === '5 TICKETS TO PLAY', 'zoom lands in the NOVA TETHER DEMO: INSERT CREDIT, 2 TICKETS TO PLAY ' + JSON.stringify(d));
@@ -37,7 +37,7 @@ const PHONE = process.argv[2] === 'phone';
   const t0 = await page.evaluate(() => localStorage.getItem('neonarcade.tickets'));
   const dk = await page.evaluate(W => { const w = eval(W), s0 = w.NV.G.score; w.NV.step(900); return { score: w.NV.G.score - s0, got: w.__TK.got, kills: w.__TK.kills }; }, W);
   chk(dk.score > 0 && dk.got === 0 && await page.evaluate(() => localStorage.getItem('neonarcade.tickets')) === t0, 'DEMO autopilot shoots things down but never drops tickets ' + JSON.stringify(dk));
-  await page.waitForTimeout(400); await page.screenshot({ path: 'shots/nova_demo' + sfx + '.png' });
+  await page.waitForTimeout(400); if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/nova_demo' + sfx + '.png' });
   // 1 ticket: NEED 2
   const n0 = (await H.state()).need; await H.insert();
   const b = await page.evaluate(() => ({ cr: window.__arcade.play.machines.nova.credits, t: window.__arcade.play.tickets.total, btn: document.getElementById('bTicket').textContent, need: window.__arcade.play.need }));
@@ -62,7 +62,7 @@ const PHONE = process.argv[2] === 'phone';
   // play on: kills drop tickets, banked at once (run the game's own autopilot steering; the sim still kills / scores normally)
   const a0 = await page.evaluate(() => window.__arcade.play.tickets.total);
   let k = null; for (let i = 0; i < 60; i++) { k = await page.evaluate(W => { const w = eval(W); w.NV.god = true; for (let j = 0; j < 30; j++) { w.__nova.pilot(); w.NV.step(1); if (w.__TK.got) break; } w.NV.god = false; return { got: w.__TK.got, log: w.__TK.log.slice(-3), mode: w.NV.G.mode, t: w.NV.G.stageT }; }, W); if (k.got >= 1) break; }
-  await page.waitForTimeout(250); await page.screenshot({ path: 'shots/nova_ticket' + sfx + '.png' });
+  await page.waitForTimeout(250); if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/nova_ticket' + sfx + '.png' });
   const a1 = await page.evaluate(() => ({ t: window.__arcade.play.tickets.total, ls: +localStorage.getItem('neonarcade.tickets') }));
   chk(k.got >= 1 && a1.t - a0 >= Math.floor(k.got * 2.5) && a1.t - a0 <= Math.ceil(k.got * 2.5) && a1.ls === a1.t, 'kills drop gold tickets, banked in the arcade at once: +' + k.got + ' ' + JSON.stringify(k));
   // a whole stage (warden + stage boss) and into stage 2 (test keeps the ship alive so the timeline completes)

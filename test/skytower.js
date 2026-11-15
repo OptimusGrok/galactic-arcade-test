@@ -32,8 +32,8 @@ const { open } = require('./lib'); const { helpers } = require('./cabflow');
   await H.goTo('skyTowerCabinet');
   await page.waitForFunction(() => document.getElementById('playUI').classList.contains('on'), null, { timeout: 8000 }).catch(() => {});
   const p0 = await H.ui();
-  chk(p0.on && p0.txt === 'PLAY' && p0.near === 'skyTowerCabinet' && /5 TICKETS TO PLAY/.test(p0.cr),
-    'PLAY prompt with 5 TICKETS TO PLAY ' + JSON.stringify(p0));
+  chk(p0.on && p0.txt === 'PLAY' && p0.near === 'skyTowerCabinet',
+    'PLAY prompt at SKY TOWER ' + JSON.stringify(p0));
 
   await H.press();
   await page.waitForFunction(() => window.__arcade.play.mode === 'game' && window.__arcade.play.sub === 'demo' && document.getElementById('game').classList.contains('on'), null, { timeout: 150000 });

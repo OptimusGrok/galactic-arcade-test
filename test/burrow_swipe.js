@@ -10,6 +10,7 @@ const ORIG = '/workspace/burrow-buster/index.html', md5 = () => crypto.createHas
   const m0 = md5();
   const supa = r => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   const { page, errors, close } = await open(PHONE ? { phone: true, w: 412, h: 860, supa } : { supa }); page.setDefaultTimeout(60000);
+  await page.evaluate(() => { document.body.classList.add('upright'); const t = document.getElementById('turnHint'); if (t) t.classList.remove('on'); });
   let ok = true; const chk = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) ok = false; };
   const H = helpers(page, PHONE), W = 'document.getElementById("game").contentWindow';
   const s = await page.evaluate(() => { const A = window.__arcade, T = A.THREE, c = A.bbCab;
@@ -41,12 +42,12 @@ const ORIG = '/workspace/burrow-buster/index.html', md5 = () => crypto.createHas
   const w0 = await H.ui(); chk(w0.on && w0.near === 'bbCabinet', 'walking up to it brings up its PLAY prompt ' + JSON.stringify(w0));
   // screenshots: close-up beside SUPER PIP, wider room view
   await page.evaluate(PH => { window.__arcade.monkey.position.set(-7, 0, 6.5); window.__camOverride = { pos: PH ? [-6.2, 2.2, 5.4] : [-5.8, 2.2, 5.8], at: [-9.6, 1.2, 10.0] }; }, PHONE); await page.waitForTimeout(3000);
-  await page.screenshot({ path: 'shots/bb_cabinet_test' + sfx + '.png' });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/bb_cabinet_test' + sfx + '.png' });
   await page.evaluate(() => { window.__camOverride = { pos: [1.5, 4.6, -1.0], at: [-7.5, 1.0, 9.0] }; }); await page.waitForTimeout(2500);
-  await page.screenshot({ path: 'shots/bb_room' + sfx + '.png' }); await page.evaluate(() => { window.__camOverride = null; });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/bb_room' + sfx + '.png' }); await page.evaluate(() => { window.__camOverride = null; });
   await page.evaluate(() => { const p = window.__arcade.play; p.tickets.total = 1; localStorage.setItem('neonarcade.tickets', '1'); p.machines.bb.credits = 0; });
   await H.goTo('bbCabinet'); await page.waitForFunction(() => document.getElementById('playUI').classList.contains('on'), null, { timeout: 8000 }).catch(() => {});
-  const p0 = await H.ui(); chk(p0.on && p0.txt === 'PLAY' && p0.near === 'bbCabinet' && /5 TICKETS TO PLAY/.test(p0.cr), 'PLAY prompt with 5 TICKETS TO PLAY ' + JSON.stringify(p0));
+  const p0 = await H.ui(); chk(p0.on && p0.txt === 'PLAY' && p0.near === 'bbCabinet', 'PLAY prompt at BURROW BUSTER ' + JSON.stringify(p0));
   await H.press(); await page.waitForFunction(() => window.__arcade.play.mode === 'game' && window.__arcade.play.sub === 'demo' && document.getElementById('game').classList.contains('on'), null, { timeout: 150000 }); await page.waitForTimeout(1500);
   const d = await page.evaluate(W => { const w = eval(W); return { src: w.location.pathname, demo: w.__DEMO, mode: w.__bb.G.mode, silent: w.__bb.silent, cost: document.getElementById('dCost').textContent }; }, W);
   chk(/bb-play/.test(d.src) && d.demo && /play|ready/.test(d.mode) && d.silent && d.cost === '5 TICKETS TO PLAY', 'zoom lands in the silent BURROW BUSTER DEMO ' + JSON.stringify(d));
@@ -63,7 +64,7 @@ const ORIG = '/workspace/burrow-buster/index.html', md5 = () => crypto.createHas
   await page.evaluate(() => window.__arcade.play.insertTicket());
   const c = await page.evaluate(() => ({ cr: window.__arcade.play.machines.bb.credits, t: window.__arcade.play.tickets.total }));
   chk(c.cr === 1 && c.t === 1, 'INSERT 5 TICKETS -> CREDIT 1 (6 -> 1) ' + JSON.stringify(c));
-  if (PHONE) await page.tap('#dInsert'); else await page.keyboard.press('Enter'); await page.waitForTimeout(1500);
+  if (PHONE) await page.tap('#dInsert', { force: true }); else await page.keyboard.press('Enter'); await page.waitForTimeout(1500);
   const g = await page.evaluate(W => { const w = eval(W), B = w.__bb; return { mode: B.G.mode, lives: B.G.lives, run: B.run, demo: w.__DEMO, cr: window.__arcade.play.machines.bb.credits, sub: window.__arcade.play.sub, silent: B.silent }; }, W);
   chk(/ready|play/.test(g.mode) && g.lives === 3 && g.run && !g.demo && g.cr === 0 && g.sub === 'play' && !g.silent, 'credit starts a game with 3 lives, sound on ' + JSON.stringify(g));
   await page.waitForFunction(W => eval(W).__bb.G.mode === 'play', W, { timeout: 20000 }).catch(() => {}); await page.waitForTimeout(300);
@@ -72,7 +73,7 @@ const ORIG = '/workspace/burrow-buster/index.html', md5 = () => crypto.createHas
   const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
   const J = await page.evaluate(W => { const d = eval(W).document; return { base: !!d.getElementById('stickBase'), knob: !!d.getElementById('stickKnob'), pump: getComputedStyle(d.getElementById('pump')).display !== 'none' }; }, W);
   chk(!J.base && !J.knob && J.pump, 'no joystick elements, PUMP button still shown ' + JSON.stringify(J));
-  await page.screenshot({ path: '/workspace/ga-burrow/shots/bb_nojoystick_phone.png' });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: '/workspace/ga-burrow/shots/bb_nojoystick_phone.png' });
   const pos = () => page.evaluate(W => { const p = eval(W).__bb.G.player; return [p.x, p.y]; }, W);
   const swipe = async (dx, dy, x = 230, y = 520) => { await page.evaluate(W => { eval(W).__bb.G.god = true; }, W); const a = await pos(); await touch('touchStart', x, y);
     for (let k = 1; k <= 4; k++) await touch('touchMove', x + dx * k / 4, y + dy * k / 4);

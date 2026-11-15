@@ -21,9 +21,9 @@ const PHONE = process.argv[2] === 'phone';
   chk(bk['1:1'] === '10' && bk['2:0'] === '8' && bk['r2:centre'] === '9' && bk['1:0'] === '11' && bk['2:2'] === '15' && bk['r2:0:0'] === 'H' && !slot.bs.some(b => b[0] === 'B' || b[0] === 'E'), 'NUMBERS: BLASTER = 10, ROADSTER 8, DEAD SIGNAL 9, PIP 11, SKY TOWER 15, letter H stays, B/E retired');
   await page.evaluate(() => { const p = window.__arcade.play; p.tickets.total = 1; localStorage.setItem('neonarcade.tickets', '1'); p.machines.blaster.credits = 0; });
   await page.evaluate(PH => { window.__arcade.monkey.position.set(-6, 0, 1); window.__camOverride = { pos: PH ? [-7.0, 2.0, 0.6] : [-7.4, 2.0, 1.2], at: [-11.6, 1.25, 4.4] }; }, PHONE); await page.waitForTimeout(2500);
-  await page.screenshot({ path: 'shots/blaster_room' + sfx + '.png' }); await page.evaluate(() => { window.__camOverride = null; });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/blaster_room' + sfx + '.png' }); await page.evaluate(() => { window.__camOverride = null; });
   await H.goTo('blasterCabinet'); await page.waitForFunction(() => document.getElementById('playUI').classList.contains('on'), null, { timeout: 8000 }).catch(() => {});
-  const p0 = await H.ui(); chk(p0.on && p0.txt === 'PLAY' && p0.near === 'blasterCabinet' && /5 TICKETS TO PLAY/.test(p0.cr), 'PLAY prompt at BLASTER with 5 TICKETS TO PLAY ' + JSON.stringify(p0));
+  const p0 = await H.ui(); chk(p0.on && p0.txt === 'PLAY' && p0.near === 'blasterCabinet', 'PLAY prompt at BLASTER ' + JSON.stringify(p0));
   await H.press(); await H.zoomToDemo(); await page.waitForTimeout(2000);
   const d = await page.evaluate(W => { const w = eval(W), B = w.__blaster; return { src: w.location.pathname, demo: w.__DEMO, mode: B.S.mode, snd: w.document.getElementById('snd').textContent, ins: document.getElementById('dInsert').textContent, cost: document.getElementById('dCost').textContent }; }, W);
   chk(/blaster-play/.test(d.src) && d.demo && /play|win/.test(d.mode) && d.ins === 'INSERT CREDIT' && d.cost === '5 TICKETS TO PLAY', 'zoom lands in the BLASTER DEMO: INSERT CREDIT, 5 TICKETS TO PLAY ' + JSON.stringify(d));
@@ -59,7 +59,7 @@ const PHONE = process.argv[2] === 'phone';
     await page.keyboard.down('Space'); await page.waitForTimeout(60); fired = await page.evaluate(W => eval(W).__blaster.S.shots.length > 0, W); await page.keyboard.up('Space'); }
   const x1 = await page.evaluate(W => eval(W).__blaster.S.p.x, W);
   chk(x1 > x0 + 10 && fired, (PHONE ? 'touch ▶ / FIRE' : 'arrow keys / SPACE') + ' move and fire the ship: x ' + x0.toFixed(0) + ' -> ' + x1.toFixed(0) + ', fired ' + fired);
-  await page.waitForTimeout(500); await page.screenshot({ path: 'shots/blaster_play' + sfx + '.png' });
+  await page.waitForTimeout(500); if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/blaster_play' + sfx + '.png' });
   // a decent run: 5 freighters (levels 1-5) via a forced hit, as in RPG's own test
   const a0 = await page.evaluate(W => { const B = eval(W).__blaster; B.TK.run = 0; B.S.level = 1; B.S.mode = 'play'; return window.__arcade.play.tickets.total; }, W);
   const kill = W => page.evaluate(W => { const w = eval(W), B = w.__blaster, S = B.S; S.bombs = []; S.beam = null; S.p.frz = 0; S.f.alive = true; S.f.x = S.p.x - 6; S.f.dx = 0; S.f.y = S.p.y - 80;

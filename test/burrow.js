@@ -41,12 +41,12 @@ const ORIG = '/workspace/burrow-buster/index.html', md5 = () => crypto.createHas
   const w0 = await H.ui(); chk(w0.on && w0.near === 'bbCabinet', 'walking up to it brings up its PLAY prompt ' + JSON.stringify(w0));
   // screenshots: close-up beside SUPER PIP, wider room view
   await page.evaluate(PH => { window.__arcade.monkey.position.set(-7, 0, 6.5); window.__camOverride = { pos: PH ? [-6.2, 2.2, 5.4] : [-5.8, 2.2, 5.8], at: [-9.6, 1.2, 10.0] }; }, PHONE); await page.waitForTimeout(3000);
-  await page.screenshot({ path: 'shots/bb_cabinet_test' + sfx + '.png' });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/bb_cabinet_test' + sfx + '.png' });
   await page.evaluate(() => { window.__camOverride = { pos: [1.5, 4.6, -1.0], at: [-7.5, 1.0, 9.0] }; }); await page.waitForTimeout(2500);
-  await page.screenshot({ path: 'shots/bb_room' + sfx + '.png' }); await page.evaluate(() => { window.__camOverride = null; });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/bb_room' + sfx + '.png' }); await page.evaluate(() => { window.__camOverride = null; });
   await page.evaluate(() => { const p = window.__arcade.play; p.tickets.total = 1; localStorage.setItem('neonarcade.tickets', '1'); p.machines.bb.credits = 0; });
   await H.goTo('bbCabinet'); await page.waitForFunction(() => document.getElementById('playUI').classList.contains('on'), null, { timeout: 8000 }).catch(() => {});
-  const p0 = await H.ui(); chk(p0.on && p0.txt === 'PLAY' && p0.near === 'bbCabinet' && /5 TICKETS TO PLAY/.test(p0.cr), 'PLAY prompt with 5 TICKETS TO PLAY ' + JSON.stringify(p0));
+  const p0 = await H.ui(); chk(p0.on && p0.txt === 'PLAY' && p0.near === 'bbCabinet', 'PLAY prompt at BURROW BUSTER ' + JSON.stringify(p0));
   await H.press(); await page.waitForFunction(() => window.__arcade.play.mode === 'game' && window.__arcade.play.sub === 'demo' && document.getElementById('game').classList.contains('on'), null, { timeout: 150000 }); await page.waitForTimeout(1500);
   const d = await page.evaluate(W => { const w = eval(W); return { src: w.location.pathname, demo: w.__DEMO, mode: w.__bb.G.mode, silent: w.__bb.silent, cost: document.getElementById('dCost').textContent }; }, W);
   chk(/bb-play/.test(d.src) && d.demo && /play|ready/.test(d.mode) && d.silent && d.cost === '5 TICKETS TO PLAY', 'zoom lands in the silent BURROW BUSTER DEMO ' + JSON.stringify(d));
@@ -73,7 +73,7 @@ const ORIG = '/workspace/burrow-buster/index.html', md5 = () => crypto.createHas
   const q1 = await page.evaluate(W => { const p = eval(W).__bb.G.player; return [p.x, p.y]; }, W);
   const qm = await page.evaluate(W => eval(W).__bb.G.mode, W);
   chk(Math.abs(q1[0] - q0[0]) + Math.abs(q1[1] - q0[1]) > 10, 'controls move the digger ' + JSON.stringify([q0, q1, qm]));
-  await page.waitForTimeout(400); await page.screenshot({ path: 'shots/bb_play' + sfx + '.png' });
+  await page.waitForTimeout(400); if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/bb_play' + sfx + '.png' });
   // clear rounds 1-5 through the game's own clear -> next round
   const a0 = await page.evaluate(() => window.__arcade.play.tickets.total);
   const run = await page.evaluate(W => { const w = eval(W), B = w.__bb, out = []; for (let r = 0; r < 5; r++) { B.G.enemies = []; B.G.mode = 'play'; for (let i = 0; i < 200 && B.G.mode !== 'ready'; i++) w.update(); out.push(B.TK.run); } return out; }, W);

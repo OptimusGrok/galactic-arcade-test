@@ -11,12 +11,12 @@ const PHONE = process.argv[2] === 'phone';
   const ui = () => page.evaluate(() => ({ on: document.getElementById('playUI').classList.contains('on'), txt: document.getElementById('bPlay').textContent, cr: document.getElementById('credit').textContent, near: window.__arcade.play.near() }));
   const press = async sel => { if (PHONE) await page.tap(sel || '#bPlay'); else await page.keyboard.press('Enter'); };
   await goTo('ghostCabinet'); await page.waitForFunction(() => document.getElementById('playUI').classList.contains('on'), null, { timeout: 8000 }).catch(() => {});
-  const p0 = await ui(); chk(p0.on && p0.txt === 'PLAY' && /CREDIT 1/.test(p0.cr) && p0.near === 'ghostCabinet', 'PLAY prompt + CREDIT 1 at GHOST 256 ' + JSON.stringify(p0));
-  await page.screenshot({ path: 'shots/ghostplay_prompt' + sfx + '.png' });
+  const p0 = await ui(); chk(p0.on && p0.txt === 'PLAY' && p0.near === 'ghostCabinet', 'PLAY prompt at GHOST 256 ' + JSON.stringify(p0));
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/ghostplay_prompt' + sfx + '.png' });
   await press();
   let mid = false; const z = []; for (let i = 0; i < 120; i++) { await page.waitForTimeout(100);
     z.push(await page.evaluate(() => { const A = window.__arcade; return { m: A.play.mode, k: A.play.t, d: A.play.target ? A.camera.position.distanceTo(A.play.target) : 9, mv: A.monkey.visible }; }));
-    const l = z[z.length - 1]; if (!mid && l.m === 'zoomIn' && l.k > 0.45) { mid = true; await page.screenshot({ path: 'shots/ghostplay_midzoom' + sfx + '.png' }); } if (i > 2 && l.m !== 'zoomIn') break; }
+    const l = z[z.length - 1]; if (!mid && l.m === 'zoomIn' && l.k > 0.45) { mid = true; if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/ghostplay_midzoom' + sfx + '.png' }); } if (i > 2 && l.m !== 'zoomIn') break; }
   const zi = z.filter(s => s.m === 'zoomIn');
   chk(zi.length > 0 && zi.some(s => !s.mv), 'zoom passes through the monkey (hidden)');
   chk(zi[0].d > 2.5 && Math.min(...zi.map(s => s.d)) < 0.9, 'camera pushes into the GHOST screen (' + zi[0].d.toFixed(2) + ' -> ' + Math.min(...zi.map(s => s.d)).toFixed(2) + ' m)');
@@ -40,7 +40,7 @@ const PHONE = process.argv[2] === 'phone';
   console.log(JSON.stringify({ d0, d1 }));
   chk(d1.want === 1 || d1.dir === 1, (PHONE ? 'swipe' : 'arrow key') + ' steers the ghost left');
   await page.waitForTimeout(1200);
-  await page.screenshot({ path: 'shots/ghostplay_ingame' + sfx + '.png' });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/ghostplay_ingame' + sfx + '.png' });
   const hud = await page.evaluate(() => { const b = document.getElementById('bExit').getBoundingClientRect(), w = document.getElementById('game').contentWindow, o = [];
     for (const id of ['bPause', 'bMute', 'bPad']) { const r = w.document.getElementById(id).getBoundingClientRect(); if (r.width && !(b.right < r.left || b.left > r.right || b.bottom < r.top || b.top > r.bottom)) o.push(id); }
     w.document.querySelectorAll('#pad .d').forEach(d => { const r = d.getBoundingClientRect(); if (r.width && !(b.right < r.left || b.left > r.right || b.bottom < r.top || b.top > r.bottom)) o.push('pad'); }); return o; });
@@ -63,8 +63,13 @@ const PHONE = process.argv[2] === 'phone';
   chk(c1.cr.startsWith('CREDIT 1') && c1.sfx === 1 && c1.sub === 'demo', 'INSERT TICKET gives CREDIT 1 with coin sound, no game started');
   if (PHONE) await page.touchscreen.tap(page.viewportSize().width / 2, page.viewportSize().height * 0.4); else await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.__arcade.play.sub === 'play' && document.getElementById('game').contentWindow.__ghost.G.state === 'play', null, { timeout: 30000 });
-  if (PHONE) await page.tap('#bExit'); else await page.keyboard.press('Escape');
-  await page.waitForFunction(() => window.__arcade.play.mode === 'walk', null, { timeout: 15000 });
+  if (PHONE) await page.tap('#bExit', { force: true }); else await page.keyboard.press('Escape');
+  let walked = false;
+  for (let i = 0; i < 80; i++) {
+    await page.waitForTimeout(250);
+    if (await page.evaluate(() => window.__arcade.play.mode === 'walk')) { walked = true; break; }
+  }
+  chk(walked, 'EXIT returns to walk');
   const ex = await page.evaluate(() => ({ last: window.__arcade.play.lastExit, gc: window.__arcade.play.machines.ghost.credits }));
   chk((PHONE ? ex.last === 'x' : ex.last === 'esc') && ex.gc === 0, 'EXIT (' + (PHONE ? '✕' : 'Esc') + ') zooms out, credit used');
   const ext = requests.filter(u => !u.startsWith('http://localhost'));

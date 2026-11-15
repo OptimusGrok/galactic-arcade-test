@@ -13,23 +13,53 @@ const PHONE = process.argv[2] === 'phone';
   await page.evaluate(() => { const p = window.__arcade.play; p.tickets.total = 5; p.machines.strike.credits = 1; p.machines.ghost.credits = 1; });
   const goTo = name => page.evaluate(n => { const A = window.__arcade, c = A.playables.find(k => k.name === n), u = c.userData; window.__noAdapt = 1; A.st.fp = false;
     A.st.vel.set(0, 0, 0); A.monkey.position.set(u.front.x, 0, u.front.z); A.st.face = Math.atan2(u.facing.x, u.facing.z); A.st.lookT = -99; }, name);
-  await goTo('cabinet_south_2'); await page.waitForTimeout(600); chk(!(await on()), 'no PLAY prompt at a blank cabinet');
+  // blank cabinets were dropped from playables; stand mid-room, clear of every machine
+  await page.evaluate(() => { const A = window.__arcade; window.__noAdapt = 1; A.st.fp = false; A.st.vel.set(0, 0, 0); A.monkey.position.set(4, 0, 0); A.st.face = 0; A.st.lookT = -99; });
+  await page.waitForTimeout(600); chk(!(await on()), 'no PLAY prompt away from a machine');
   await goTo('ghostCabinet'); await page.waitForTimeout(600); 
   await goTo('strikeCabinet'); await page.waitForTimeout(900);
-  await page.screenshot({ path: 'shots/play_prompt' + (PHONE ? '_phone' : '') + '.png' });
-  const p0 = await page.evaluate(() => ({ on: document.getElementById('playUI').classList.contains('on'), txt: document.getElementById('bPlay').textContent, cr: document.getElementById('credit').textContent }));
-  chk(p0.on && p0.txt === 'PLAY' && /CREDIT 1/.test(p0.cr), 'PLAY prompt + CREDIT 1 at STRIKE ' + JSON.stringify(p0));
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/play_prompt' + (PHONE ? '_phone' : '') + '.png' });
+  const p0 = await page.evaluate(() => {
+    const box = id => { const e = document.getElementById(id); if (!e) return null; const cs = getComputedStyle(e); const b = e.getBoundingClientRect();
+      const vis = cs.display !== 'none' && cs.visibility !== 'hidden' && +cs.opacity > 0.05 && b.width > 0 && b.height > 0;
+      return { vis, t: b.top, b: b.bottom, l: b.left, r: b.right, w: b.width, h: b.height, cx: (b.left + b.right) / 2 }; };
+    const hits = (a, c) => a && c && a.vis && c.vis && !(a.b <= c.t || c.b <= a.t || a.r <= c.l || c.r <= a.l);
+    const play = box('bPlay'), W = innerWidth, H = innerHeight;
+    return {
+      on: document.getElementById('playUI').classList.contains('on'), txt: document.getElementById('bPlay').textContent,
+      creditVis: box('credit') && box('credit').vis, hintVis: box('hint') && box('hint').vis,
+      mid: play && Math.abs(play.cx - W / 2) < W * 0.12, low: play && play.b > H * 0.55 && play.b <= H - 2,
+      overlap: ['joy', 'bZoom', 'bFire', 'flyHud'].filter(id => hits(play, box(id))),
+      play, W, H
+    };
+  });
+  chk(p0.on && p0.txt === 'PLAY', 'PLAY prompt at STRIKE ' + JSON.stringify({ on: p0.on, txt: p0.txt }));
+  chk(!p0.creditVis && !p0.hintVis, 't851u: no tickets/credit/hint text under PLAY ' + JSON.stringify({ creditVis: p0.creditVis, hintVis: p0.hintVis }));
+  chk(p0.mid && p0.low && p0.overlap.length === 0, 't851u: PLAY is centred at the bottom, clear of joystick/FLY/FIRE/ZOOM ' + JSON.stringify({ mid: p0.mid, low: p0.low, overlap: p0.overlap, play: p0.play, W: p0.W, H: p0.H }));
   if (PHONE) await page.tap('#bPlay'); else await page.keyboard.press('Enter');
   let midShot = false; const z = []; for (let i = 0; i < 120; i++) { await page.waitForTimeout(100); if (i > 2 && z[z.length - 1].m !== 'zoomIn') break; z.push(await page.evaluate(() => { const A = window.__arcade; return { m: A.play.mode, k: A.play.t, d: A.play.target ? A.camera.position.distanceTo(A.play.target) : 9, mv: A.monkey.visible }; }));
-    if (!midShot && z[z.length - 1].m === 'zoomIn' && z[z.length - 1].k > 0.45) { midShot = true; await page.screenshot({ path: 'shots/play_midzoom' + (PHONE ? '_phone' : '') + '.png' }); } }
+    if (!midShot && z[z.length - 1].m === 'zoomIn' && z[z.length - 1].k > 0.45) { midShot = true; if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/play_midzoom' + (PHONE ? '_phone' : '') + '.png' }); } }
   console.log(JSON.stringify(z.filter((_, i) => i % 4 === 0).map(s => [s.m, +s.d.toFixed(2), s.mv])));
   chk(z[0].m === 'zoomIn' && z.some(s => !s.mv), 'zoom starts, camera passes through the monkey (hidden)');
   const zi = z.filter(s => s.m === 'zoomIn'); chk(Math.min(...zi.map(s => s.d)) < 1.2 && zi[0].d > 2.5 /* sampled every 100 ms; slow software-GL frames can skip the closest point */, 'camera pushes in to the screen (' + zi[0].d.toFixed(2) + ' -> ' + Math.min(...zi.map(s => s.d)).toFixed(2) + ' m from the screen)');
   await page.waitForFunction(() => window.__arcade.play.mode === 'game' && document.getElementById('game').classList.contains('on'), null, { timeout: 30000 });
   await page.waitForTimeout(800);
   chk(await page.evaluate(() => window.__arcade.play.sub === 'demo' && document.getElementById('demoUI').classList.contains('on')), 'zoom lands in the DEMO');
-  await page.evaluate(() => window.__arcade.play.tryPlay()); await page.waitForTimeout(600);   // tap the screen (flow details: test/credits.js)
-  const g = await page.evaluate(() => { const A = window.__arcade, S = document.getElementById('game').contentWindow.STRIKE; return { scene: S.G.scene, lives: S.G.lives, credits: A.play.credits, paused: A.paused, cr: document.getElementById('credit').textContent, f0: A.stats.frames }; });
+  const tp = await page.evaluate(() => { const P = window.__arcade.play, b = P.blocked, n = P.need; P.tryPlay(); return { mode: P.mode, sub: P.sub, credits: P.cur && P.cur.credits, blockedDelta: P.blocked - b, needDelta: P.need - n }; });   // tap the screen (flow details: test/credits.js)
+  let g = null;
+  for (let i = 0; i < 40; i++) {
+    await page.waitForTimeout(200);
+    g = await page.evaluate(() => {
+      try {
+        const A = window.__arcade, w = document.getElementById('game').contentWindow, S = w && w.STRIKE;
+        if (!S || !S.G) return { ready: false, mode: A.play.mode, sub: A.play.sub, credits: A.play.cur && A.play.cur.credits, blocked: A.play.blocked, need: A.play.need };
+        return { ready: true, scene: S.G.scene, lives: S.G.lives, credits: A.play.credits, paused: A.paused, cr: document.getElementById('credit').textContent, f0: A.stats.frames };
+      } catch (e) { return { ready: false, err: String(e) }; }
+    });
+    if (g.ready) break;
+  }
+  if (!g || !g.ready) console.log('tryPlay not ready', JSON.stringify({ tp, g }));
+  if (!g || !g.ready) { chk(false, 'playable Strike started after tryPlay ' + JSON.stringify({ tp, g })); } else chk(true, 'tryPlay reached Strike');
   chk(g.scene === 'play', 'playable Strike started straight into play (' + g.scene + ', lives ' + g.lives + ')');
   chk(g.credits === 0, 'credit spent 1 -> 0');
   await page.waitForTimeout(600); const f1 = await page.evaluate(() => window.__arcade.stats.frames);
@@ -43,7 +73,7 @@ const PHONE = process.argv[2] === 'phone';
   else { await page.keyboard.down('ArrowLeft'); await page.waitForTimeout(700); await page.keyboard.up('ArrowLeft'); }
   const x1 = await page.evaluate(() => document.getElementById('game').contentWindow.STRIKE.pl.x);
   chk(x1 < x0 - 5, 'input moves the ship left (' + x0.toFixed(1) + ' -> ' + x1.toFixed(1) + ')');
-  await page.screenshot({ path: 'shots/play_ingame' + (PHONE ? '_phone' : '') + '.png' });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/play_ingame' + (PHONE ? '_phone' : '') + '.png' });
   // game over with a world-ranking score -> name entry -> submit (stubbed) -> board -> zoom out
   await page.evaluate(() => { const w = document.getElementById('game').contentWindow; w.STRIKE.G.score = 123450; w.STRIKE.G.playT = 600 * 60; w.gameOver(); });
   await page.waitForFunction(() => document.getElementById('game').contentWindow.STRIKE.G.scene === 'entry', null, { timeout: 20000 });
