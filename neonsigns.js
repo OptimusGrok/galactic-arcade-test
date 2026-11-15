@@ -6,6 +6,8 @@
 // same fonts. Still ONE merged mesh of quads (one draw call, one program, no per-frame work), compiled by the warm-up; the atlas is uploaded
 // to the GPU as soon as it loads (initTexture), on the start screen, not at the first room frame.
 // t826u / v216: a neon character/icon image sits just above each name sign (one extra canvas atlas + one merged mesh, no per-frame work).
+// t850u / v229: the free-standing claw icon is two-sided (front + UV-flipped back) and its prongs open/close on a cheap baked-frame loop.
+// Orc Attack’s icon is a detailed neon orc (tusks, horned helmet, axe) in the same dim-glow style as the Viking / Strike icons.
 import { NEON_ATLAS } from './neon_atlas.js';
 
 function neonStroke(g, draw, col, w, glow) {
@@ -116,6 +118,258 @@ function strikeBlueShip(g, S) {
   g.restore();
 }
 
+
+// t850u / v229: local dim neon (blur 9 / alpha 0.5) — do not change neonStroke(), which the other icons still use at blur 18
+function dimGlow(g, col, w, blur, a0, fn, mode) {
+  g.save();
+  g.shadowColor = col; g.shadowBlur = blur; g.strokeStyle = col; g.fillStyle = col;
+  g.lineWidth = w; g.lineJoin = 'round'; g.lineCap = 'round'; g.globalAlpha = a0;
+  g.beginPath(); fn(g); if (mode === 'fill') { g.fill(); g.stroke(); } else g.stroke();
+  g.shadowBlur = 0; g.globalAlpha = Math.min(0.9, a0 + 0.38);
+  g.beginPath(); fn(g); if (mode === 'fill') { g.fill(); g.stroke(); } else g.stroke();
+  g.restore();
+}
+
+// Detailed neon orc for ORC ATTACK: head with tusks, horned iron helmet, battle axe.
+// Same size cell and ~45% dimmer glow as the v225 Viking / v226 Strike icons.
+function orcAttackIcon(g, S) {
+  const cx = S / 2, cy = S / 2;
+  const hide = '#3db83a', hide2 = '#2a8a28', skin = '#5cbf3a', tusk = '#f0e6c8';
+  const iron = '#9aa4b0', edge = '#d4dee8', gold = '#d4b032', wood = '#c08040';
+  const wrap = '#8a5a28', ember = '#c42816', horn = '#e8d0a0', leather = '#6a3a1c';
+  const stroke = (col, w, fn) => dimGlow(g, col, w, 9, 0.5, fn, 'stroke');
+  const fillc = (col, w, fn) => dimGlow(g, col, w, 8, 0.45, fn, 'fill');
+  const fine = (col, w, fn) => dimGlow(g, col, w, 4, 0.4, fn, 'stroke');
+  const vx = cx - 26; // shift further left so the axe blade stays inside the 12 px atlas crop
+  // leather jerkin / shoulders
+  fillc(leather, 2.4, c => {
+    c.moveTo(vx - 70, cy + 28);
+    c.quadraticCurveTo(vx - 82, cy + 8, vx - 52, cy + 8);
+    c.lineTo(vx - 20, cy + 24);
+    c.lineTo(vx + 16, cy + 24);
+    c.lineTo(vx + 36, cy + 8);
+    c.quadraticCurveTo(vx + 70, cy + 10, vx + 68, cy + 32);
+    c.lineTo(vx + 48, cy + 88);
+    c.lineTo(vx - 48, cy + 88);
+    c.closePath();
+  });
+  // scale / plate rows on the chest
+  g.save();
+  g.beginPath();
+  g.moveTo(vx - 36, cy + 28); g.lineTo(vx + 32, cy + 28); g.lineTo(vx + 36, cy + 78); g.lineTo(vx - 32, cy + 78); g.closePath();
+  g.clip();
+  fine(hide, 1.6, c => {
+    for (let row = 0, y = cy + 32; y < cy + 76; y += 6, row++) {
+      for (let x = vx - 34 + (row % 2) * 4; x < vx + 34; x += 8) {
+        c.moveTo(x - 3.2, y); c.quadraticCurveTo(x, y + 3.4, x + 3.2, y);
+      }
+    }
+  });
+  g.restore();
+  // belt + buckle
+  stroke(gold, 5, c => { c.moveTo(vx - 36, cy + 72); c.lineTo(vx + 36, cy + 72); });
+  fillc(gold, 1.8, c => { c.rect(vx - 7, cy + 66, 14, 14); });
+  fine('#8a6a18', 1.6, c => { c.moveTo(vx, cy + 68); c.lineTo(vx, cy + 78); });
+  // thick neck
+  fillc(skin, 2.2, c => {
+    c.moveTo(vx - 22, cy + 8);
+    c.quadraticCurveTo(vx - 20, cy + 28, vx - 16, cy + 36);
+    c.lineTo(vx + 16, cy + 36);
+    c.quadraticCurveTo(vx + 20, cy + 28, vx + 22, cy + 8);
+    c.closePath();
+  });
+  // pointed ears (behind helmet cheeks)
+  fillc(skin, 2, c => {
+    c.moveTo(vx - 36, cy - 18); c.quadraticCurveTo(vx - 70, cy - 16, vx - 42, cy + 10); c.quadraticCurveTo(vx - 36, cy + 2, vx - 30, cy - 8); c.closePath();
+  });
+  fillc(skin, 2, c => {
+    c.moveTo(vx + 36, cy - 18); c.quadraticCurveTo(vx + 70, cy - 16, vx + 42, cy + 10); c.quadraticCurveTo(vx + 36, cy + 2, vx + 30, cy - 8); c.closePath();
+  });
+  fine(hide2, 1.5, c => {
+    c.moveTo(vx - 40, cy - 12); c.quadraticCurveTo(vx - 58, cy - 12, vx - 42, cy + 4);
+    c.moveTo(vx + 40, cy - 12); c.quadraticCurveTo(vx + 58, cy - 12, vx + 42, cy + 4);
+  });
+  // broad jaw / snout
+  fillc(skin, 2.4, c => {
+    c.moveTo(vx - 40, cy - 16);
+    c.quadraticCurveTo(vx - 48, cy + 8, vx - 28, cy + 22);
+    c.quadraticCurveTo(vx, cy + 32, vx + 28, cy + 22);
+    c.quadraticCurveTo(vx + 48, cy + 8, vx + 40, cy - 16);
+    c.quadraticCurveTo(vx, cy - 4, vx - 40, cy - 16);
+    c.closePath();
+  });
+  // brow ridge
+  fillc(hide2, 2, c => {
+    c.moveTo(vx - 34, cy - 22);
+    c.quadraticCurveTo(vx, cy - 8, vx + 34, cy - 22);
+    c.quadraticCurveTo(vx + 28, cy - 32, vx, cy - 28);
+    c.quadraticCurveTo(vx - 28, cy - 32, vx - 34, cy - 22);
+    c.closePath();
+  });
+  // iron helmet dome
+  fillc(iron, 2.4, c => {
+    c.moveTo(vx - 44, cy - 20);
+    c.quadraticCurveTo(vx - 50, cy - 72, vx, cy - 86);
+    c.quadraticCurveTo(vx + 50, cy - 72, vx + 44, cy - 20);
+    c.closePath();
+  });
+  fine('#6a7480', 1.6, c => {
+    c.moveTo(vx - 28, cy - 28); c.quadraticCurveTo(vx, cy - 70, vx + 28, cy - 28);
+    c.moveTo(vx - 20, cy - 24); c.quadraticCurveTo(vx, cy - 58, vx + 20, cy - 24);
+  });
+  // brow rim + nose guard
+  stroke(gold, 5, c => { c.moveTo(vx - 46, cy - 20); c.quadraticCurveTo(vx, cy - 10, vx + 46, cy - 20); });
+  stroke(gold, 4.5, c => { c.moveTo(vx, cy - 76); c.lineTo(vx, cy + 4); });
+  // cheek plates
+  fillc(iron, 2.2, c => {
+    c.moveTo(vx - 44, cy - 20); c.lineTo(vx - 48, cy + 8); c.lineTo(vx - 32, cy + 6); c.lineTo(vx - 30, cy - 16); c.closePath();
+  });
+  fillc(iron, 2.2, c => {
+    c.moveTo(vx + 44, cy - 20); c.lineTo(vx + 48, cy + 8); c.lineTo(vx + 32, cy + 6); c.lineTo(vx + 30, cy - 16); c.closePath();
+  });
+  fillc(gold, 1.2, c => {
+    for (const [x, y] of [
+      [vx - 34, cy - 16], [vx - 16, cy - 13], [vx, cy - 12], [vx + 16, cy - 13], [vx + 34, cy - 16],
+      [vx - 40, cy - 4], [vx + 40, cy - 4]
+    ]) c.moveTo(x + 2.1, y), c.arc(x, y, 2.1, 0, 7);
+  });
+  // bull horns
+  fillc(horn, 2.4, c => {
+    c.moveTo(vx - 28, cy - 60);
+    c.quadraticCurveTo(vx - 86, cy - 52, vx - 28, cy - 104);
+    c.quadraticCurveTo(vx - 52, cy - 72, vx - 14, cy - 64);
+    c.closePath();
+  });
+  fillc(horn, 2.4, c => {
+    c.moveTo(vx + 28, cy - 60);
+    c.quadraticCurveTo(vx + 86, cy - 52, vx + 28, cy - 104);
+    c.quadraticCurveTo(vx + 52, cy - 72, vx + 14, cy - 64);
+    c.closePath();
+  });
+  fine('#c4a878', 1.5, c => {
+    c.moveTo(vx - 26, cy - 66); c.quadraticCurveTo(vx - 66, cy - 58, vx - 30, cy - 94);
+    c.moveTo(vx + 26, cy - 66); c.quadraticCurveTo(vx + 66, cy - 58, vx + 30, cy - 94);
+  });
+  // eyes under the brow (after helmet so they sit in the open face)
+  g.fillStyle = '#14080c';
+  g.beginPath(); g.ellipse(vx - 13, cy - 12, 6.2, 4.2, -0.2, 0, 7); g.ellipse(vx + 13, cy - 12, 6.2, 4.2, 0.2, 0, 7); g.fill();
+  g.fillStyle = '#ffd040';
+  g.beginPath(); g.ellipse(vx - 12, cy - 12, 2.6, 2.2, -0.2, 0, 7); g.ellipse(vx + 12, cy - 12, 2.6, 2.2, 0.2, 0, 7); g.fill();
+  g.fillStyle = '#fff6c8';
+  g.beginPath(); g.arc(vx - 11, cy - 13, 1.1, 0, 7); g.arc(vx + 13, cy - 13, 1.1, 0, 7); g.fill();
+  // snarl
+  stroke('#2a1a0a', 2.2, c => {
+    c.moveTo(vx - 16, cy + 10); c.quadraticCurveTo(vx, cy + 18, vx + 16, cy + 10);
+  });
+  // tusks from the lower jaw, curving out and up
+  fillc(tusk, 2.2, c => {
+    c.moveTo(vx - 16, cy + 16);
+    c.quadraticCurveTo(vx - 36, cy + 18, vx - 44, cy - 2);
+    c.quadraticCurveTo(vx - 30, cy + 8, vx - 18, cy + 10);
+    c.closePath();
+  });
+  fillc(tusk, 2.2, c => {
+    c.moveTo(vx + 16, cy + 16);
+    c.quadraticCurveTo(vx + 36, cy + 18, vx + 44, cy - 2);
+    c.quadraticCurveTo(vx + 30, cy + 8, vx + 18, cy + 10);
+    c.closePath();
+  });
+  fine('#d8c8a0', 1.4, c => {
+    c.moveTo(vx - 20, cy + 12); c.quadraticCurveTo(vx - 32, cy + 14, vx - 38, cy + 2);
+    c.moveTo(vx + 20, cy + 12); c.quadraticCurveTo(vx + 32, cy + 14, vx + 38, cy + 2);
+  });
+  // smaller inner fangs
+  fillc(tusk, 1.6, c => {
+    c.moveTo(vx - 6, cy + 16); c.lineTo(vx - 10, cy + 4); c.lineTo(vx - 2, cy + 14); c.closePath();
+    c.moveTo(vx + 6, cy + 16); c.lineTo(vx + 10, cy + 4); c.lineTo(vx + 2, cy + 14); c.closePath();
+  });
+  // nose ring
+  stroke(gold, 2.4, c => { c.arc(vx, cy + 2, 6, 0.15 * Math.PI, 0.85 * Math.PI); });
+  // wooden haft + axe (right side, same crop budget as the Viking)
+  stroke(wood, 9, c => { c.moveTo(vx + 46, cy + 46); c.lineTo(vx + 74, cy - 34); });
+  stroke(wrap, 4.5, c => {
+    const ax1 = vx + 46, ay1 = cy + 46, ax2 = vx + 74, ay2 = cy - 34;
+    for (const t of [0.16, 0.28, 0.40, 0.68]) {
+      const x = ax1 + (ax2 - ax1) * t, y = ay1 + (ay2 - ay1) * t;
+      const dx = (ax2 - ax1) * 0.04, dy = (ay2 - ay1) * 0.04;
+      c.moveTo(x - dy * 3 - dx, y + dx * 3 - dy); c.lineTo(x + dy * 3 + dx, y - dx * 3 + dy);
+    }
+  });
+  fillc(skin, 1.8, c => { c.arc(vx + 48, cy + 44, 8, 0, 7); });
+  stroke(skin, 3.2, c => {
+    c.moveTo(vx + 42, cy + 40); c.quadraticCurveTo(vx + 40, cy + 34, vx + 46, cy + 32);
+    c.moveTo(vx + 46, cy + 38); c.quadraticCurveTo(vx + 44, cy + 30, vx + 50, cy + 28);
+    c.moveTo(vx + 50, cy + 38); c.quadraticCurveTo(vx + 50, cy + 30, vx + 56, cy + 30);
+  });
+  const hx = vx + 72, hy = cy - 40;
+  fillc(iron, 2.4, c => {
+    c.moveTo(hx - 14, hy - 10);
+    c.lineTo(hx + 4, hy - 16);
+    c.lineTo(hx + 10, hy - 4);
+    c.quadraticCurveTo(hx + 34, hy - 4, hx + 34, hy + 12);
+    c.quadraticCurveTo(hx + 22, hy + 38, hx - 2, hy + 30);
+    c.quadraticCurveTo(hx + 12, hy + 14, hx + 2, hy + 8);
+    c.lineTo(hx - 12, hy + 12);
+    c.closePath();
+  });
+  stroke('#6a7480', 3.2, c => { c.moveTo(hx - 8, hy - 12); c.lineTo(hx - 6, hy + 10); });
+  fine('#b8c0c8', 1.6, c => { c.moveTo(hx + 6, hy - 2); c.quadraticCurveTo(hx + 20, hy + 6, hx + 14, hy + 22); });
+  stroke(edge, 2.6, c => {
+    c.moveTo(hx + 10, hy - 4);
+    c.quadraticCurveTo(hx + 34, hy - 4, hx + 34, hy + 12);
+    c.quadraticCurveTo(hx + 22, hy + 38, hx - 2, hy + 30);
+  });
+}
+
+// Neon claw: 3 prongs (like the cabinet crane). open 0 = shut, 1 = fully spread.
+function drawClawIcon(g, S, open) {
+  const cx = S / 2, cy = S / 2;
+  const pink = '#ff2bd6', hot = '#ff8ae8', steel = '#e8d0ff';
+  const o = Math.max(0, Math.min(1, open == null ? 0.55 : +open));
+  const stroke = (col, w, fn) => dimGlow(g, col, w, 8, 0.5, fn, 'stroke');
+  const fillc = (col, w, fn) => dimGlow(g, col, w, 7, 0.45, fn, 'fill');
+  const fine = (col, w, fn) => dimGlow(g, col, w, 4, 0.4, fn, 'stroke');
+  // cable down from the top of the cell
+  stroke(pink, 5, c => { c.moveTo(cx, cy - 96); c.lineTo(cx, cy - 42); });
+  // housing
+  fillc(pink, 2.4, c => {
+    c.moveTo(cx - 28, cy - 44);
+    c.quadraticCurveTo(cx - 32, cy - 62, cx, cy - 66);
+    c.quadraticCurveTo(cx + 32, cy - 62, cx + 28, cy - 44);
+    c.lineTo(cx + 22, cy - 28);
+    c.quadraticCurveTo(cx, cy - 22, cx - 22, cy - 28);
+    c.closePath();
+  });
+  fine(hot, 1.8, c => { c.arc(cx, cy - 48, 10, 0, 7); });
+  fillc(steel, 1.4, c => { c.arc(cx, cy - 48, 4.5, 0, 7); });
+  // hinge bar
+  stroke(steel, 5, c => { c.moveTo(cx - 16, cy - 24); c.lineTo(cx + 16, cy - 24); });
+  const pivotY = cy - 22;
+  // three prongs: left, centre, right. closed angles are nearly vertical; open fans out
+  const specs = [
+    { sign: -1, closed: 0.32, spread: 1.05 },
+    { sign: 0, closed: 0, spread: 0 },
+    { sign: 1, closed: 0.32, spread: 1.05 }
+  ];
+  for (const sp of specs) {
+    const ang = (sp.sign === 0 ? 0 : sp.sign) * (sp.closed + (sp.spread - sp.closed) * o);
+    const len = 80, hook = 22 + 14 * o;
+    const px = cx + Math.sin(ang) * 6;
+    const ex = px + Math.sin(ang) * len;
+    const ey = pivotY + Math.cos(ang * 0.12) * len;
+    // inward hook: tighter when closing so the tips curl in, still readable when open
+    const hookA = ang + (sp.sign === 0 ? 0 : -sp.sign) * (1.05 - 0.25 * o);
+    const tx = ex + Math.sin(hookA) * hook;
+    const ty = ey + Math.cos(hookA) * hook * 0.45;
+    stroke(pink, 5.2, c => {
+      c.moveTo(px, pivotY);
+      c.lineTo(ex, ey);
+      c.lineTo(tx, ty);
+    });
+    fine(hot, 2, c => { c.moveTo(ex, ey); c.lineTo(tx, ty); });
+  }
+}
+
 function drawIcon(g, key, S) {
   const C = {
     strike: '#ff3b3b', ghost: '#b46bff', cyber: '#ff3fd0', orc: '#4dff5a', pip: '#ff7ad9',
@@ -135,9 +389,7 @@ function drawIcon(g, key, S) {
     path(c => { c.rect(cx - 70, cy + 20, 36, 50); c.rect(cx - 28, cy - 10, 32, 80); c.rect(cx + 12, cy - 50, 28, 120); c.rect(cx + 48, cy + 8, 24, 62); });
     path(c => { c.moveTo(cx - 80, cy + 72); c.lineTo(cx + 80, cy + 72); c.moveTo(cx - 40, cy + 4); c.lineTo(cx + 8, cy + 4); });
   } else if (key === 'orc') {
-    fillp(c => { c.ellipse(cx, cy + 4, 62, 58, 0, 0, 7); });
-    path(c => { c.moveTo(cx - 22, cy + 28); c.lineTo(cx - 18, cy + 78); c.lineTo(cx - 6, cy + 30); c.moveTo(cx + 22, cy + 28); c.lineTo(cx + 18, cy + 78); c.lineTo(cx + 6, cy + 30); });
-    g.fillStyle = '#0a0618'; g.beginPath(); g.arc(cx - 22, cy - 4, 8, 0, 7); g.arc(cx + 22, cy - 4, 8, 0, 7); g.fill();
+    orcAttackIcon(g, S);
   } else if (key === 'pip') {
     fillp(c => { c.arc(cx, cy - 8, 52, 0.15 * Math.PI, 0.85 * Math.PI, true); c.lineTo(cx - 36, cy + 70); c.lineTo(cx + 36, cy + 70); c.closePath(); });
     path(c => { c.arc(cx, cy - 4, 22, 0, 7); c.moveTo(cx - 10, cy + 40); c.lineTo(cx + 10, cy + 40); });
@@ -370,7 +622,7 @@ function drawIcon(g, key, S) {
   } else if (key === 'roadster') {
     path(c => { c.moveTo(cx - 78, cy + 8); c.lineTo(cx - 40, cy + 8); c.lineTo(cx - 20, cy - 28); c.lineTo(cx + 36, cy - 28); c.lineTo(cx + 62, cy + 8); c.lineTo(cx + 78, cy + 8); c.lineTo(cx + 78, cy + 28); c.lineTo(cx - 78, cy + 28); c.closePath(); c.arc(cx - 36, cy + 32, 16, 0, 7); c.moveTo(cx + 52, cy + 32); c.arc(cx + 36, cy + 32, 16, 0, 7); });
   } else if (key === 'claw') {
-    path(c => { c.moveTo(cx, cy - 78); c.lineTo(cx, cy - 20); c.moveTo(cx, cy - 20); c.lineTo(cx - 48, cy + 50); c.lineTo(cx - 20, cy + 70); c.moveTo(cx, cy - 20); c.lineTo(cx + 48, cy + 50); c.lineTo(cx + 20, cy + 70); c.moveTo(cx - 16, cy - 8); c.lineTo(cx + 16, cy - 8); });
+    drawClawIcon(g, S, 0.55);
   }
 }
 
@@ -382,8 +634,12 @@ function makeIconAtlas() {
   const rects = {};
   keys.forEach((key, i) => {
     const x = (i % COLS) * S, y = Math.floor(i / COLS) * S;
+    // willReadFrequently (software 2D) avoids a Chromium GPU-path-cache leak where
+    // the previous cell's neon colour is stamped into the next icon (e.g. cyber pink on the orc).
     const t = document.createElement('canvas'); t.width = S; t.height = S;
-    drawIcon(t.getContext('2d'), key, S);
+    const tctx = t.getContext('2d', { willReadFrequently: true });
+    if (tctx.reset) tctx.reset();
+    drawIcon(tctx, key, S);
     g.drawImage(t, x, y);
     rects[key] = { x: x + 12, y: y + 12, w: S - 24, h: S - 24 };
   });
@@ -409,9 +665,16 @@ export function buildNeonSigns(THREE, mergeGeometries, list, opt = {}) {
       p.y = Math.max(b.max.y + 0.3 + h / 2, opt.minY || 3.3); }
     else if (!e.at) p.y = b.max.y + 0.08 + h / 2;
     else p.y += h / 2;
+    const yaw = Math.atan2(n.x, n.z);
     const g = new THREE.PlaneGeometry(w, h), uv = g.attributes.uv;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) ? u1 : u0, uv.getY(i) ? v1 : v0);
-    g.rotateY(Math.atan2(n.x, n.z)); g.translate(p.x, p.y, p.z); quads.push(g);
+    g.rotateY(yaw); g.translate(p.x + n.x * 0.004, p.y, p.z + n.z * 0.004); quads.push(g);
+    // t850u: claw sits in the middle of the room — add a UV-flipped back so the lettering reads correctly from the far side
+    if (e.key === 'claw') {
+      const g2 = new THREE.PlaneGeometry(w, h), uv2 = g2.attributes.uv;
+      for (let i = 0; i < uv2.count; i++) uv2.setXY(i, uv2.getX(i) ? u0 : u1, uv2.getY(i) ? v1 : v0);
+      g2.rotateY(yaw + Math.PI); g2.translate(p.x - n.x * 0.004, p.y, p.z - n.z * 0.004); quads.push(g2);
+    }
     const top = p.y + h / 2, bottom = p.y - h / 2;
     info.push({ title: e.title, key: e.key, color: '#' + new THREE.Color(e.color).getHexString(), pos: p.toArray().map(v => +v.toFixed(3)), w: +w.toFixed(3), h: +h.toFixed(3), normal: n.toArray().map(v => +v.toFixed(3)), bottom: +bottom.toFixed(3), top: +top.toFixed(3), cabTop: +b.max.y.toFixed(3) });
     const ir = atlas.rects[e.key];
@@ -442,11 +705,13 @@ export function buildNeonSigns(THREE, mergeGeometries, list, opt = {}) {
     if (maxW < A.iw) A.iw = Math.max(ICON_MIN, maxW);
     A.ip.y = Math.min(ICON_MAX_TOP - A.ih / 2, A.top + ICON_GAP + A.ih / 2);
     const ir = A.ir, iw = A.iw, ih = A.ih, ip = A.ip, n = A.n, top = A.top;
+    iconInfo.push({ key: A.e.key, pos: ip.toArray().map(v => +v.toFixed(3)), w: +iw.toFixed(3), h: +ih.toFixed(3), bottom: +(ip.y - ih / 2).toFixed(3), top: +(ip.y + ih / 2).toFixed(3), signTop: +top.toFixed(3) });
+    // t850u: the claw icon is a separate two-sided animated mesh (see below); keep it out of the static atlas merge
+    if (A.e.key === 'claw') { A._claw = { iw, ih, ip, n }; continue; }
     const iu0 = ir.x / atlas.W, iu1 = (ir.x + ir.w) / atlas.W, iv1 = 1 - ir.y / atlas.H, iv0 = 1 - (ir.y + ir.h) / atlas.H;
     const ig = new THREE.PlaneGeometry(iw, ih), iuv = ig.attributes.uv;
     for (let k = 0; k < iuv.count; k++) iuv.setXY(k, iuv.getX(k) ? iu1 : iu0, iuv.getY(k) ? iv1 : iv0);
     ig.rotateY(Math.atan2(n.x, n.z)); ig.translate(ip.x, ip.y, ip.z); iconQuads.push(ig);
-    iconInfo.push({ key: A.e.key, pos: ip.toArray().map(v => +v.toFixed(3)), w: +iw.toFixed(3), h: +ih.toFixed(3), bottom: +(ip.y - ih / 2).toFixed(3), top: +(ip.y + ih / 2).toFixed(3), signTop: +top.toFixed(3) });
   }
   const tex = new THREE.TextureLoader().load(opt.src || 'tex/neon_signs.webp', t => { try { if (opt.renderer) opt.renderer.initTexture(t); } catch (err) {} if (opt.onLoad) opt.onLoad(t); });
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = opt.aniso || 4;
@@ -462,6 +727,52 @@ export function buildNeonSigns(THREE, mergeGeometries, list, opt = {}) {
     const icons = new THREE.Mesh(mergeGeometries(iconQuads), imat); icons.name = 'neonIcons'; icons.renderOrder = 3; icons.matrixAutoUpdate = false; icons.updateMatrix();
     icons.userData.icons = iconInfo; mesh.add(icons); mesh.userData.icons = iconInfo;
     if (typeof window !== 'undefined') window.__neonIcons = icons;
+  } else {
+    mesh.userData.icons = iconInfo;
+  }
+  const clawPending = iconPending.find(a => a.e && a.e.key === 'claw' && a._claw);
+  if (clawPending) {
+    const { iw, ih, ip, n } = clawPending._claw;
+    const N = 10, S = 256, period = 3.6;
+    const strip = document.createElement('canvas'); strip.width = S * N; strip.height = S;
+    const sg = strip.getContext('2d');
+    for (let i = 0; i < N; i++) {
+      const t = document.createElement('canvas'); t.width = S; t.height = S;
+      const tctx = t.getContext('2d', { willReadFrequently: true });
+      if (tctx.reset) tctx.reset();
+      drawClawIcon(tctx, S, i / (N - 1));
+      sg.drawImage(t, i * S, 0);
+    }
+    const ctex = new THREE.CanvasTexture(strip);
+    ctex.colorSpace = THREE.SRGBColorSpace; ctex.anisotropy = opt.aniso || 4;
+    ctex.wrapS = THREE.ClampToEdgeWrapping; ctex.wrapT = THREE.ClampToEdgeWrapping;
+    ctex.repeat.set(1 / N, 1); ctex.offset.set(0, 0); ctex.needsUpdate = true;
+    try { if (opt.renderer) opt.renderer.initTexture(ctex); } catch (err) {}
+    const yaw = Math.atan2(n.x, n.z);
+    const mk = flip => {
+      const g = new THREE.PlaneGeometry(iw, ih), uv = g.attributes.uv;
+      if (flip) { for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i)); }
+      g.rotateY(yaw + (flip ? Math.PI : 0));
+      g.translate(ip.x + n.x * (flip ? -0.004 : 0.004), ip.y, ip.z + n.z * (flip ? -0.004 : 0.004));
+      return g;
+    };
+    const cmat = new THREE.MeshBasicMaterial({ map: ctex, transparent: true, depthWrite: false, fog: false, color: new THREE.Color(1, 1, 1).multiplyScalar(opt.k || 0.55) });
+    cmat.name = 'neonClawIcon'; cmat.side = THREE.DoubleSide;
+    const claw = new THREE.Mesh(mergeGeometries([mk(false), mk(true)]), cmat);
+    claw.name = 'neonClawIcon'; claw.renderOrder = 3; claw.frustumCulled = false; claw.matrixAutoUpdate = false; claw.updateMatrix();
+    claw.userData = { key: 'claw', period, frames: N, open: 0, frame: 0, pos: ip.toArray().map(v => +v.toFixed(3)), w: +iw.toFixed(3), h: +ih.toFixed(3) };
+    function tickClaw(t) {
+      const phase = ((t / period) % 1 + 1) % 1;
+      const open = 0.5 - 0.5 * Math.cos(phase * Math.PI * 2);
+      const f = Math.min(N - 1, Math.max(0, Math.round(open * (N - 1))));
+      if (f !== claw.userData.frame) { ctex.offset.x = f / N; ctex.needsUpdate = true; }
+      claw.userData.open = open; claw.userData.frame = f; claw.userData.phase = phase;
+    }
+    tickClaw(0);
+    mesh.add(claw);
+    mesh.userData.tick = tickClaw;
+    mesh.userData.claw = claw;
+    if (typeof window !== 'undefined') window.__neonClawIcon = claw;
   }
   return mesh;
 }

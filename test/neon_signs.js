@@ -1,4 +1,4 @@
-// t773u: no wall shelf (ledge) or stained-glass windows anywhere; a neon name sign above every machine, one draw call, readable, clear of the
+// t773u / t850u: neon name signs + icons; claw icon is two-sided and animates; Orc Attack has a detailed orc. node test/neon_signs.js
 // ceiling band / other signs, facing into the room; it is compiled by the warm-up (no new program at entry). node test/neon_signs.js
 const { open } = require('./lib');
 let ok = true; const chk = (c, m, x) => { console.log((c ? 'PASS ' : 'FAIL ') + m + (x !== undefined ? ' ' + JSON.stringify(x).slice(0, 400) : '')); if (!c) ok = false; };
@@ -45,6 +45,79 @@ let ok = true; const chk = (c, m, x) => { console.log((c ? 'PASS ' : 'FAIL ') + 
     return edge > 11.85; // would reach the east/west window (or wall end) plane at |HALF|=12
   }).map(i => [i.key, i.pos, i.w]);
   chk(winHit.length === 0, 'v223: icons stay clear of the window walls', winHit);
+  // t850u / v229: claw icon is visible from both sides and its prongs open/close
+  const claw = await page.evaluate(() => {
+    const S = window.__neonSigns, c = window.__neonClawIcon || (S && S.userData && S.userData.claw);
+    if (!c) return { ok: false };
+    const THREE = window.__arcade.THREE;
+    const tick = S.userData.tick;
+    const samples = [];
+    for (const t of [0, 0.9, 1.8, 2.7, 3.6]) { tick(t); samples.push({ t, open: +c.userData.open.toFixed(3), frame: c.userData.frame }); }
+    return {
+      ok: true, name: c.name, side: c.material && c.material.side, double: THREE && c.material && c.material.side === THREE.DoubleSide,
+      depthWrite: c.material && c.material.depthWrite, frustumCulled: c.frustumCulled, frames: c.userData.frames, period: c.userData.period,
+      samples, parent: c.parent && c.parent.name
+    };
+  });
+  chk(claw.ok && claw.name === 'neonClawIcon' && claw.double && claw.depthWrite === false && claw.frustumCulled === false,
+    't850u: claw neon icon is a two-sided (DoubleSide) mesh with no depth write', claw);
+  const opens = (claw.samples || []).map(s => s.open);
+  const frames = (claw.samples || []).map(s => s.frame);
+  chk(claw.period >= 3 && claw.period <= 5 && claw.frames >= 6 && Math.max(...opens) - Math.min(...opens) > 0.6 && new Set(frames).size >= 3,
+    't850u: claw prongs open and close on a smooth multi-second loop', claw.samples);
+  const vis = await page.evaluate(async () => {
+    const A = window.__arcade, S = window.__neonSigns;
+    const ic = (S.userData.icons || []).find(i => i.key === 'claw');
+    if (!ic) return { ok: false };
+    const sample = async (pos, at) => {
+      window.__camOverride = { pos, at, showMonkey: false, bloom: 0.25 };
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const v = new A.THREE.Vector3(ic.pos[0], ic.pos[1], ic.pos[2]).project(A.camera);
+      const w = A.renderer.domElement.width, h = A.renderer.domElement.height;
+      const x = Math.round((v.x * 0.5 + 0.5) * w), y = Math.round((v.y * 0.5 + 0.5) * h);
+      const gl = A.renderer.getContext();
+      // sample a 5x5 neighbourhood around the projected icon (readPixels origin is bottom-left)
+      const span = 5, buf = new Uint8Array(span * span * 4);
+      const rx = Math.max(0, Math.min(w - span, x - 2)), ry = Math.max(0, Math.min(h - span, y - 2));
+      gl.readPixels(rx, ry, span, span, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      let pink = 0, maxR = 0, maxB = 0;
+      for (let i = 0; i < buf.length; i += 4) {
+        const R = buf[i], G = buf[i + 1], B = buf[i + 2];
+        if (R > G + 20 && B > G && R > 40) pink++;
+        if (R > maxR) maxR = R; if (B > maxB) maxB = B;
+      }
+      return { ndc: [+v.x.toFixed(3), +v.y.toFixed(3), +v.z.toFixed(3)], inView: Math.abs(v.x) < 1 && Math.abs(v.y) < 1 && v.z > 0 && v.z < 1, pink, maxR, maxB, xy: [x, y] };
+    };
+    // front of the claw (normal +Z, sign faces +Z) and the far side looking back
+    const front = await sample([ic.pos[0], 1.7, ic.pos[2] + 7], [ic.pos[0], ic.pos[1], ic.pos[2]]);
+    const back = await sample([ic.pos[0], 1.7, ic.pos[2] - 7], [ic.pos[0], ic.pos[1], ic.pos[2]]);
+    window.__camOverride = null;
+    return { pos: ic.pos, front, back };
+  });
+  chk(vis.front && vis.front.inView && vis.front.pink > 0, 't850u: claw neon is visible from the front of the machine', vis.front);
+  chk(vis.back && vis.back.inView && vis.back.pink > 0, 't850u: claw neon is visible from the far side of the room', vis.back);
+  // t850u: Chromium's GPU 2D path cache can stamp the previous atlas cell's fill into a detailed icon
+  const leak = await page.evaluate(() => {
+    const icons = window.__neonIcons;
+    if (!icons || !icons.material || !icons.material.map) return { ok: false };
+    const img = icons.material.map.image;
+    const keys = ['strike', 'ghost', 'cyber', 'orc', 'pip', 'berserker', 'monkey', 'nova', 'blaster', 'bb', 'rockfall', 'skytower', 'roadster', 'claw'];
+    const S = 256, COLS = 4;
+    const c = document.createElement('canvas'); c.width = S; c.height = S;
+    const g = c.getContext('2d');
+    const count = (key, rgb) => {
+      const i = keys.indexOf(key);
+      g.clearRect(0, 0, S, S);
+      g.drawImage(img, (i % COLS) * S, (i / COLS | 0) * S, S, S, 0, 0, S, S);
+      const a = g.getImageData(0, 0, S, S).data;
+      let n = 0;
+      for (let j = 0; j < a.length; j += 4) if (a[j + 3] > 30 && a[j] === rgb[0] && a[j + 1] === rgb[1] && a[j + 2] === rgb[2]) n++;
+      return n;
+    };
+    return { ok: true, orcHasCyber: count('orc', [255, 63, 208]), vikingHasPip: count('berserker', [255, 122, 217]) };
+  });
+  chk(leak.ok && leak.orcHasCyber === 0, 't850u: orc icon is not stained with Cybercity pink', leak);
+  chk(leak.ok && leak.vikingHasPip === 0, 't850u: viking icon is not stained with the previous icon colour', leak);
   chk(errors.length === 0, 'no page errors', errors);
   await o.close(); process.exit(ok ? 0 : 1);
 })().catch(e => { console.log('FAIL exception ' + e.message); process.exit(1); });
