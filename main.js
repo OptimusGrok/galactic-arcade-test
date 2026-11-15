@@ -697,7 +697,27 @@ let lightsIn = 1;
 // the floor reflection skips the far room (it is only a slit through the doorway): saves a second draw of it in the mirror pass
 const skipFar = (m, far) => { const orig = m.onBeforeRender; m.onBeforeRender = function (...args) { const v = far.visible; far.visible = false; try { orig.apply(this, args); } finally { far.visible = v; } }; };
 skipFar(mirror, room2); skipFar(room2.userData.mirror, room);
+let nbHold = null;   // t854u / v235: while Neon Bricks is zoomed full-screen, don't draw the rest of the arcade
 function cullRooms(fr) {
+  const nbZoom = !!(typeof nb !== 'undefined' && nb && nb.playing && (nb.zoomK || 0) > 0.85);
+  if (nbZoom) {
+    if (!nbHold) {
+      if (nb.grp && nb.grp.parent !== scene) scene.add(nb.grp);
+      if (nb.panel && nb.panel.parent !== scene) scene.add(nb.panel);
+      nbHold = [];
+      for (const c of scene.children) {
+        if (c === nb.grp || c === nb.panel || c.isLight || c.isCamera) continue;
+        nbHold.push([c, c.visible]); c.visible = false;
+      }
+      if (nb.grp) nb.grp.visible = true; if (nb.panel) nb.panel.visible = true;
+    }
+    return;
+  }
+  if (nbHold) {
+    try { if (nb && room) { if (nb.grp) room.add(nb.grp); if (nb.panel) room.add(nb.panel); } } catch (e) {}
+    for (const [c, v] of nbHold) c.visible = v;
+    nbHold = null;
+  }
   const inW = camera.position.x > WX / 2; if (tp) tp.whiteRoom.visible = inW;
   hall.visible = !inW;
   if (inW) { room.visible = room2.visible = false; mirror.visible = false; room2.userData.mirror.visible = false; return; }
@@ -1844,6 +1864,7 @@ function frame(now) {
   { // run each cabinet screen only when that cabinet is near and in view
     _frus.setFromProjectionMatrix(_pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     cullRooms(_frus);
+    if (!nbHold) {   // Neon Bricks fullscreen: room is hidden, skip cabinet attract work
     const vis = c => { const sc = c.userData.centre, maxD = PS.on ? PS.cabFar : 18; return (_frus.intersectsSphere(_sph.set(_v.copy(sc).setY(1.2), 1.4)) && camera.position.distanceTo(sc) < maxD) || !!window.__forceDemo; };
     const dts = Math.min(gap / 1000, 0.1);
     if (draw) { tickStrikeDemo(demo, dts, vis(strikeCab)); tickGhostDemo(ghostDemo, dts, vis(ghostCab)); }
@@ -1854,6 +1875,7 @@ function frame(now) {
       c.userData._psTick = now; c.userData.tick(now / 1000); liveBadge(c); } }
     strikeCab.userData.glow.intensity = demo.running ? 1.2 + Math.sin(now * 0.013) * 0.08 + Math.sin(now * 0.031) * 0.06 : 0.6;
     ghostCab.userData.glow.intensity = ghostDemo.running ? 1.1 + Math.sin(now * 0.017) * 0.08 : 0.5;
+    }
   }
   if (spaceWin) spaceWin.update(now);
   if (window.__neonSigns && window.__neonSigns.userData.tick) window.__neonSigns.userData.tick(now / 1000);   // t850u: claw icon prongs
