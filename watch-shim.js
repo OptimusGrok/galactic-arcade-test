@@ -1,3 +1,22 @@
+// t854u / v234: cap the playable's devicePixelRatio to the arcade quality tier.
+// Cabinet games were reading the raw phone DPR (often 2–3) even on low/mid, so Claw / Monkey Crossing
+// painted a 2–3× backing store and stuttered after the room itself had already dropped to dpr 1–1.25.
+// Only overrides inside the arcade play iframe; a standalone open of the copy is unchanged.
+(function () {
+  try {
+    var inCab = window.frameElement && window.frameElement.id === 'game' && window.parent && window.parent.__arcade;
+    if (!inCab) return;
+    var tier = 'high';
+    try { var T = window.parent.__arcade.tier; if (T && (T.name === 'low' || T.name === 'mid' || T.name === 'high')) tier = T.name; } catch (e) {}
+    try { var q = new URLSearchParams(location.search).get('tier'); if (q === 'low' || q === 'mid' || q === 'high') tier = q; } catch (e) {}
+    var raw = window.devicePixelRatio || 1;
+    var cap = tier === 'low' ? 1 : tier === 'mid' ? 1.25 : 2;
+    var dpr = Math.min(cap, raw);
+    window.__gaPlayTier = tier; window.__gaPlayDpr = dpr; window.__gaPlayDprRaw = raw;
+    if (dpr === raw) return;
+    Object.defineProperty(window, 'devicePixelRatio', { configurable: true, get: function () { return dpr; } });
+  } catch (e) {}
+})();
 // Watch / demo isolation for arcade play copies (?watch=1 or ?demo=1).
 // Memory-only storage, no score/name network posts, early __DEMO so TicketArt never pays out.
 // t757u: inside the arcade's play frame the shell's close X (+ ticket pill) sits tight in the top-left corner, so the

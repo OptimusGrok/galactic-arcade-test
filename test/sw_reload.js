@@ -26,8 +26,9 @@ const { open } = require('./lib');
     const S = window.__start || {};
     return {
       loadN: Number(sessionStorage.getItem('gaLoadN') || 0),
-      flag: sessionStorage.getItem('gaReloaded.galactic-arcade-v233'),
-      stale: keys.filter(k => k.indexOf('galactic-arcade-v') === 0 && k !== 'galactic-arcade-v233'),
+      want: (window.__gaUpdate && window.__gaUpdate.want) || ('galactic-arcade-' + (window.__GA_VER || '')),
+      flag: sessionStorage.getItem('gaReloaded.' + ((window.__gaUpdate && window.__gaUpdate.want) || ('galactic-arcade-' + (window.__GA_VER || '')))),
+      stale: keys.filter(k => k.indexOf('galactic-arcade-v') === 0 && k !== ((window.__gaUpdate && window.__gaUpdate.want) || ('galactic-arcade-' + (window.__GA_VER || '')))),
       updating: document.documentElement.classList.contains('ga-updating'),
       checked: !!(window.__gaUpdate && window.__gaUpdate.checked),
       reloading: !!(window.__gaUpdate && window.__gaUpdate.reloading),
@@ -38,7 +39,7 @@ const { open } = require('./lib');
   });
   console.log('after boot', JSON.stringify(a));
   chk(a.loadN === 2, 'stale cache caused exactly one reload (loadN=' + a.loadN + ')');
-  chk(a.flag === '1', 'session guard gaReloaded.v233 is set');
+  chk(a.flag === '1', 'session guard gaReloaded is set for ' + a.want);
   chk(a.stale.length === 0, 'old galactic-arcade-v* caches are gone (' + a.stale.join(',') + ')');
   chk(!a.updating && a.checked && !a.reloading, 'start screen is no longer blocked after the reload');
   chk(a.startShown && !a.dismissed, 'still on the start screen (not kicked mid-play)');
