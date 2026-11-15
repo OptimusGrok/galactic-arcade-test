@@ -1207,8 +1207,13 @@ window.__gaContinue = {
 // updates snapAt; takeHostIfSilent also trusts recentHostSnap). A phone that did steal yields again when typ:'st'
 // arrives, unless it is the established slot-0 host. Guest cameras follow P2 during intro/warp so the stick is
 // not visually applied to P1. Guest joystick always moves P2 on both screens; P1 stays put.
+// t849u/v228: one-shot typ:'fx' (Thor lightning lasts only 0.35s) is dropped under the 70 ms cap /
+// relay jitter, so the other screen missed the power. FX now also ride in typ:'st' with a duration
+// and are replayed once. P2 is drawn even if the Y-sort list is empty. A debug status line shows
+// role / p2on / snapAge / fx / cache version on real phones. Stale SW caches are cleared.
 (function () {
-  const C = window.__bzCoop = { role: 'solo', slot: 0, p2on: false, locked: false, peerAt: 0, sent: 0, recv: 0, snaps: 0, joins: 0, rejoins: 0, p2color: '#ff6e14', drawn: { p1: 0, p2: 0 }, left: 0, rejoinCost: 5, typ: {}, seen: {} };
+  const GA_VER = window.__GA_VER = window.__GA_VER || 'v228';
+  const C = window.__bzCoop = { role: 'solo', slot: 0, p2on: false, locked: false, peerAt: 0, sent: 0, recv: 0, snaps: 0, joins: 0, rejoins: 0, p2color: '#ff6e14', drawn: { p1: 0, p2: 0 }, left: 0, rejoinCost: 5, typ: {}, seen: {}, ver: GA_VER };
   const I2 = { x: 0, y: 0, A: 0, D: 0, T: 0, R: 0, O: 0, since: 0, tx: null, ty: null, vx: 0, vy: 0 };
   const AB_KEYS = ['rgReady', 'rgT', 'odReady', 'odT', 'odS', 'odN', 'odAcc', 'odHits', 'odSpawned'];
   const P2ab = { rgReady: 0, rgT: 0, odReady: 0, odT: 0, odS: 0, odN: 0, odAcc: 0, odHits: 0, odSpawned: 0 };
@@ -1447,7 +1452,8 @@ window.__gaContinue = {
       cn: packArr(coins, 20, c => c && !c.got ? [c.x | 0, c.y | 0, c.v | 0] : null),
       o: (C.p1out ? 1 : 0) | (C.p2out ? 2 : 0),
       stg: G.stage | 0, seq: G.seqI | 0, wk: G.wK | 0, state: G.state, flash: +(G.flash || 0).toFixed(2),
-      ab: { r1: G.rgReady ? 1 : 0, o1: G.odReady ? 1 : 0, os1: +(G.odS || 0).toFixed(2), r2: P2ab.rgReady ? 1 : 0, o2: P2ab.odReady ? 1 : 0, os2: +(P2ab.odS || 0).toFixed(2) }
+      ab: { r1: G.rgReady ? 1 : 0, o1: G.odReady ? 1 : 0, os1: +(G.odS || 0).toFixed(2), r2: P2ab.rgReady ? 1 : 0, o2: P2ab.odReady ? 1 : 0, os2: +(P2ab.odS || 0).toFixed(2) },
+      fx: packFx()
     };
   }
 
@@ -1560,6 +1566,7 @@ window.__gaContinue = {
     C.p1out = !!((s.o | 0) & 1); C.p2out = !!((s.o | 0) & 2);
     C.visE = s.e || []; C.visSh = s.sh || []; C.visAx = s.ax || []; C.visBo = s.bo || []; C.visRv = s.rv || []; C.visHp = s.hp || []; C.visCn = s.cn || [];
     applyVis();
+    if (s.fx && s.fx.length) applyFxSnap(s.fx);
     if (s.ab) { G.rgReady = !!s.ab.r1; G.odReady = !!s.ab.o1; G.odS = +s.ab.os1 || 0; P2ab.rgReady = !!s.ab.r2; P2ab.odReady = !!s.ab.o2; P2ab.odS = +s.ab.os2 || 0; }
     C.p2on = s.p2 == null ? true : !!s.p2;
     C.peerAt = performance.now();
@@ -1596,6 +1603,63 @@ window.__gaContinue = {
     }
   }
 
+  // t849u: Thor bolts live only 0.35s, so a delayed typ:'st' or a dropped typ:'fx' (70 ms cap /
+  // eventsPerSecond) left the other screen with no lightning. Keep the event in typ:'st' for
+  // FX_DUR_MS and replay visuals/sound once.
+  const FX_DUR_MS = { thor: 900, rage: 1500, odin: 1500 };
+  C.fxLive = []; C.fxApplied = {};
+  function fxKey(e) { return (e.typ || '') + ':' + (e.who || 0) + ':' + (e.t || 0); }
+  function pruneFx() {
+    const now = performance.now();
+    C.fxLive = (C.fxLive || []).filter(e => now - (e.t0 || e.t || 0) < (e.d || FX_DUR_MS[e.typ] || 900) + 200);
+  }
+  function packFx() {
+    pruneFx();
+    const now = performance.now();
+    return (C.fxLive || []).map(e => {
+      const left = Math.max(0, (e.d || FX_DUR_MS[e.typ] || 900) - (now - (e.t0 || now)));
+      return { typ: e.typ, who: e.who || 1, t: e.t, d: e.d, left: Math.round(left), hits: e.hits || null, x: e.x, y: e.y };
+    }).filter(e => e.left > 0);
+  }
+  function noteFx(typ, who) {
+    who = who || (C.inP2 ? 2 : 1);
+    const now = performance.now();
+    const ev = { typ: typ, who: who, t: Math.round(now), t0: now, d: FX_DUR_MS[typ] || 900 };
+    const pl = who === 2 ? P2 : P;
+    if (pl) { ev.x = +pl.x.toFixed(1); ev.y = +pl.y.toFixed(1); }
+    if (typ === 'thor') {
+      ev.hits = (bolts || []).filter(b => b && b.l > 0).slice(0, 14).map(b => [b.x | 0, b.y | 0]);
+      if (!ev.hits.length && ev.x != null) ev.hits = [[ev.x | 0, ev.y | 0]];
+    }
+    pruneFx();
+    C.fxLive.push(ev);
+    C.lastFx = ev;
+    return ev;
+  }
+  function spawnThorVis(e) {
+    const hits = (e && e.hits && e.hits.length) ? e.hits : (e && e.x != null ? [[e.x, e.y]] : []);
+    const left = Number.isFinite(+e.left) ? +e.left / 1000 : 0.7;
+    const life = Math.max(0.35, Math.min(1.2, left || 0.7));
+    for (let i = 0; i < hits.length; i++) bolts.push({ x: +hits[i][0], y: +hits[i][1], l: life });
+    if (!hits.length && P) bolts.push({ x: P.x, y: P.y, l: life });
+    G.flash = Math.max(G.flash || 0, 0.35);
+    shake = Math.max(shake, 18);
+  }
+  function applyFxEvent(e, fromSnap) {
+    if (!e || !e.typ) return false;
+    const key = fxKey(e);
+    if (C.fxApplied[key]) return false;
+    C.fxApplied[key] = performance.now();
+    C.lastFx = e;
+    playFx({ ev: [e] });
+    if (e.typ === 'thor') spawnThorVis(e);
+    typN('r_', 'fx');
+    return true;
+  }
+  function applyFxSnap(list) {
+    if (!list || !list.length) return;
+    for (let i = 0; i < list.length; i++) applyFxEvent(list[i], true);
+  }
   function playFx(pld) {
     const L = pld && (Array.isArray(pld) ? pld : pld.ev); if (!L || !L.length) return;
     C.fxGot = (C.fxGot || 0) + L.length; C.fxLog = (C.fxLog || []).concat(L);
@@ -1610,20 +1674,35 @@ window.__gaContinue = {
     }
   }
   function emitFx(typ, who) {
-    const ev = [{ typ: typ, who: who || (C.inP2 ? 2 : 1) }];
-    C.fxSent = (C.fxSent || 0) + 1; C.fxLog = (C.fxLog || []).concat(ev);
-    // both screens hear it: host plays locally (the wrapped fn already did); guest gets the packet
+    const ev = noteFx(typ, who);
+    C.fxSent = (C.fxSent || 0) + 1; C.fxLog = (C.fxLog || []).concat([ev]);
+    // both screens hear it: host plays locally (the wrapped fn already did); guest gets typ:'fx'
+    // AND the same event in typ:'st' so a dropped one-shot cannot hide the power
     const M = mp();
+    const pld = { typ: 'fx', ev: [ev] };
     if (M && M.berserker) {
       const send = M.berserker.sendNow || M.berserker.send;
-      try { send.call(M.berserker, { typ: 'fx', ev: ev }); } catch (e) { sendImp({ typ: 'fx', ev: ev }); }
-    } else sendImp({ typ: 'fx', ev: ev });
+      try { send.call(M.berserker, pld); } catch (e) { sendImp(pld); }
+    } else sendImp(pld);
     if (C.inP2) C.needSnap = true;
     else sendStateNow();
   }
 
+  // Live / test hook: drop typ:'fx' and delay typ:'st' so we can prove FX survive on snapshots.
+  C.injectLag = (opts) => { opts = opts || {}; C.lagDropFx = !!opts.dropFx; C.lagDelaySt = opts.delaySt | 0; C.fxDropped = 0; };
   function onMsg(pld) {
     if (!pld || pld.i === myId()) return;
+    if (C.lagDropFx && pld.typ === 'fx') { C.fxDropped = (C.fxDropped || 0) + 1; typN('r_', 'fxdrop'); return; }
+    if (C.lagDelaySt > 0 && pld.typ === 'st') {
+      const wait = C.lagDelaySt, copy = pld;
+      typN('r_', 'stlag');
+      setTimeout(() => deliverMsg(copy), wait);
+      return;
+    }
+    deliverMsg(pld);
+  }
+  function deliverMsg(pld) {
+    if (!pld) return;
     C.recv++; C.peerAt = performance.now(); noteSeen(pld); typN('r_', pld.typ || '?');
     // t836u: only the late cabinet slot yields. A typ:'host' from a smaller id must not evict slot 0.
     if ((pld.typ === 'st' || pld.typ === 'host') && shouldYieldToHost()) {
@@ -1647,7 +1726,11 @@ window.__gaContinue = {
     if (pld.typ === 'rejoin' && C.role === 'host') { doHostRejoin(pld); }
     if (pld.typ === 'end' && C.role === 'guest') endGuest('host ended');
     if (pld.typ === 'tk' && C.role === 'guest') { try { if (window.TicketArt && TicketArt.collect) TicketArt.collect('berserker'); } catch (e) {} }
-    if (pld.typ === 'fx' && C.role === 'guest') playFx(pld);
+    if (pld.typ === 'fx' && C.role === 'guest') {
+      const L = pld.ev || [];
+      if (L.length) { for (let i = 0; i < L.length; i++) applyFxEvent(L[i], false); }
+      else playFx(pld);
+    }
   }
 
   const GUEST_SILENT = 5000;
@@ -2004,14 +2087,29 @@ window.__gaContinue = {
   const _draw = draw;
   draw = function () {
     const saved = pax;
+    const p2Drawn0 = C.drawn.p2 || 0;
     if ((C.p2on || C.role === 'guest') && pax2 && pax2.length) pax = saved.concat(pax2);
     // t834u: insert P2 into the Y-sort list at P2.y so a village house cannot bury the remote Viking
+    // t849u: also hook empty-safe (list[0] may be a village sprite); fallback-draw if sort never ran
     const _sort = Array.prototype.sort;
     Array.prototype.sort = function (cmp) {
       if (this && this.length && this[0] && typeof this[0].f === 'function' && typeof this[0].y === 'number') addP2ToList(this);
       return _sort.apply(this, arguments);
     };
     try { _draw(); } finally { Array.prototype.sort = _sort; pax = saved; }
+    if (p2Live() && (C.drawn.p2 || 0) === p2Drawn0) {
+      try {
+        const sx = 0, sy = 0;
+        cx.save();
+        cx.setTransform(DPR * SC, 0, 0, DPR * SC, DPR * (W / 2 - cam.x * SC + sx), DPR * (H / 2 - cam.y * SC + sy));
+        cx.shadowColor = C.p2color; cx.shadowBlur = 14;
+        withP2(() => _dpw(performance.now() / 1000));
+        cx.restore();
+        C.drawn.p2++; C.drawn.p2fb = (C.drawn.p2fb || 0) + 1;
+      } catch (e) {}
+    }
+    C.drawn.p2This = (C.drawn.p2 || 0) > p2Drawn0;
+    paintStatus();
     if (C.tracing) { const a = P || { x: 0, y: 0 }, b = P2 || { x: 0, y: 0 }; C.trace.push([performance.now(), +a.x.toFixed(2), +a.y.toFixed(2), +b.x.toFixed(2), +b.y.toFixed(2)]); if (C.trace.length > 3000) C.trace.shift(); }
   };
   C.trace = [];
@@ -2223,8 +2321,28 @@ window.__gaContinue = {
     if (!pl) return { on: false, hits: 0 };
     return Object.assign(C.sampleAt(pl.x, pl.y - 8, 20), { x: +pl.x.toFixed(1), y: +pl.y.toFixed(1) });
   };
+  function paintStatus() {
+    let el = document.getElementById('bzDbg');
+    if (!el) {
+      el = document.createElement('div'); el.id = 'bzDbg';
+      el.style.cssText = 'position:fixed;left:8px;bottom:calc(4px + env(safe-area-inset-bottom,0px));z-index:90;font:10px/1.25 ui-monospace,Menlo,monospace;color:#c9e8ff;text-shadow:0 1px 2px #000;pointer-events:none;background:rgba(0,0,0,.5);padding:2px 7px;border-radius:4px;white-space:nowrap;max-width:96vw;overflow:hidden';
+      document.body.appendChild(el);
+    }
+    if (C.role === 'solo' && !C.p2on) { el.style.display = 'none'; C.status = ''; return; }
+    el.style.display = 'block';
+    const age = C.role === 'guest' ? Math.round(C.snapAge || (C.snapAt ? performance.now() - C.snapAt : 0)) : 0;
+    const fx = C.lastFx ? (C.lastFx.typ + '/' + (C.lastFx.who || 1)) : '—';
+    const p2s = P2 ? (Math.round(P2.x) + ',' + Math.round(P2.y)) : 'off';
+    const vis = C.drawn.p2This ? 'P2on' : (p2Live() ? 'P2miss' : 'P2off');
+    el.textContent = GA_VER + ' ' + (C.role || '?') + ' s' + (C.slot | 0) + (C.p2on ? ' p2on' : ' p2off') + ' snap ' + age + 'ms fx ' + fx + ' ' + vis + ' ' + p2s + (C.stoleHost ? ' STEAL' : '');
+    el.dataset.role = C.role || '';
+    el.dataset.ver = GA_VER;
+    C.status = el.textContent;
+  }
   C.hud = () => ({
-    role: C.role, slot: C.slot, p2on: C.p2on, locked: !!C.locked, names: names(),
+    role: C.role, slot: C.slot, p2on: C.p2on, locked: !!C.locked, names: names(), ver: GA_VER, status: C.status || '',
+    fx: C.lastFx ? { typ: C.lastFx.typ, who: C.lastFx.who, t: C.lastFx.t } : null,
+    fxSent: C.fxSent || 0, fxGot: C.fxGot || 0, snapAge: C.snapAge || 0,
     p1: P ? { x: +P.x.toFixed(2), y: +P.y.toFixed(2), hp: +P.hp.toFixed(1), lives: P.lives | 0, kills: P.kills | 0, gold: P.gold | 0, energy: +(P.energy || 0).toFixed(1), rage: +(P.rage || 0).toFixed(2), alive: P.hp > 0 && !C.p1out, out: !!C.p1out } : null,
     p2: P2 ? { x: +P2.x.toFixed(2), y: +P2.y.toFixed(2), hp: +P2.hp.toFixed(1), lives: P2.lives | 0, kills: P2.kills | 0, gold: P2.gold | 0, energy: +(P2.energy || 0).toFixed(1), rage: +(P2.rage || 0).toFixed(2), alive: P2.hp > 0 && !C.p2out, out: !!C.p2out } : null,
     wave: G.seqI | 0, stage: G.stage | 0, rejoin: { can: !!C.canRejoin(), shown: !!C.rejoinShown, need: !!C.rejoinNeed, cost: C.rejoinCost, blocked: C.rejoinBlocked || 0, n: C.rejoins || 0 }
