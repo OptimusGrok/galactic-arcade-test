@@ -6,7 +6,8 @@
 // same fonts. Still ONE merged mesh of quads (one draw call, one program, no per-frame work), compiled by the warm-up; the atlas is uploaded
 // to the GPU as soon as it loads (initTexture), on the start screen, not at the first room frame.
 // t826u / v216: a neon character/icon image sits just above each name sign (one extra canvas atlas + one merged mesh, no per-frame work).
-// t850u / v229: the free-standing claw icon is two-sided (front + UV-flipped back) and its prongs open/close on a cheap baked-frame loop.
+// t850u / v229: the free-standing claw icon and name sign are two-sided (back plane rotated 180° about Y, same UVs as the front)
+// so lettering reads left-to-right from both sides; the claw prongs open/close on a cheap baked-frame loop.
 // Orc Attack’s icon is a detailed neon orc (tusks, horned helmet, axe) in the same dim-glow style as the Viking / Strike icons.
 import { NEON_ATLAS } from './neon_atlas.js';
 
@@ -669,10 +670,11 @@ export function buildNeonSigns(THREE, mergeGeometries, list, opt = {}) {
     const g = new THREE.PlaneGeometry(w, h), uv = g.attributes.uv;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) ? u1 : u0, uv.getY(i) ? v1 : v0);
     g.rotateY(yaw); g.translate(p.x + n.x * 0.004, p.y, p.z + n.z * 0.004); quads.push(g);
-    // t850u: claw sits in the middle of the room — add a UV-flipped back so the lettering reads correctly from the far side
+    // t850u: claw sits in the middle of the room. Back plane is rotated 180° about Y
+    // with the SAME UVs as the front (a UV flip plus the rotation would mirror the lettering).
     if (e.key === 'claw') {
       const g2 = new THREE.PlaneGeometry(w, h), uv2 = g2.attributes.uv;
-      for (let i = 0; i < uv2.count; i++) uv2.setXY(i, uv2.getX(i) ? u0 : u1, uv2.getY(i) ? v1 : v0);
+      for (let i = 0; i < uv2.count; i++) uv2.setXY(i, uv2.getX(i) ? u1 : u0, uv2.getY(i) ? v1 : v0);
       g2.rotateY(yaw + Math.PI); g2.translate(p.x - n.x * 0.004, p.y, p.z - n.z * 0.004); quads.push(g2);
     }
     const top = p.y + h / 2, bottom = p.y - h / 2;
@@ -749,15 +751,16 @@ export function buildNeonSigns(THREE, mergeGeometries, list, opt = {}) {
     ctex.repeat.set(1 / N, 1); ctex.offset.set(0, 0); ctex.needsUpdate = true;
     try { if (opt.renderer) opt.renderer.initTexture(ctex); } catch (err) {}
     const yaw = Math.atan2(n.x, n.z);
-    const mk = flip => {
-      const g = new THREE.PlaneGeometry(iw, ih), uv = g.attributes.uv;
-      if (flip) { for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i)); }
-      g.rotateY(yaw + (flip ? Math.PI : 0));
-      g.translate(ip.x + n.x * (flip ? -0.004 : 0.004), ip.y, ip.z + n.z * (flip ? -0.004 : 0.004));
+    const mk = back => {
+      // same UVs on both sides; the back plane is rotated 180° about Y so the claw is not mirrored
+      const g = new THREE.PlaneGeometry(iw, ih);
+      g.rotateY(yaw + (back ? Math.PI : 0));
+      g.translate(ip.x + n.x * (back ? -0.004 : 0.004), ip.y, ip.z + n.z * (back ? -0.004 : 0.004));
       return g;
     };
     const cmat = new THREE.MeshBasicMaterial({ map: ctex, transparent: true, depthWrite: false, fog: false, color: new THREE.Color(1, 1, 1).multiplyScalar(opt.k || 0.55) });
-    cmat.name = 'neonClawIcon'; cmat.side = THREE.DoubleSide;
+    // FrontSide: two planes already face both ways; drawing the back of the front plane would mirror the claw
+    cmat.name = 'neonClawIcon'; cmat.side = THREE.FrontSide;
     const claw = new THREE.Mesh(mergeGeometries([mk(false), mk(true)]), cmat);
     claw.name = 'neonClawIcon'; claw.renderOrder = 3; claw.frustumCulled = false; claw.matrixAutoUpdate = false; claw.updateMatrix();
     claw.userData = { key: 'claw', period, frames: N, open: 0, frame: 0, pos: ip.toArray().map(v => +v.toFixed(3)), w: +iw.toFixed(3), h: +ih.toFixed(3) };
