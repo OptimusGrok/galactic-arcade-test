@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="en"><head>
 <link rel="preload" as="image" href="img/start.webp" type="image/webp" fetchpriority="high">
-<script>window.__GA_VER="v236";</script>
+<script>window.__GA_VER="v237";</script>
 <script>/* t855u / v233: if an older galactic-arcade-v* cache is still on this phone, clear it and reload ONCE
    before the start screen is interactive — never mid-session (v228 did this 6s after the room started drawing). */
 (function(){if(!('caches'in window)||location.protocol==='file:')return;
-  var want='galactic-arcade-v236',key='gaReloaded.'+want,skip=false;
+  var want='galactic-arcade-v237',key='gaReloaded.'+want,skip=false;
   try{skip=!!sessionStorage.getItem(key);}catch(e){skip=true;}
   window.__gaUpdate={want:want,checked:!!skip,reloading:false};
   if(skip)return;
@@ -36,7 +36,7 @@
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>
-html,body{margin:0;height:100%;background:#07040c;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+html,body{margin:0;height:100%;background:#07040c;overflow:hidden;touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
 canvas{display:block;width:100vw;height:100vh;height:100dvh;outline:none}
 #ui{position:fixed;top:max(8px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));display:flex;gap:6px;z-index:26}
 #ui button{width:30px;height:30px;border-radius:7px;border:1px solid #ff2bd666;background:#0a0612aa;color:#ff8ce8;font:600 13px system-ui;padding:0;opacity:.55}
@@ -410,12 +410,13 @@ if (document.getElementById('flBtn')) flBtnInit(); else document.addEventListene
 <script src="cabinet-demo.js"></script>
 <script src="cabinet-music.js"></script>
 <script src="pa.js"></script>
+<script src="quest-pad.js"></script>
 <script type="module" src="main.js"></script>
 <script src="inventory.js"></script>
 <script src="roomfire.js"></script>
 <script>/* FAST LOAD (t229): register the service worker (its install pre-caches ~7 MB) only after the room is drawing and things settle, so it never competes with the first load */
-if('serviceWorker' in navigator&&location.protocol!=='file:'){(function(){window.__GA_VER=window.__GA_VER||'v236';
-var done=0,want='galactic-arcade-v236';
+if('serviceWorker' in navigator&&location.protocol!=='file:'){(function(){window.__GA_VER=window.__GA_VER||'v237';
+var done=0,want='galactic-arcade-v237';
 var reg=function(){if(done)return;done=1;navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(){
   return caches.keys();}).then(function(ks){var stale=ks.filter(function(k){return k.indexOf('galactic-arcade-v')===0&&k!==want;});
   if(!stale.length)return;return Promise.all(stale.map(function(k){return caches.delete(k);}));

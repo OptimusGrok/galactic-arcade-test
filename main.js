@@ -1106,7 +1106,7 @@ function loadZoom() {
   return false;
 }
 if (!MOBILE) loadZoom();   // desktop wheel zoom may persist; the hold-to-zoom button never writes this key
-cv.addEventListener('wheel', e => { setDist(st.dist + e.deltaY * 0.004); e.preventDefault(); }, { passive: false });
+cv.addEventListener('wheel', e => { if (isQuestPad()) { e.preventDefault(); return; } setDist(st.dist + e.deltaY * 0.004); e.preventDefault(); }, { passive: false });
 const PITCH_MIN = -0.6, PITCH_MAX = 1.25, NB_PITCH_MIN = -1.35;   // t791u: while Neon Bricks is playing, allow looking further up so the top of the playfield is on screen
 function lookPitchRange() { const n = window.__neonBricks; return (n && n.playing && !n.zoom) ? [NB_PITCH_MIN, PITCH_MAX] : [PITCH_MIN, PITCH_MAX]; }
 function look(dx, dy) { st.lookT = st.t; st.yaw -= dx * 0.005; const r = lookPitchRange(); st.pitch = THREE.MathUtils.clamp(st.pitch + dy * 0.004, r[0], r[1]); }
@@ -1159,6 +1159,79 @@ function syncJoyArm() {
   joyArm = on; joyEl.classList.toggle('arm', on);
   if (!on) joyClear();
 }
+// t856u / v237: Quest Browser gamepad sticks drive the same joy / look path as the on-screen stick.
+let padJoy = false, padBtn = { fire: false, fly: false, zoom: false };
+function isQuestPad() { const Q = window.__gaQuestPad; return !!(Q && Q.isQuest && Q.isQuest()); }
+function joyFromPad(x, y) {
+  const mag = Math.hypot(x, y);
+  if (mag < (window.__gaQuestPad && window.__gaQuestPad.DEAD || 0.18)) {
+    if (padJoy) { padJoy = false; if (joyId == null) joyClear(); }
+    return;
+  }
+  padJoy = true;
+  const nx = x / mag, ny = y / mag;
+  const dead = window.__gaQuestPad && window.__gaQuestPad.DEAD || 0.18;
+  const t = Math.min(1, (mag - dead) / (1 - dead));
+  const dist = JOY_DEAD + t * (JOY_REACH - JOY_DEAD);
+  st.joy.on = true; st.joy.x = nx; st.joy.y = ny; st.joy.dist = dist; st.joy.vmax = joySpeed(dist);
+  try {
+    const c = joyCenter(), show = dist > JOY_DEAD, cl = Math.min(c.R, dist);
+    knob.style.transform = show ? `translate(${nx * cl}px,${ny * cl}px)` : '';
+    if (show) {
+      joyLine.classList.add('on');
+      const lx = c.x + nx * cl, ly = c.y + ny * cl;
+      joyDash.setAttribute('x1', c.x); joyDash.setAttribute('y1', c.y);
+      joyDash.setAttribute('x2', lx); joyDash.setAttribute('y2', ly);
+    } else joyLine.classList.remove('on');
+  } catch (e) {}
+}
+function applyQuestPad(dt) {
+  const Q = window.__gaQuestPad;
+  if (!Q || !isQuestPad()) {
+    if (padJoy && joyId == null) { padJoy = false; joyClear(); }
+    if (padBtn.fire || padBtn.fly || padBtn.zoom) applyQuestButtons({ fire: false, fly: false, zoom: false });
+    return Q && Q.last;
+  }
+  const s = Q.read(); Q.last = s;
+  const startUp = document.getElementById('start') && window.__start && window.__start.shown && !window.__start.dismissed;
+  const walking = !window.__arcade || !window.__arcade.play || window.__arcade.play.mode === 'walk';
+  if (!startUp && walking && joyId == null) {
+    const mv = s.move || { x: 0, y: 0 };
+    joyFromPad(mv.x || 0, mv.y || 0);
+    const lk = s.look || { x: 0, y: 0 };
+    if (lk.mag > 0) {
+      const ms = (dt != null && dt > 0 ? dt : 1 / 60) * 1000;
+      look((lk.x || 0) * 0.6 * ms, (lk.y || 0) * 0.6 * ms);
+    }
+  }
+  applyQuestButtons(s);
+  return s;
+}
+function applyQuestButtons(s) {
+  if (!!s.fire !== padBtn.fire) {
+    padBtn.fire = !!s.fire;
+    try { if (window.__roomFire && window.__roomFire.setHeld) window.__roomFire.setHeld(padBtn.fire); } catch (e) {}
+  }
+  if (!!s.fly !== padBtn.fly) {
+    padBtn.fly = !!s.fly;
+    st.fly.hold = padBtn.fly;
+    try { flyBtn(padBtn.fly); } catch (e) {}
+  }
+  if (!!s.zoom !== padBtn.zoom) {
+    padBtn.zoom = !!s.zoom;
+    try {
+      if (nb && nb.playing) { if (padBtn.zoom) { nb.toggleZoom(); bZoom.classList.toggle('locked', nb.zoom); } }
+      else if (padBtn.zoom) {
+        if (zoomHold.lock) zoomRelease();
+        else { zoomHold.on = true; bZoom.classList.add('held'); }
+      } else if (!(nb && nb.playing)) {
+        if (zoomHold.on && zoomHold.k >= 1) { bZoom.classList.remove('held'); zoomSetLock(true); zoomHold.locks++; }
+        else { zoomHold.on = false; bZoom.classList.remove('held'); }
+      }
+    } catch (e) {}
+  }
+}
+
 cv.addEventListener('touchstart', e => {
   const nbOn = !!(window.__neonBricks && window.__neonBricks.playing);
   for (const t of e.changedTouches) {
@@ -1842,6 +1915,7 @@ window.__compileForPlay = compileForPlay;
 function frame(now) {
   syncJoyArm();
   const gap = Math.max(0, Math.min(100, now - last)); last = now;   // rAF time can be a hair before a resume timestamp
+  applyQuestPad(gap / 1000);
   if (paused) { rafOn = false; return; }   // full-screen game running: arcade render loop stopped
   if (document.hidden) { PS.hiddenSkips++; requestAnimationFrame(frame); return; }   // pause GPU work while the tab is in the background
   syncZoomBtn(); tickZoom(gap / 1000); if (nb) nb.restoreCam(camera);
@@ -2061,7 +2135,7 @@ const opts = setupOpts({ play, kiosk, shield, st, monkey, setFloor, getFloor: ()
 requestAnimationFrame(frame);
 
 // hooks for tests / future art work
-window.__arcade = { powerSave: PS, tier: TIER, mem: () => memSnapshot({ THREE, renderer, scene, composer, extras: { tier: TIER.name, why: TIER.why, gpu: TIER.gpu, post: !!usePost, cabDemos: !!Q.cabDemos, gapAvg: stats.gapAvg, cpuAvg: stats.cpuAvg } }), setTier: name => { if (name !== 'low' && name !== 'mid' && name !== 'high') return TIER; TIER.name = name; TIER.forced = true; persistTier(name); applyQuality(); return TIER; }, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, floorMats, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, skyTowerCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, joyFrom, joyClear, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, get neonBricks() { return nb; }, nbFade: dt => nbFade(dt), get playerFade() { return PF.k; }, get pfClones() { return PF.clones; }, nbWarm: () => nbWarm(), get randomRoom() { return window.__randomRoom; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow) };
+window.__arcade = { powerSave: PS, tier: TIER, mem: () => memSnapshot({ THREE, renderer, scene, composer, extras: { tier: TIER.name, why: TIER.why, gpu: TIER.gpu, post: !!usePost, cabDemos: !!Q.cabDemos, gapAvg: stats.gapAvg, cpuAvg: stats.cpuAvg } }), setTier: name => { if (name !== 'low' && name !== 'mid' && name !== 'high') return TIER; TIER.name = name; TIER.forced = true; persistTier(name); applyQuality(); return TIER; }, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, floorMats, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, skyTowerCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, joyFrom, joyClear, joyFromPad, applyQuestPad, isQuestPad, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, get neonBricks() { return nb; }, nbFade: dt => nbFade(dt), get playerFade() { return PF.k; }, get pfClones() { return PF.clones; }, nbWarm: () => nbWarm(), get randomRoom() { return window.__randomRoom; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow) };
 const mp = setupMP({ scene, camera, monkey, makeMonkey, makeAlien, st, play, getTp: () => tp, HALF, Z2, HALL_L, WX: 80 }); window.__arcade.mp = mp;   // multiplayer step 1: public room, 10 players
 // after the first room frames: pull in the shop, then the window scenery, off the critical path
 { const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 1500 }) : setTimeout(f, 200));
