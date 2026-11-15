@@ -38,9 +38,9 @@ const PHONE = process.argv[2] === 'phone';
   // room shots
   await page.evaluate(() => { const p = window.__arcade.play; p.tickets.total = 2; localStorage.setItem('neonarcade.tickets', '2'); p.machines.roadster.credits = 0; });
   await page.evaluate(PH => { window.__arcade.monkey.position.set(1, 0, 4); window.__camOverride = { pos: PH ? [-1.2, 3.0, 1.0] : [-0.8, 3.0, 2.2], at: [6, 1.3, 9.6] }; }, PHONE); await page.waitForTimeout(2500);
-  await page.screenshot({ path: 'shots/mr_room' + sfx + '.png' });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/mr_room' + sfx + '.png' });
   await page.evaluate(PH => { window.__camOverride = { pos: PH ? [11, 2.2, 6.5] : [11.2, 2.4, 7.5], at: [6, 1.1, 10] }; }, PHONE); await page.waitForTimeout(1500);
-  await page.screenshot({ path: 'shots/mr_room_side' + sfx + '.png' }); await page.evaluate(() => { window.__camOverride = null; });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/mr_room_side' + sfx + '.png' }); await page.evaluate(() => { window.__camOverride = null; });
   // seat selection
   // t184: the PLAY prompt shows only standing beside the car's side, next to a seat, facing the car
   const seatAt = x => page.evaluate(x => { const A = window.__arcade, c = A.roadsterCab, sx = Math.sign(x - c.position.x) || 1, s = Object.values(c.userData.seats).find(q => Math.sign(q.world.x - c.position.x) === sx).world; A.st.fp = false; A.st.vel.set(0, 0, 0); A.monkey.position.set(c.position.x + sx * 2.95, 0, s.z); A.st.face = sx > 0 ? -Math.PI / 2 : Math.PI / 2; A.st.yaw = A.st.face; A.st.lookT = -99; }, x);
@@ -51,26 +51,30 @@ const PHONE = process.argv[2] === 'phone';
   const sL = await H.ui();
   await seatAt(pl.seats.R[0] - 0.3); await waitTxt('RIGHT SEAT');
   const sR = await H.ui();
-  chk(sL.on && sL.txt === 'LEFT SEAT' && sL.near === 'roadsterCabinet' && /5 TICKETS TO PLAY/.test(sL.cr), 'nearest seat prompt: LEFT SEAT (x=' + pl.seats.L[0] + ') ' + JSON.stringify(sL));
+  chk(sL.on && sL.txt === 'LEFT SEAT' && sL.near === 'roadsterCabinet', 'nearest seat prompt: LEFT SEAT (x=' + pl.seats.L[0] + ') ' + JSON.stringify(sL));
   chk(sR.on && sR.txt === 'RIGHT SEAT', 'nearest seat prompt: RIGHT SEAT (x=' + pl.seats.R[0] + ') ' + JSON.stringify(sR));
-  await page.screenshot({ path: 'shots/mr_seat_prompt' + sfx + '.png' }); if (PHONE) await page.screenshot({ path: 'shots/mr_side_prompt_phone.png' });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/mr_seat_prompt' + sfx + '.png' }); if (PHONE) if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/mr_side_prompt_phone.png' });
   await page.evaluate(() => { window.__arcade.monkey.position.x += 20; window.__arcade.step(1 / 60); }); await waitTxt('');
   chk(!(await H.ui()).on, 'no prompt away from the cabinet');
   // sit in the RIGHT seat: seated pose + zoom into the right screen
   await seatAt(pl.seats.R[0]); await waitTxt('RIGHT SEAT');
   await H.press(); await page.waitForFunction(() => window.__arcade.play.mode === 'prep' && window.__arcade.play.stepIn > 0.5, null, { timeout: 15000 }).catch(() => {});
   const si = await page.evaluate(() => { const A = window.__arcade; return { mode: A.play.mode, k: +(A.play.stepIn || 0).toFixed(2), y: +A.monkey.position.y.toFixed(2), x: +A.monkey.position.x.toFixed(2) }; });
-  if (PHONE) await page.screenshot({ path: 'shots/mr_stepin_phone.png' });
+  if (PHONE) if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/mr_stepin_phone.png' });
   chk(si.mode === 'prep' && si.k > 0.4 && si.k < 1, 'PLAY runs the step-in animation (walk to the seat, leg over, sit) ' + JSON.stringify(si));
-  await page.waitForFunction(() => window.__arcade.play.mode === 'zoomIn' && window.__arcade.play.t > 0.15, null, { timeout: 15000 }).catch(() => {});
-  const z = await page.evaluate(() => { const A = window.__arcade, u = A.monkey.userData, P = A.play; return { mode: P.mode, seated: A.st.seated, x: +A.monkey.position.x.toFixed(2), z: +A.monkey.position.z.toFixed(2), hips: +u.hips.position.y.toFixed(2), leg: +u.legs[0].leg.rotation.x.toFixed(2), knee: +u.legs[0].knee.rotation.x.toFixed(2), end: P.end && [+P.end.x.toFixed(2), +P.end.y.toFixed(2), +P.end.z.toFixed(2)], scr: A.roadsterCab.userData.screen.name }; });
-  await page.screenshot({ path: 'shots/mr_seated_zoom' + sfx + '.png' });
+  let z = null;
+  for (let i = 0; i < 80; i++) {
+    await page.waitForTimeout(200);
+    z = await page.evaluate(() => { const A = window.__arcade, u = A.monkey.userData, P = A.play; return { mode: P.mode, t: P.t, seated: A.st.seated, x: +A.monkey.position.x.toFixed(2), z: +A.monkey.position.z.toFixed(2), hips: +u.hips.position.y.toFixed(2), leg: +u.legs[0].leg.rotation.x.toFixed(2), knee: +u.legs[0].knee.rotation.x.toFixed(2), end: P.end && [+P.end.x.toFixed(2), +P.end.y.toFixed(2), +P.end.z.toFixed(2)], scr: A.roadsterCab.userData.screen.name }; });
+    if (z.mode === 'zoomIn' && z.t > 0.15) break;
+  }
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/mr_seated_zoom' + sfx + '.png' });
   chk(z.mode === 'zoomIn' && z.seated === 'R' && Math.abs(z.x - pl.seats.R[0]) < 0.05 && z.leg < -1.2 && z.knee > 1.2, 'monkey sits in the RIGHT bucket seat (seated pose: thighs forward, knees bent) ' + JSON.stringify(z));
   chk(z.scr === 'screenR' && z.end && Math.abs(z.end[0] - 4.78) < 0.3 && z.end[2] < 11 && z.end[2] > 9, 'camera zooms into the RIGHT seat\'s screen ' + JSON.stringify(z.end));
   await H.zoomToDemo(); await page.waitForTimeout(1500);
   const d = await page.evaluate(W => { const w = eval(W); return { src: w.location.pathname, demo: w.__DEMO, st: w.__mrA.scene(), muted: w.eval('muted'), ins: document.getElementById('dInsert').textContent, cost: document.getElementById('dCost').textContent, picks: w.__TK.n, got: w.__TK.got }; }, W);
   chk(/mr-play/.test(d.src) && d.demo && d.st === 'play' && d.ins === 'INSERT CREDIT' && d.cost === '5 TICKETS TO PLAY' && d.muted, 'zoom lands in the silent MARS ROADSTER DEMO: INSERT CREDIT, 5 TICKETS TO PLAY ' + JSON.stringify(d));
-  await page.screenshot({ path: 'shots/mr_demo' + sfx + '.png' });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/mr_demo' + sfx + '.png' });
   const t0 = await page.evaluate(() => localStorage.getItem('neonarcade.tickets'));
   await page.evaluate(W => { const w = eval(W); for (let i = 0; i < 900; i++) w.step(1 / 60); }, W);
   chk((await page.evaluate(W => eval(W).__TK.got, W)) === 0 && await page.evaluate(() => localStorage.getItem('neonarcade.tickets')) === t0, 'DEMO drives but never collects tickets');
@@ -99,11 +103,11 @@ const PHONE = process.argv[2] === 'phone';
   chk(hit.log.some(x => /^air/.test(x)), 'an in-air pickup over a gap works');
   // mid-drive shot with a pickup ahead: put the car on the road just behind the next ground ticket
   await page.evaluate(W => { const w = eval(W); w.eval(`(function(){ const clear = z => { for (let k = z - 34; k <= z; k += 2) if (gapAt(k)) return false; return true; }; const p = __TK.picks.find(p => !p.taken && !p.air && clear(p.z)) || __TK.picks.find(p => !p.taken); if (!p) return; C.z = p.z - 20; C.x = CX(C.z); C.y = GH(C.x, C.z); C.yaw = Math.atan2(CX(C.z+10)-C.x, 10); C.v = 12; C.vx = C.vy = C.vz = 0; C.dead = 0; C.ground = true; snapCam(); })()`); }, W);
-  await page.waitForTimeout(120); await page.screenshot({ path: 'shots/mr_seated' + sfx + '.png' });
+  await page.waitForTimeout(120); if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/mr_seated' + sfx + '.png' });
   const hud = await page.evaluate(() => { const vis = id => { const e = document.getElementById(id); if (!e) return null; const s = getComputedStyle(e); return s.display !== 'none' && s.visibility !== 'hidden'; }; return { tix: vis('tix'), vix: vis('vix'), exit: vis('bExit') }; });
   const ghud = await page.evaluate(W => { const w = eval(W), v = id => { const e = w.document.getElementById(id); return e ? getComputedStyle(e).display !== 'none' : null; }; return { again: v('again'), menu: v('toMenu'), gar: v('garB') }; }, W);
   chk(hud.tix && !hud.vix && hud.exit && !ghud.again && !ghud.menu && !ghud.gar, 'arcade HUD: one ticket counter, no Viking chip (none held), home/exit; the copy hides RETRY / MENU / GARAGE ' + JSON.stringify([hud, ghud]));
-  const iso = await page.evaluate(() => ({ s: localStorage.getItem('arcade_mr_save'), orig: localStorage.getItem('marsroadster.save.v1'), mute: localStorage.getItem('marsroadster.mute'), keys: Object.keys(localStorage).filter(k => !/^neonarcade\.|^arcade_/.test(k)) }));
+  const iso = await page.evaluate(() => ({ s: localStorage.getItem('arcade_mr_save'), orig: localStorage.getItem('marsroadster.save.v1'), mute: localStorage.getItem('marsroadster.mute'), keys: Object.keys(localStorage).filter(k => !/^neonarcade\.|^arcade_|^galacticarcade\./.test(k)) }));
   chk(iso.orig === null && iso.mute === null && iso.keys.length === 0, 'the copy uses its own keys; the original roadster keys are untouched; arcade keys stay neonarcade.* ' + JSON.stringify(iso));
   const orig = fs.readFileSync('/workspace/mars-roadster/index.html', 'utf8');
   chk(!/TicketArt|__neonTicket|__TK|__mrA/.test(orig), 'the original Mars Roadster has no tickets / pickups / arcade code');

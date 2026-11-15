@@ -21,15 +21,29 @@ const PH = process.argv[2] === 'phone', sfx = PH ? '_phone' : '';
   let s = await S(); chk(s.t === 1 && s.ls === '1' && s.badge === '1' && s.s === 0 && s.g === 0, 'fresh visit: 1 ticket, STRIKE and GHOST at CREDIT 0');
   for (const [cab, key] of [['strikeCabinet', 'strike'], ['ghostCabinet', 'ghost']]) {
     const k1 = key === 'strike' ? 's' : 'g', kg = key === 'strike' ? 'sg' : 'gg', N = key.toUpperCase();
-    await goTo(cab); await page.waitForFunction(() => document.getElementById('playUI').classList.contains('on'), null, { timeout: 10000 }).catch(() => {}); await page.waitForTimeout(400); s = await S();
-    chk(s.on && s.txt === 'PLAY' && /^5 TICKETS TO PLAY  ·  CREDIT 0 /.test(s.cr), N + ': room prompt is PLAY at CREDIT 0 "' + s.cr + '"');
+    // after leaving Strike (which may still have a credit), wait until we are actually at this cabinet, not still near the previous one
+    for (let i = 0; i < 20; i++) {
+      await goTo(cab);
+      const here = await page.evaluate(n => ({ near: window.__arcade.play.near(), on: document.getElementById('playUI').classList.contains('on'), mode: window.__arcade.play.mode }), cab);
+      if (here.mode === 'walk' && here.near === cab && here.on) break;
+      await page.waitForTimeout(250);
+    }
+    s = await S();
+    const near = await page.evaluate(() => window.__arcade.play.near());
+    chk(s.on && s.txt === 'PLAY' && near === cab, N + ': room prompt is PLAY (tickets line under PLAY is gone) ' + JSON.stringify({ on: s.on, txt: s.txt, near }));
     const g0 = s[kg];
     await playBtn(); await page.waitForFunction(() => window.__arcade.play.mode === 'game' && document.getElementById('game').classList.contains('on'), null, { timeout: 90000 });
-    await page.waitForTimeout(2500); s = await S();
-    chk(s.sub === 'demo' && s.demoOn && s.demoW && s.ins === 'INSERT CREDIT' && s.dcr.startsWith('CREDIT 0') && s[kg] === g0, N + ': zoomed in to the DEMO with INSERT CREDIT / CREDIT 0, no game started');
-    const live = await page.evaluate(k => { const w = document.getElementById('game').contentWindow; return k === 'strike' ? w.STRIKE.G.scene : w.__ghost.G.state; }, key);
+    await page.waitForTimeout(2500);
+    for (let i = 0; i < 25; i++) {
+      s = await S();
+      const ready = await page.evaluate(k => { try { const w = document.getElementById('game').contentWindow; return k === 'strike' ? !!(w && w.STRIKE && w.STRIKE.G) : !!(w && w.__ghost && w.__ghost.G); } catch (e) { return false; } }, key);
+      if (s.sub === 'demo' && s.demoOn && s.demoW && ready) break;
+      await page.waitForTimeout(200);
+    }
+    chk(s.sub === 'demo' && s.demoOn && s.demoW && s.ins === 'INSERT CREDIT' && s.dcr.startsWith('CREDIT 0') && s[kg] === g0, N + ': zoomed in to the DEMO with INSERT CREDIT / CREDIT 0, no game started ' + JSON.stringify({ sub:s.sub, demoOn:s.demoOn, demoW:s.demoW, ins:s.ins, dcr:s.dcr, games:s[kg] }));
+    const live = await page.evaluate(k => { const w = document.getElementById('game').contentWindow; return k === 'strike' ? (w.STRIKE && w.STRIKE.G && w.STRIKE.G.scene) : (w.__ghost && w.__ghost.G && w.__ghost.G.state); }, key);
     chk(live === 'play', N + ': the demo is the real game on autoplay (' + live + ')');
-    await page.screenshot({ path: 'shots/demo_' + key + sfx + '.png' });
+    if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/demo_' + key + sfx + '.png' });
     // demo gives no tickets
     const ta = await page.evaluate(() => { const w = document.getElementById('game').contentWindow; w.TicketArt.collect('x'); return window.__arcade.play.award(1); });
     s = await S(); chk(!ta && s.t === (key === 'strike' ? 1 : s.t), N + ': the demo never awards tickets');
@@ -41,10 +55,10 @@ const PH = process.argv[2] === 'phone', sfx = PH ? '_phone' : '';
     if (t0 < 5) await page.evaluate(() => { window.__arcade.play.tickets.total = 5; });
     await tapEl('#bTicket'); s = await S();
     chk(s.sub === 'demo' && s[k1] === 1 && s.t === 0 && s.ls === '0' && s.coin === c0 + 1 && s[kg] === g0 && s.dcr.startsWith('CREDIT 1'), N + ': INSERT 5 TICKETS: 5 🎟 -> CREDIT 1, coin sound, still the demo (not a screen tap)');
-    if (key === 'strike') await page.screenshot({ path: 'shots/insert_ticket' + sfx + '.png' });
+    if (key === 'strike') if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/insert_ticket' + sfx + '.png' });
     await tapEl('#bTicket'); s = await S();
     chk(s.bt === 'NEED 5 TICKETS' && s[k1] === 1 && s.t === 0 && s.sub === 'demo', N + ': at 0 tickets the button shows NEED 5 TICKETS and adds nothing');
-    if (key === 'strike') await page.screenshot({ path: 'shots/need_ticket' + sfx + '.png' });
+    if (key === 'strike') if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/need_ticket' + sfx + '.png' });
     // tap the screen: real game, uses the credit
     await tapScreen(); await page.waitForTimeout(400); s = await S();
     chk(s.sub === 'play' && !s.demoOn && !s.demoW && s[k1] === 0 && s[kg] === g0 + 1, N + ': tapping the screen with CREDIT 1 starts a real game (CREDIT 1 -> 0)');

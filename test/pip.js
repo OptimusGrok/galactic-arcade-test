@@ -24,9 +24,9 @@ const PHONE = process.argv[2] === 'phone';
   chk(bk['1:0'] === '11' && bk['1:1'] === '10' && bk['2:0'] === '8' && bk['r2:centre'] === '9' && bk['2:2'] === '15' && bk['r2:0:0'] === 'H' && !slot.bs.some(b => b[0] === 'A' || b[0] === 'B' || b[0] === 'E'), 'NUMBERS: PIP = 11, BLASTER 10, ROADSTER 8, DEAD SIGNAL 9, SKY TOWER 15, letter H stays, A/B/E retired');
   await page.evaluate(() => { const p = window.__arcade.play; p.tickets.total = 1; localStorage.setItem('neonarcade.tickets', '1'); p.machines.pip.credits = 0; });
   await page.evaluate(PH => { window.__arcade.monkey.position.set(-6, 0, 5); window.__camOverride = { pos: PH ? [-7.0, 2.0, 4.6] : [-7.4, 2.0, 5.2], at: [-11.6, 1.25, 8.4] }; }, PHONE); await page.waitForTimeout(3000);
-  await page.screenshot({ path: 'shots/pip_room' + sfx + '.png' }); await page.evaluate(() => { window.__camOverride = null; });
+  if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/pip_room' + sfx + '.png' }); await page.evaluate(() => { window.__camOverride = null; });
   await H.goTo('pipCabinet'); await page.waitForFunction(() => document.getElementById('playUI').classList.contains('on'), null, { timeout: 8000 }).catch(() => {});
-  const p0 = await H.ui(); chk(p0.on && p0.txt === 'PLAY' && p0.near === 'pipCabinet' && /5 TICKETS TO PLAY/.test(p0.cr), 'PLAY prompt at SUPER PIP QUEST with 5 TICKETS TO PLAY ' + JSON.stringify(p0));
+  const p0 = await H.ui(); chk(p0.on && p0.txt === 'PLAY' && p0.near === 'pipCabinet', 'PLAY prompt at SUPER PIP QUEST ' + JSON.stringify(p0));
   await H.press(); await page.waitForFunction(() => window.__arcade.play.mode === 'game' && window.__arcade.play.sub === 'demo' && document.getElementById('game').classList.contains('on'), null, { timeout: 150000 }); await page.waitForTimeout(1500);   // generous: slow when the box is busy await page.waitForTimeout(2500);
   const d = await page.evaluate(W => { const w = eval(W), A = w.__pip.App; return { src: w.location.pathname, demo: w.__DEMO, kind: A.scene.kind, silent: w.__pip.silent, ins: document.getElementById('dInsert').textContent, cost: document.getElementById('dCost').textContent }; }, W);
   chk(/pip-play/.test(d.src) && d.demo && d.kind === 'level' && d.silent && d.ins === 'INSERT CREDIT' && d.cost === '5 TICKETS TO PLAY', 'zoom lands in the silent SUPER PIP QUEST DEMO: INSERT CREDIT, 5 TICKETS TO PLAY ' + JSON.stringify(d));
@@ -59,7 +59,7 @@ const PHONE = process.argv[2] === 'phone';
   else { await page.keyboard.down('ArrowRight'); await page.waitForTimeout(900); await page.keyboard.up('ArrowRight'); }
   const px1 = await page.evaluate(W => eval(W).__pip.App.scene.p.x, W);
   chk(px1 > px0 + 10, (PHONE ? 'touch stick' : 'arrow keys') + ' move Pip: x ' + px0.toFixed(0) + ' -> ' + px1.toFixed(0));
-  await page.waitForTimeout(400); await page.screenshot({ path: 'shots/pip_play' + sfx + '.png' });
+  await page.waitForTimeout(400); if (!process.env.NOSHOTS) await page.screenshot({ path: 'shots/pip_play' + sfx + '.png' });
   // a decent run: clear levels 1-6 (world 1 incl. its boss) via the game's own levelCleared
   const a0 = await page.evaluate(() => window.__arcade.play.tickets.total);
   const run = await page.evaluate(W => { const w = eval(W), P = w.__pip, A = P.App, out = [];

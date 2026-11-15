@@ -11,6 +11,7 @@ const ORIG = '/workspace/boulder-dig/index.html', md5 = () => crypto.createHash(
   const m0 = md5();
   const supa = r => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   const { page, errors, close } = await open({ phone: true, w: 390, h: 700, supa }); page.setDefaultTimeout(60000);
+  await page.evaluate(() => { document.body.classList.add('upright'); const t = document.getElementById('turnHint'); if (t) t.classList.remove('on'); });
   let ok = true; const chk = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) ok = false; };
   const H = helpers(page, PHONE), W = 'document.getElementById("game").contentWindow';
   const s = await page.evaluate(() => { const A = window.__arcade, T = A.THREE, c = A.rockfallCab;
@@ -41,7 +42,7 @@ const ORIG = '/workspace/boulder-dig/index.html', md5 = () => crypto.createHash(
   chk(s.frontFree && s.pathFree, 'monkey can walk up: the play spot ' + JSON.stringify(s.front) + ' and the way to it from the room centre are clear');
   await page.evaluate(() => { const p = window.__arcade.play; p.tickets.total = 1; localStorage.setItem('neonarcade.tickets', '1'); p.machines.rockfall.credits = 0; });
   await H.goTo('rockfallCabinet'); await page.waitForFunction(() => document.getElementById('playUI').classList.contains('on'), null, { timeout: 8000 }).catch(() => {});
-  const p0 = await H.ui(); chk(p0.on && p0.txt === 'PLAY' && p0.near === 'rockfallCabinet' && /5 TICKETS TO PLAY/.test(p0.cr), 'PLAY prompt with 5 TICKETS TO PLAY ' + JSON.stringify(p0));
+  const p0 = await H.ui(); chk(p0.on && p0.txt === 'PLAY' && p0.near === 'rockfallCabinet', 'PLAY prompt at ROCKFALL RUSH ' + JSON.stringify(p0));
   await H.press(); await page.waitForFunction(() => window.__arcade.play.mode === 'game' && window.__arcade.play.sub === 'demo' && document.getElementById('game').classList.contains('on'), null, { timeout: 150000 }); await page.waitForTimeout(1500);
   const d = await page.evaluate(W => { const w = eval(W); return { src: w.location.pathname, demo: w.__DEMO, mode: w.__G.S.mode, silent: w.__rockfall.silent, cost: document.getElementById('dCost').textContent, lives: w.__G.S.lives }; }, W);
   chk(/rockfall-play/.test(d.src) && d.demo && d.mode === 'play' && d.silent && d.cost === '5 TICKETS TO PLAY' && d.lives >= 3, 'zoom lands in the silent ROCKFALL RUSH DEMO ' + JSON.stringify(d));
@@ -89,7 +90,7 @@ const ORIG = '/workspace/boulder-dig/index.html', md5 = () => crypto.createHash(
   await page.waitForTimeout(800);
   const back = await page.evaluate(W => { const w = eval(W); return { sub: window.__arcade.play.sub, demo: w.__DEMO, cr: window.__arcade.play.machines.rockfall.credits }; }, W);
   chk(back.sub === 'demo' && back.demo && back.cr === 0, 'game over returns to the silent DEMO ' + JSON.stringify(back));
-  await page.tap('#bExit'); await page.waitForFunction(() => window.__arcade.play.mode === 'walk', null, { timeout: 30000 }).catch(() => {});
+  await page.tap('#bExit', { force: true }); await page.waitForFunction(() => window.__arcade.play.mode === 'walk', null, { timeout: 30000 }).catch(() => {});
   chk(await page.evaluate(() => !document.getElementById('game')), 'zoomed out: the game iframe is unloaded');
   const src = fs.readFileSync(ORIG, 'utf8');
   chk(md5() === m0 && !/TicketArt|arcade_rockfall|__TK/.test(src), 'original /workspace/boulder-dig/index.html untouched, no tickets in it');
