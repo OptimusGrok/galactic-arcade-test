@@ -69,6 +69,7 @@ const { open } = require('./lib');
     const demoSrc = (info.mem.iframeSrc || []).filter(s => s && /strike-demo|ghost-demo/.test(s) && s !== 'about:blank');
     chk(demoSrc.length === 0, 'low tier did not attach live demo iframes ' + JSON.stringify(info.mem.iframeSrc));
     chk(info.mem.rtMB < 2, 'low tier render-target memory is tiny, got ' + info.mem.rtMB + ' MB');
+    chk(info.mem.texMB < 80, 'low tier walked textures stay under 80 MB, got ' + info.mem.texMB + ' MB');
     chk(errors.length === 0, 'no page errors ' + errors.join(' | '));
     await close();
   }
@@ -85,6 +86,7 @@ const { open } = require('./lib');
     console.log('forced-low', JSON.stringify({ tier: info.tier, why: info.why, dpr: info.dpr, post: info.post, texMB: info.texMB, rtMB: info.rtMB, lightsOn: info.lightsOn, jsMB: info.jsMB }));
     chk(info.tier === 'low', 'localStorage galacticarcade.tier=low forces low');
     chk(info.post === false, 'forced low has no post');
+    chk(info.texMB < 80, 'forced low textures under 80 MB, got ' + info.texMB + ' MB');
     await close();
   }
 

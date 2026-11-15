@@ -4,15 +4,16 @@
 // THE QUEST FOR THE SUN CROWN, teal-capped Pip jumping over coins, chomper pipes and a sunset. Purple control panel with a red ball
 // joystick, JUMP and RUN buttons; brushed steel coin door with two red slots and an INSERT COIN plate. Screen: a silent attract loop.
 import * as THREE from 'three';
+import { cabWH, flagTex, capLoadedTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos } from './strikecab.js';
 const L = new THREE.TextureLoader();
-const load = (url, flip) => { const t = L.load(url); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
-const canvasTex = (w, h, paint) => { const c = document.createElement('canvas'); c.width = w; c.height = h; paint(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
+const load = (url, flip) => { const t = L.load(url, tex => capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
+const canvasTex = (w, h, paint) => { const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } paint(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return t; };
 const PIP = ['...TTTT...', '..TTTTTTT.', '..SSSSS...', '.SSKSSKS..', '..SSSSS...', '.BBTTTTBB.', '.S.BBBB.S.', '...B..B...', '..NN..NN..'];
 const COL = { T: '#1fb5a8', S: '#f2b47a', K: '#1a1020', B: '#2a5bd8', N: '#6a3a1a' };
 const pxc = (g, rows, x, y, s) => rows.forEach((r, j) => { for (let i = 0; i < r.length; i++) if (COL[r[i]]) { g.fillStyle = COL[r[i]]; g.fillRect(x + i * s, y + j * s, s, s); } });
 function attract(W, H) {
-  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  const c = document.createElement('canvas'); { const sz = cabWH(W, H); c.width = sz[0]; c.height = sz[1]; } const g = c.getContext('2d'); if (c.width !== W || c.height !== H) g.scale(c.width / W, c.height / H);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   const visit = { on: false };
   function draw(t) {

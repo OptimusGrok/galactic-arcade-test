@@ -2,9 +2,10 @@
 // green jagged ORC ATTACK marquee, side art of a roaring orc with an axe before a burning castle, red joystick,
 // red / yellow / green buttons, coin door with two red slots. Screen: a cheap tower-defence attract loop with INSERT CREDIT.
 import * as THREE from 'three';
+import { cabWH, flagTex, capLoadedTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos } from './strikecab.js';
 const L = new THREE.TextureLoader();
-const load = (url, flip) => { const t = L.load(url); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
+const load = (url, flip) => { const t = L.load(url, tex => capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
 function woodTex() {
   const c = document.createElement('canvas'); c.width = 256; c.height = 512; const g = c.getContext('2d');
   g.fillStyle = '#4a2c18'; g.fillRect(0, 0, 256, 512);
@@ -14,7 +15,7 @@ function woodTex() {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
 }
 function attract(W, H) {
-  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  const c = document.createElement('canvas'); { const sz = cabWH(W, H); c.width = sz[0]; c.height = sz[1]; } const g = c.getContext('2d'); if (c.width !== W || c.height !== H) g.scale(c.width / W, c.height / H);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   const visit = { on: false };
   const path = [[0, .3], [.3, .3], [.3, .7], [.62, .7], [.62, .25], [.85, .25], [.85, .6], [1, .6]].map(([x, y]) => [x * W, y * H]);

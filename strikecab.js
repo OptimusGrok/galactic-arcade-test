@@ -1,10 +1,11 @@
 // STRIKE cabinet: detailed model + live attract-mode screen driven from a sandboxed, network-free copy of Strike.
 import * as THREE from 'three';
+import { cabWH, flagTex, capLoadedTexture } from './tier.js';
 
 const MOBILE = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
 function tex(w, h, draw) {
-  const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+  const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return t;
 }
 // ---------- painting helpers ----------
 function burst(g, x, y, r, a = 1) {

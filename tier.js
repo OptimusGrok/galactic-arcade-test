@@ -59,12 +59,62 @@ export function detectTier(opt = {}) {
 }
 
 export function qualityForTier(tier, { mobile = false, powerSave = false } = {}) {
-  if (tier === 'low') return { dpr: 1, refl: 0, bloom: 0, post: false, samples: 0, cabDemos: false, aniso: 1, fps: 30, warm: false, windowQ: 0.28, rtFloat: false };
-  if (tier === 'mid' && powerSave) return { dpr: 1.25, refl: 0.22, bloom: 0.28, post: true, samples: 0, cabDemos: true, aniso: 2, fps: 30, warm: true, windowQ: 0.5, rtFloat: false };
-  if (tier === 'mid') return { dpr: 1.5, refl: 0.35, bloom: 0.5, post: true, samples: 0, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false };
-  if (powerSave) return { dpr: mobile ? 1.25 : 1.5, refl: mobile ? 0.22 : 0.35, bloom: 0.28, post: true, samples: 0, cabDemos: true, aniso: 4, fps: 30, warm: true, windowQ: 0.75, rtFloat: false };
-  if (mobile) return { dpr: 1.5, refl: 0.35, bloom: 0.5, post: true, samples: 2, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false };
-  return { dpr: 2, refl: 0.6, bloom: 0.5, post: true, samples: 4, cabDemos: true, aniso: 8, fps: 60, warm: true, windowQ: 1, rtFloat: true };
+  // t854u / v232: texMax = longest image edge after downsample; cabScale shrinks cabinet canvases;
+  // mips off saves ~33% GPU memory; shopCell is the prize-atlas cell (atlas is 16x16 cells).
+  if (tier === 'low') return { dpr: 1, refl: 0, bloom: 0, post: false, samples: 0, cabDemos: false, aniso: 1, fps: 30, warm: false, windowQ: 0.28, rtFloat: false, texMax: 384, cabScale: 0.5, mips: false, shopCell: 64, shopLab: 0.5, nbW: 256, nbH: 320, previewDpr: 1, stone: 256 };
+  if (tier === 'mid' && powerSave) return { dpr: 1.25, refl: 0.22, bloom: 0.28, post: true, samples: 0, cabDemos: true, aniso: 2, fps: 30, warm: true, windowQ: 0.5, rtFloat: false, texMax: 640, cabScale: 0.75, mips: true, shopCell: 96, shopLab: 0.75, nbW: 384, nbH: 480, previewDpr: 1.25, stone: 512 };
+  if (tier === 'mid') return { dpr: 1.5, refl: 0.35, bloom: 0.5, post: true, samples: 0, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false, texMax: 768, cabScale: 0.75, mips: true, shopCell: 96, shopLab: 0.75, nbW: 384, nbH: 480, previewDpr: 1.25, stone: 512 };
+  if (powerSave) return { dpr: mobile ? 1.25 : 1.5, refl: mobile ? 0.22 : 0.35, bloom: 0.28, post: true, samples: 0, cabDemos: true, aniso: 4, fps: 30, warm: true, windowQ: 0.75, rtFloat: false, texMax: 768, cabScale: 0.85, mips: true, shopCell: 128, shopLab: 1, nbW: 512, nbH: 640, previewDpr: 1.25, stone: 512 };
+  if (mobile) return { dpr: 1.5, refl: 0.35, bloom: 0.5, post: true, samples: 2, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false, texMax: 0, cabScale: 1, mips: true, shopCell: 128, shopLab: 1, nbW: 512, nbH: 640, previewDpr: 1.5, stone: 1024 };
+  return { dpr: 2, refl: 0.6, bloom: 0.5, post: true, samples: 4, cabDemos: true, aniso: 8, fps: 60, warm: true, windowQ: 1, rtFloat: true, texMax: 0, cabScale: 1, mips: true, shopCell: 128, shopLab: 1, nbW: 512, nbH: 640, previewDpr: 1.5, stone: 1024 };
+}
+
+export function tierQuality() {
+  try { return (typeof window !== 'undefined' && window.__gaTier && window.__gaTier.quality) || {}; } catch (e) { return {}; }
+}
+
+export function scaleWH(w, h, scale = 1, max = 0) {
+  let ww = Math.max(1, Math.round(w * (scale || 1))), hh = Math.max(1, Math.round(h * (scale || 1)));
+  if (max && Math.max(ww, hh) > max) {
+    const s = max / Math.max(ww, hh);
+    ww = Math.max(1, Math.round(ww * s)); hh = Math.max(1, Math.round(hh * s));
+  }
+  return [ww, hh];
+}
+
+export function cabWH(w, h) {
+  const q = tierQuality();
+  return scaleWH(w, h, q.cabScale == null ? 1 : q.cabScale, 0);
+}
+
+export function flagTex(t, THREE) {
+  if (!t) return t;
+  const q = tierQuality();
+  if (q.mips === false) {
+    t.generateMipmaps = false;
+    if (THREE && THREE.LinearFilter) t.minFilter = THREE.LinearFilter;
+  }
+  if (q.aniso != null) t.anisotropy = q.aniso;
+  return t;
+}
+
+// Downsample a loaded image texture to quality.texMax and apply mip/aniso flags.
+export function capLoadedTexture(t, THREE) {
+  if (!t) return t;
+  const q = tierQuality();
+  const img = t.image;
+  const iw = img && (img.width || img.videoWidth) || 0;
+  const ih = img && (img.height || img.videoHeight) || 0;
+  const max = q.texMax || 0;
+  if (max && iw && ih && Math.max(iw, ih) > max) {
+    try {
+      const [w, h] = scaleWH(iw, ih, 1, max);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      t.image = c; t.needsUpdate = true;
+    } catch (e) {}
+  }
+  return flagTex(t, THREE);
 }
 
 export function persistTier(name) {

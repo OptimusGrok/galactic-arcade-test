@@ -3,11 +3,12 @@
 // MARS seat pods, flying-roadster side art. No neon on the body (the room's wall tube outlines it like every cabinet).
 // Local frame: x across (-W/2..W/2), y up, z from the wall end (0) out to the seats (DEP). Rotated PI so local +z points into the room.
 import * as THREE from 'three';
+import { cabWH, flagTex, capLoadedTexture } from './tier.js';
 export const MR = { W: 5.0, DEP: 4.0, HT: 3.1 };
 const L = new THREE.TextureLoader();
-const load = (u, flip) => { const t = L.load(u); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
+const load = (u, flip) => { const t = L.load(u, tex => capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
 function marqueeTex() {
-  const c = document.createElement('canvas'); c.width = 1024; c.height = 140; const g = c.getContext('2d'); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const c = document.createElement('canvas'); { const sz = cabWH(1024, 140); c.width = sz[0]; c.height = sz[1]; } const g = c.getContext('2d'); if (c.width !== 1024 || c.height !== 140) g.scale(c.width / 1024, c.height / 140); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE);
   const bg = new Image(); const draw = () => {
     const gr = g.createLinearGradient(0, 0, 0, 140); gr.addColorStop(0, '#d0603a'); gr.addColorStop(1, '#6a2412'); g.fillStyle = gr; g.fillRect(0, 0, 1024, 140);
     if (bg.complete && bg.naturalWidth) g.drawImage(bg, 0, 40, 1024, 220, 0, 0, 1024, 140);
@@ -23,7 +24,7 @@ function podTex() { const c = document.createElement('canvas'); c.width = 256; c
   g.fillStyle = '#111'; g.fillRect(10, 14, 92, 36); g.fillStyle = '#fff'; g.font = '900 26px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('MARS', 56, 33);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
 function attract(W, H, seed) {
-  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const c = document.createElement('canvas'); { const sz = cabWH(W, H); c.width = sz[0]; c.height = sz[1]; } const g = c.getContext('2d'); if (c.width !== W || c.height !== H) g.scale(c.width / W, c.height / H); const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; flagTex(tex, THREE);
   function draw(t) { t += seed;
     const sk = g.createLinearGradient(0, 0, 0, H * 0.5); sk.addColorStop(0, '#5a3a4a'); sk.addColorStop(1, '#e0a070'); g.fillStyle = sk; g.fillRect(0, 0, W, H * 0.5);
     g.fillStyle = '#9a5038'; g.beginPath(); g.moveTo(0, H * 0.5); for (let x = 0; x <= W; x += 16) g.lineTo(x, H * 0.5 - 10 - 14 * Math.abs(Math.sin(x * 0.013 + 1)) - (x > W * 0.6 && x < W * 0.8 ? 26 : 0)); g.lineTo(W, H * 0.5); g.fill();

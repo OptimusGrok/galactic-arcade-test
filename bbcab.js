@@ -4,8 +4,9 @@
 // black coin door and two red slots; a red PUMP button. ONE joystick (not two), no touch buttons drawn on the screen. No body neon
 // (house rule), only the standard wall edge glow. Screen: a silent attract loop until the arcade zooms into the real game.
 import * as THREE from 'three';
+import { cabWH, flagTex, capLoadedTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos } from './strikecab.js';
-const canvasTex = (w, h, paint, flip) => { const c = document.createElement('canvas'); c.width = w; c.height = h; paint(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+const canvasTex = (w, h, paint, flip) => { const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } paint(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE);
   if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
 // 12x12 pixel sprites
 const COL = { W: '#f4f4f4', B: '#2a6bff', b: '#16348a', K: '#101010', S: '#f2c08a', R: '#e8281e', r: '#9a120c', Y: '#ffe040', G: '#3ec83a', g: '#1e7a1e', O: '#ff8a1a', w: '#ffffff' };
@@ -37,7 +38,7 @@ function paintSide(g, w, h) {   // canvas = the side profile's bounding box: dir
   rock(0.8, 0.4, T * 0.5); rock(0.15, 0.2, T * 0.45); rock(0.7, 0.88, T * 0.55); rock(0.25, 0.9, T * 0.4);
 }
 function attract(W, H) {
-  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  const c = document.createElement('canvas'); { const sz = cabWH(W, H); c.width = sz[0]; c.height = sz[1]; } const g = c.getContext('2d'); if (c.width !== W || c.height !== H) g.scale(c.width / W, c.height / H);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   const visit = { on: false };
   function draw(t) {

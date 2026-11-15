@@ -4,12 +4,13 @@
 // attract loop (platforms, jetpack, Lego aliens, INSERT CREDIT). visit.on hides INSERT CREDIT
 // while Grok is playing.
 import * as THREE from 'three';
+import { cabWH, flagTex, capLoadedTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos } from './strikecab.js';
 
 const canvasTex = (w, h, paint) => {
-  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; }
   paint(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return t;
 };
 
 function brickFill(g, x, y, w, h, col) {
@@ -114,7 +115,7 @@ function drawClimber(g, px, py, k, q, t, tagCol, name) {
 }
 
 function attract(W, H) {
-  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  const c = document.createElement('canvas'); { const sz = cabWH(W, H); c.width = sz[0]; c.height = sz[1]; } const g = c.getContext('2d'); if (c.width !== W || c.height !== H) g.scale(c.width / W, c.height / H);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
   const visit = { on: false };
   const live = { on: false, frames: 0, names: [], focus: null };

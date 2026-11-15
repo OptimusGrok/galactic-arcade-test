@@ -1,11 +1,12 @@
 // GHOST 256 cabinet: model (no neon, plain plum trim) + live attract-mode screen from a sandboxed copy of Ghost 256.
 import * as THREE from 'three';
+import { cabWH, flagTex, capLoadedTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos, CRT } from './strikecab.js';
 
 const MOBILE = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
 function tex(w, h, draw, nearest) {
-  const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.imageSmoothingEnabled = false; draw(g, w, h);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; if (nearest) t.magFilter = THREE.NearestFilter; return t;
+  const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } const g = c.getContext('2d'); g.imageSmoothingEnabled = false; draw(g, w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (nearest) t.magFilter = THREE.NearestFilter; return t;
 }
 const GHOST = ['....####....', '..########..', '.##########.', '###WW###WW##', '##WWPP##WWPP', '##WWPP##WWPP', '###WW###WW##', '############', '############', '############', '##.###..###.##'.slice(1, 13), '#...##..##...#'.slice(1, 13)];
 function ghost(g, x, y, px, col) {

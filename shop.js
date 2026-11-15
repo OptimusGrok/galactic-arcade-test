@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
+import { capLoadedTexture, flagTex, tierQuality } from './tier.js';
 
 let api_sky = null;
 export const SHOP_HALF = 14;
@@ -34,7 +35,16 @@ const byId = Object.fromEntries(ITEMS.map(i => [i.id, i]));
 // Returns { root, arms, head, faceTex, drawFace }. Caller positions/scales the root.
 import chat from './grokchat.js';   // t810u: CHAT with Grok (shared panel + offline knowledge base)
 export function buildGrokClerk() {
-  const canvasTex = (w, h, draw) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); draw(g, w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return { t, c, g }; };
+  const canvasTex = (w, h, draw) => {
+    let ww = w, hh = h; const max = (tierQuality().texMax || 0);
+    // Don't shrink the prize atlas / label atlas (callers already picked the budgeted size). Cap other huge canvases (2048-wide banners).
+    if (max && Math.max(w, h) > 1024 && Math.max(w, h) > max * 2) {
+      const s = (max * 2) / Math.max(w, h); ww = Math.max(16, Math.round(w * s)); hh = Math.max(16, Math.round(h * s));
+    }
+    const c = document.createElement('canvas'); c.width = ww; c.height = hh; const g = c.getContext('2d');
+    if (ww !== w || hh !== h) { g.scale(ww / w, hh / h); draw(g, w, h); } else draw(g, ww, hh);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return { t, c, g };
+  };
   const grok = new THREE.Group(); grok.name = 'grokClerk';
   // t639u look, cheaper path: Lambert (not Standard) + low-poly + merged per limb/material; castShadow off
   const mSil = new THREE.MeshLambertMaterial({ color: 0xc9ccd1, emissive: 0x3a3d42, emissiveIntensity: 0.08 });
@@ -120,7 +130,16 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
     CYL = new THREE.CylinderGeometry(1, 1, 1, 10), CON = new THREE.ConeGeometry(1, 1, 8);
   const vcMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.05, emissive: 0x2a2a2e });
   const mesh = (list, mat = vcMat, name) => { const m = new THREE.Mesh(mergeGeometries(list), mat); if (name) m.name = name; G.add(m); return m; };
-  const canvasTex = (w, h, draw) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); draw(g, w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return { t, c, g }; };
+  const canvasTex = (w, h, draw) => {
+    let ww = w, hh = h; const max = (tierQuality().texMax || 0);
+    // Don't shrink the prize atlas / label atlas (callers already picked the budgeted size). Cap other huge canvases (2048-wide banners).
+    if (max && Math.max(w, h) > 1024 && Math.max(w, h) > max * 2) {
+      const s = (max * 2) / Math.max(w, h); ww = Math.max(16, Math.round(w * s)); hh = Math.max(16, Math.round(h * s));
+    }
+    const c = document.createElement('canvas'); c.width = ww; c.height = hh; const g = c.getContext('2d');
+    if (ww !== w || hh !== h) { g.scale(ww / w, hh / h); draw(g, w, h); } else draw(g, ww, hh);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return { t, c, g };
+  };
 
   // ---------- plush / toy builders (local origin = bottom centre, facing +z) ----------
   function monkeyPlush(L, x, y, z, fur, face, s = 1, pose = 0) {   // seated plush: round head, big ears, muzzle + smile, belly, arms, feet with toes, curled tail, hair tuft
@@ -237,7 +256,7 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
     _m.compose(_V1.set(x, y, z), _q.setFromEuler(_e.set(0, yaw, 0)), _V2.set(k, k, k)); for (const g of T) { g.applyMatrix4(_m); L.push(g); }
   }
   // ---------- label atlas: one canvas, every label is "NAME · N TICKETS" ----------
-  const LBL = []; const LW = 512, LH = 64, COLS = 4, ROWS = 16; const lab = canvasTex(LW * COLS, LH * ROWS, (g, w, h) => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h); });
+  const LBL = []; const labS = (tierQuality().shopLab || 1); const LW = Math.round(512 * labS), LH = Math.round(64 * labS), COLS = 4, ROWS = 16; const lab = canvasTex(LW * COLS, LH * ROWS, (g, w, h) => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h); });
   const labelGeos = [], cardGeos = [];
   function label(item, x, y, z, ry = 0, w = 0.78) {
     const i = LBL.length, cx = (i % COLS) * LW, cy = ((i / COLS) | 0) * LH, g = lab.g; LBL.push(item.id);
@@ -303,7 +322,7 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
     for (const sd of [-1, 1]) rim.push(new THREE.BoxGeometry(0.14, 0.1, VL).translate(sd * (VR - 0.07), CH + 0.02, VZ));
     add(rim, new THREE.MeshBasicMaterial({ color: 0xdfe4ec }), 'shopRoofRim'); }
   // ---------- MURALS: painted straight onto the walls, edge to edge, floor to ceiling ----------
-  const loadT = f => { const t = new THREE.TextureLoader().load(new URL('./tex/' + f, import.meta.url).href); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
+  const loadT = f => { const t = new THREE.TextureLoader().load(new URL('./tex/' + f, import.meta.url).href, tex => capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return t; };
   const SW = 9.2, MB = 0.0, MT = CH - 0.06, MHh = MT - MB, xE = SW / 2 + 0.15, TB = 5.08, zm = ZW + 0.012;
   const mat = f => new THREE.MeshBasicMaterial({ map: loadT(f), toneMapped: false });
   add([setUV(new THREE.PlaneGeometry(HS - xE, MHh), 0.38, 1, 0, 1).translate(-(HS + xE) / 2, MB + MHh / 2, zm)], mat('shop_mural_left.jpg'), 'muralLeft');      // back wall left of the shelves
@@ -356,7 +375,9 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
     label(it, x, SY[4] - 0.13, LZ, 0, LBW); });
   // ---------- lower shelves: real 3D toys (two staggered rows, colour + pose variants, one merged mesh) and boxed sets ----------
   const KIND = ['viking', 'boxBerserker', 'orc', 'boxRoadster', 'teddy', 'boxMars', 'boxMars2', 'dino', 'boxOrc', 'robot', 'rocket', 'boxGhost', 'alien', 'boxMonkey', 'ball', 'duck'];
-  const CS = 128, AC = 16, atl = canvasTex(CS * AC, CS * AC, (g) => { g.clearRect(0, 0, CS * AC, CS * AC); });
+  const CELL = 128, AC = 16, CS = (tierQuality().shopCell || 128);
+  const atl = canvasTex(CS * AC, CS * AC, (g) => { g.clearRect(0, 0, CS * AC, CS * AC); });
+
   const pal = ['#ff3c3c', '#ff8a1e', '#ffd21e', '#6cff4a', '#1ec8ff', '#3c78ff', '#a64dff', '#ff3cf0', '#ffffff', '#2a2a3a', '#ff7aa8', '#3cffc8'];
   const P_ = () => pal[(rnd() * pal.length) | 0];
   function drawBox(g, kind, v, x, y) { g.save(); g.translate(x, y); const c1 = P_(), c2 = P_(), c3 = P_();
@@ -374,7 +395,7 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
     else { circ(64, by + 56, 16, v % 2 ? c1 : art[1]); rect(64 - 18, by + 70, 36, 26, v % 3 ? c2 : art[1], 6); circ(58, by + 54, 3, '#111'); circ(70, by + 54, 3, '#111'); }
     g.fillStyle = '#fff'; g.font = '900 17px Impact, Arial Black'; g.textAlign = 'center'; g.fillText(art[0], 64, by + 19, w - 10); rect(bx + 8, by + h - 12, w - 16, 7, c3, 3); g.restore(); }
   const BOXC = { boxBerserker: ['BERSERKER', '#c8302a'], boxRoadster: ['ROADSTER', '#ff6a2a'], boxMars: ['MARS ROADSTER', '#b8321e'], boxMars2: ['MARS ROADSTER', '#b8321e'], boxNova: ['NOVA TETHER', '#2a5ad8'], boxOrc: ['ORC', '#2e8a2a'], boxGhost: ['GHOST', '#6a1a9a'], boxMonkey: ['MONKEY', '#2a8ad8'] };
-  KIND.forEach((k, ki) => { if (BOXC[k]) for (let v = 0; v < AC; v++) drawBox(atl.g, k, v, v * CS, ki * CS); }); atl.t.needsUpdate = true;
+  { const sc = CS / CELL; atl.g.setTransform(sc, 0, 0, sc, 0, 0); KIND.forEach((k, ki) => { if (BOXC[k]) for (let v = 0; v < AC; v++) drawBox(atl.g, k, v, v * CELL, ki * CELL); }); atl.g.setTransform(1, 0, 0, 1, 0, 0); atl.t.needsUpdate = true; }
   const SPAN = { viking: .26, orc: .28, teddy: .24, roadster: .36, dino: .32, robot: .2, rocket: .15, alien: .19, ball: .2, duck: .22 };
   const sprBox = [], mfr = []; let nToys = 0;
   // t635u perf (Arcade): queue toy3/part shelf builds and drain across frames (~1.3s was one long task)
@@ -489,7 +510,7 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
   // pool-play/index.html (a same-origin copy of https://optimusgrok.github.io/pool/) full-screen in an iframe overlay with a ✕. Free for now.
   const PX = 12.1, PZ = 6.0, PZ2 = 10.9, PLW = 0.78, PLL = 1.42, PTY = 0.82;   // table centre (shop-local), felt half-width (x) / half-length (z), felt height
   const pool = new THREE.Group(); pool.name = 'poolTable'; pool.position.set(PX, 0, PZ); G.add(pool);
-  { const tex = (w, h, f) => { const c = document.createElement('canvas'); c.width = w; c.height = h; f(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; };
+  { const tex = (w, h, f) => { const c = document.createElement('canvas'); c.width = w; c.height = h; f(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return t; };
     const woodT = tex(512, 64, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#5a2c12'); gr.addColorStop(1, '#3e1c0a'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
       for (let i = 0; i < 70; i++) { g.strokeStyle = `rgba(${20 + Math.random() * 40 | 0},${8 + Math.random() * 12 | 0},0,${0.15 + Math.random() * 0.3})`; g.lineWidth = 0.5 + Math.random() * 1.5; g.beginPath(); let y = Math.random() * h; g.moveTo(0, y); for (let x = 0; x <= w; x += 32) { y += (Math.random() - 0.5) * 2; g.lineTo(x, y); } g.stroke(); } });
     const feltT = tex(128, 128, (g, w, h) => { g.fillStyle = '#17734a'; g.fillRect(0, 0, w, h); const id = g.getImageData(0, 0, w, h), d = id.data; for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - 0.5) * 22; d[i] += n * 0.5; d[i + 1] += n; d[i + 2] += n * 0.6; } g.putImageData(id, 0, 0); });
@@ -1051,7 +1072,7 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
   const ICON = {}; let iconR = null, iconQ = [], iconT = 0;
   function iconFor(id) { if (ICON[id]) return ICON[id]; if (!iconQ.includes(id)) iconQ.push(id); clearTimeout(iconT); iconT = setTimeout(drawIcons, 30); return ''; }
   function drawIcons() { const q = iconQ.splice(0); if (!q.length) return;
-    try { if (!iconR) { iconR = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); iconR.setSize(128, 128, false); iconR.setPixelRatio(1); iconR.outputColorSpace = THREE.SRGBColorSpace; }
+    try { if (!iconR) { const isz = tierQuality().shopCell || 64; iconR = new THREE.WebGLRenderer({ antialias: false, alpha: true, preserveDrawingBuffer: true, powerPreference: 'low-power' }); iconR.setSize(isz, isz, false); iconR.setPixelRatio(1); iconR.outputColorSpace = THREE.SRGBColorSpace; }
       const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xffffff, 0x445566, 2.2)); const dl = new THREE.DirectionalLight(0xffffff, 1.6); dl.position.set(1, 2, 3); sc.add(dl);
       const cam = new THREE.PerspectiveCamera(30, 1, 0.01, 20), box = new THREE.Box3(), c = new THREE.Vector3(), sz = new THREE.Vector3();
       for (const id of q) { let g; try { g = buildHeld(id); } catch (e) { continue; } if (!g) continue; g.rotation.y = -0.5; sc.add(g); g.updateMatrixWorld(true); box.setFromObject(g); box.getCenter(c); box.getSize(sz);
