@@ -1,6 +1,8 @@
-/* t856u / v237: Quest Browser thumbsticks must move the player (via getGamepads)
-   and must not zoom the camera / page through wheel events. Also maps sticks
-   inside play iframes (WASD) and A/B/X/Y/triggers to FIRE / FLY / ZOOM. */
+/* t856u / v237 + t857u / v238: Quest thumbsticks must move the player.
+   v237 reads getGamepads(); v238 also translates stick-as-wheel (deltaY
+   forward/back, deltaX strafe) because 2D Quest Browser often exposes no
+   gamepads. Wheel must not zoom. Play copies get the same helper. ?qdbg=1
+   shows the last input source. */
 const { open } = require('./lib');
 
 const QUEST_UA = 'Mozilla/5.0 (Linux; Android 12; Quest 3) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/36.0.0.0.0 Chrome/122.0.6261.132 Mobile Safari/537.36';
@@ -114,10 +116,80 @@ function initPads() {
   });
   chk(btns.fire && btns.fly && btns.zoom && !btns.zoomAfter && !btns.flyAfter, 'triggers / A FIRE, squeeze / B FLY, stick-click ZOOM, and they release', btns);
 
+  // --- t857u: with no gamepad axes, wheel deltas become the joystick ---
+  const zeroPads = () => page.evaluate(() => {
+    (window.__gaMockPads || []).forEach(p => { p.axes = [0, 0, 0, 0]; p.buttons.forEach(b => { b.pressed = false; b.value = 0; }); });
+  });
+  await zeroPads();
+
+  const wheelWalk = await page.evaluate(() => {
+    const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
+    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.vel.set(0, 0, 0); st.joy.on = false;
+    for (let i = 0; i < 4; i++) {
+      window.dispatchEvent(new WheelEvent('wheel', { deltaX: 0, deltaY: -80, deltaMode: 0, bubbles: true, cancelable: true }));
+    }
+    const r = Q.read();
+    A.applyQuestPad(1 / 60);
+    const joy = { on: st.joy.on, x: +st.joy.x.toFixed(3), y: +st.joy.y.toFixed(3), source: r.source, dy: r.wheel && r.wheel.dy };
+    for (let i = 0; i < 45; i++) A.step(1 / 60);
+    return { x: +A.monkey.position.x.toFixed(3), z: +A.monkey.position.z.toFixed(3), joy, dist: +st.dist.toFixed(3) };
+  });
+  chk(wheelWalk.joy.source === 'wheel' && wheelWalk.joy.on && wheelWalk.joy.y < -0.5 && wheelWalk.z < 4.2, 'wheel deltaY (no gamepad) moves the player forward and does not zoom', wheelWalk);
+
+  const wheelStrafe = await page.evaluate(() => {
+    const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
+    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.vel.set(0, 0, 0);
+    for (let i = 0; i < 4; i++) {
+      window.dispatchEvent(new WheelEvent('wheel', { deltaX: 80, deltaY: 0, deltaMode: 0, bubbles: true, cancelable: true }));
+    }
+    A.applyQuestPad(1 / 60);
+    const r = Q.read();
+    for (let i = 0; i < 45; i++) A.step(1 / 60);
+    return { x: +A.monkey.position.x.toFixed(3), z: +A.monkey.position.z.toFixed(3), source: r.source, joyX: +st.joy.x.toFixed(3) };
+  });
+  chk(wheelStrafe.source === 'wheel' && wheelStrafe.joyX > 0.5 && wheelStrafe.x > 0.6, 'wheel deltaX strafes the player', wheelStrafe);
+
+  const wheelDecay = await page.evaluate(async () => {
+    const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
+    const t0 = performance.now();
+    while (performance.now() - t0 < 280) { /* wait past 130ms hold + 80ms fade */ }
+    const r = Q.read();
+    A.applyQuestPad(1 / 60);
+    return { source: r.source, mag: +(r.move && r.move.mag || 0).toFixed(3), on: st.joy.on };
+  });
+  chk(wheelDecay.source !== 'wheel' && !wheelDecay.on && wheelDecay.mag < 0.1, 'wheel stick decays to zero ~200ms after the last event', wheelDecay);
+
+  const wheelCtrl = await page.evaluate(() => {
+    const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
+    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.vel.set(0, 0, 0); st.joy.on = false;
+    const d0 = st.dist;
+    for (let i = 0; i < 4; i++) {
+      window.dispatchEvent(new WheelEvent('wheel', { deltaX: 0, deltaY: -80, deltaMode: 0, ctrlKey: true, bubbles: true, cancelable: true }));
+    }
+    const r = Q.read();
+    A.applyQuestPad(1 / 60);
+    for (let i = 0; i < 30; i++) A.step(1 / 60);
+    return { source: r.source, on: st.joy.on, z: +A.monkey.position.z.toFixed(3), dist: st.dist, d0, ctrl: !!(r.wheel && r.wheel.ctrl) };
+  });
+  chk(wheelCtrl.ctrl && !wheelCtrl.on && wheelCtrl.z > 4.9 && wheelCtrl.dist === wheelCtrl.d0, 'ctrl+wheel (pinch) does not walk or zoom', wheelCtrl);
+
+  const dbg = await page.evaluate(() => {
+    const Q = window.__gaQuestPad;
+    window.dispatchEvent(new WheelEvent('wheel', { deltaX: 10, deltaY: -40, deltaMode: 0, bubbles: true, cancelable: true }));
+    Q.showDebug(true);
+    const el = document.getElementById('gaQdbg');
+    const text = el ? el.textContent : '';
+    const r = Q.read();
+    return { has: !!el, text: (text || '').slice(0, 240), source: r.source, n: r.n };
+  });
+  chk(dbg.has && /src wheel/.test(dbg.text) && /gamepads/.test(dbg.text) && /keys/.test(dbg.text), '?qdbg overlay shows wheel / gamepads / keys', dbg);
+
   // --- play copy: left stick synthesizes WASD; wheel is also blocked ---
-  const origin = new URL(page.url()).origin;
+  // Resolve against the arcade page path so this works on GitHub Pages
+  // (/galactic-arcade/index.html) as well as a local root-served checkout.
+  const playUrl = new URL('monkey-play/index.html', page.url()).href;
   const playPage = await page.context().newPage();
-  await playPage.goto(origin + '/monkey-play/index.html', { timeout: 120000, waitUntil: 'domcontentloaded' });
+  await playPage.goto(playUrl, { timeout: 120000, waitUntil: 'domcontentloaded' });
   await playPage.waitForFunction(() => window.__gaQuestPad && window.__gaQuestPad.isQuest && window.__gaQuestPad.isQuest(), null, { timeout: 20000 });
   const playInfo = await playPage.evaluate(() => ({ play: window.__gaQuestPad.isPlayFrame(), quest: window.__gaQuestPad.isQuest() }));
   chk(playInfo.play && playInfo.quest, 'play copy loads quest-pad and sees itself as a play frame', playInfo);
@@ -151,6 +223,26 @@ function initPads() {
   await playPage.evaluate(() => { window.__gaMockPads[0].axes = [0, 0, 0, 0]; });
   const keyUp = await playPage.waitForFunction(() => window.__gaKeys && window.__gaKeys.KeyW === 0, null, { timeout: 8000 }).then(() => true).catch(() => false);
   chk(keyUp, 'releasing the play-copy stick releases KeyW');
+
+  const playImm = await playPage.evaluate(() => {
+    if (window.__gaMockPads) {
+      window.__gaMockPads[0].axes = [0, 0, 0, 0];
+      window.__gaMockPads[1].axes = [0, 0, 0, 0];
+    }
+    window.__gaKeys = {};
+    const evs = [];
+    for (let i = 0; i < 4; i++) {
+      const ev = new WheelEvent('wheel', { deltaX: 0, deltaY: -80, deltaMode: 0, bubbles: true, cancelable: true });
+      window.dispatchEvent(ev);
+      evs.push(ev.defaultPrevented);
+    }
+    const r = window.__gaQuestPad.read();
+    return { prevented: evs, source: r.source, y: r.move && +r.move.y.toFixed(3), wheel: r.wheel, play: window.__gaQuestPad.isPlayFrame() };
+  });
+  chk(playImm.source === 'wheel' && playImm.y < -0.3, 'play copy read() treats wheel as move immediately', playImm);
+  const playWheelKey = await playPage.waitForFunction(() => window.__gaKeys && window.__gaKeys.KeyW === 1, null, { timeout: 4000 }).then(() => true).catch(() => false);
+  const playWheelMove = await playPage.evaluate(() => ({ keys: window.__gaKeys, source: window.__gaQuestPad.read().source }));
+  chk(playWheelKey && playWheelMove.keys.KeyW === 1 && playWheelMove.source === 'wheel', 'wheel in a play copy synthesizes KeyW', playWheelMove);
 
   chk(errors.length === 0, 'no page errors ' + errors.join('|'));
   await playPage.close();

@@ -1,16 +1,35 @@
-// t856u / v237: Meta Quest Browser exposes Touch controllers as Gamepads, but maps
-// the thumbsticks to wheel / pinch-zoom on a 2D page, so the player never moves.
-// Shared helper used by the arcade shell (main.js) and every play copy (via watch-shim.js).
+// t856u / v237: Meta Quest Browser maps thumbsticks to wheel / pinch-zoom on a 2D page.
+// t857u / v238: in ordinary 2D page mode Quest often does NOT expose controllers through
+// navigator.getGamepads() (those only appear inside a WebXR session). The sticks arrive
+// as wheel events (deltaY up/down, deltaX left/right). Translate those into joystick
+// input, keep the gamepad path, and surface a ?qdbg=1 overlay so we can see what Quest sends.
+// Shared helper: arcade shell (main.js) and every play copy (via watch-shim.js).
 (function (root) {
   'use strict';
   var DEAD = 0.18;
-  var cssOn = false, wheelOn = false, loopOn = false, keysOn = {};
+  var WHEEL_SCALE = 80;
+  var WHEEL_HOLD = 150;
+  var WHEEL_FADE = 80;
+  var cssOn = false, wheelOn = false, loopOn = false, keyListenOn = false, keysOn = {};
+  var lastDrag = 0;
+  var wheelX = 0, wheelY = 0, lastWheel = 0, lastWheelDx = 0, lastWheelDy = 0, lastWheelCtrl = false;
+  var heldKeys = Object.create(null);
+  var lastKey = '';
+  var dbgEl = null, dbgOn = false;
 
   function isQuest() {
     if (root.__gaForceQuest) return true;
     try {
       var ua = navigator.userAgent || '';
       return /OculusBrowser/i.test(ua) || /\bQuest\b/i.test(ua);
+    } catch (e) { return false; }
+  }
+
+  function wantDebug() {
+    if (root.__gaQuestDbg) return true;
+    try {
+      var q = String(location.search || '') + String(location.hash || '');
+      return /[?&#]qdbg=1(?:&|$)/.test(q);
     } catch (e) { return false; }
   }
 
@@ -49,7 +68,26 @@
     return !!(b.pressed || (typeof b.value === 'number' && b.value >= 0.5));
   }
 
-  function read() {
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+  function wheelStick() {
+    if (!lastWheel) return { x: 0, y: 0, mag: 0 };
+    var age = performance.now() - lastWheel;
+    var k = 1;
+    if (age > WHEEL_HOLD) k = Math.max(0, 1 - (age - WHEEL_HOLD) / WHEEL_FADE);
+    if (k <= 0) return { x: 0, y: 0, mag: 0 };
+    var x = wheelX * k, y = wheelY * k;
+    return { x: x, y: y, mag: Math.hypot(x, y) };
+  }
+
+  function keyList() {
+    var out = [], k;
+    for (k in heldKeys) if (heldKeys[k]) out.push(k);
+    out.sort();
+    return out;
+  }
+
+  function readPads() {
     var pads = padList();
     var move = { x: 0, y: 0, mag: 0 }, look = { x: 0, y: 0, mag: 0 };
     var fire = false, fly = false, zoom = false, unhanded = [], i, j, gp, axes, s01, s23, stick, alt, hand, mapping;
@@ -60,7 +98,6 @@
       s23 = live(pair(axes, 2));
       mapping = gp.mapping || '';
       // xr-standard: the thumbstick is axes 2/3; 0/1 is a touchpad. Standard dual-stick: 0/1 left, 2/3 right.
-      // A lone pair (either 0/1 or 2/3) still counts as a stick so one controller can move the player.
       if (mapping === 'xr-standard') {
         stick = s23.mag ? s23 : s01;
         alt = { x: 0, y: 0, mag: 0 };
@@ -82,13 +119,13 @@
         unhanded.push(stick);
       }
       if (mapping === 'xr-standard') {
-        if (pressed(gp, 0) || pressed(gp, 4)) fire = true; // trigger, A / X
-        if (pressed(gp, 1) || pressed(gp, 5)) fly = true;  // squeeze, B / Y
-        if (pressed(gp, 3)) zoom = true;                   // thumbstick click
+        if (pressed(gp, 0) || pressed(gp, 4)) fire = true;
+        if (pressed(gp, 1) || pressed(gp, 5)) fly = true;
+        if (pressed(gp, 3)) zoom = true;
       } else {
-        if (pressed(gp, 0) || pressed(gp, 2) || pressed(gp, 6) || pressed(gp, 7)) fire = true; // A, X, LT, RT
-        if (pressed(gp, 1) || pressed(gp, 5)) fly = true;  // B, RB
-        if (pressed(gp, 3) || pressed(gp, 4)) zoom = true; // Y, LB
+        if (pressed(gp, 0) || pressed(gp, 2) || pressed(gp, 6) || pressed(gp, 7)) fire = true;
+        if (pressed(gp, 1) || pressed(gp, 5)) fly = true;
+        if (pressed(gp, 3) || pressed(gp, 4)) zoom = true;
       }
     }
     for (j = 0; j < unhanded.length; j++) {
@@ -96,6 +133,26 @@
       else if (!look.mag) look = unhanded[j];
     }
     return { move: move, look: look, fire: fire, fly: fly, zoom: zoom, n: pads.length };
+  }
+
+  function read() {
+    var pads = readPads();
+    var w = wheelStick();
+    var keys = keyList();
+    var move = pads.move, look = pads.look, source = 'none';
+    if (move.mag) source = 'gamepad';
+    else if (w.mag) { move = w; source = 'wheel'; }
+    else if (keys.length) source = 'key';
+    return {
+      move: move, look: look,
+      fire: pads.fire, fly: pads.fly, zoom: pads.zoom,
+      n: pads.n, source: source, keys: keys,
+      wheel: {
+        dx: lastWheelDx, dy: lastWheelDy,
+        age: lastWheel ? +(performance.now() - lastWheel).toFixed(0) : null,
+        x: w.x, y: w.y, ctrl: lastWheelCtrl
+      }
+    };
   }
 
   function ensureViewport() {
@@ -118,21 +175,100 @@
     try {
       var s = document.createElement('style');
       s.setAttribute('data-ga-quest', '1');
-      s.textContent = 'html,body{overscroll-behavior:none;touch-action:none}';
+      s.textContent = 'html,body{overscroll-behavior:none;touch-action:none}'
+        + '#gaQdbg{position:fixed;top:max(4px,env(safe-area-inset-top));left:max(4px,env(safe-area-inset-left));z-index:2147483000;pointer-events:none;background:#000c;color:#9ff;font:11px/1.35 ui-monospace,Menlo,Consolas,monospace;padding:6px 8px;border:1px solid #0ff6;border-radius:6px;white-space:pre;max-width:min(92vw,360px)}';
       (document.head || document.documentElement).appendChild(s);
     } catch (e) {}
     ensureViewport();
   }
 
+  function showDebug(on) {
+    dbgOn = on !== false;
+    if (!dbgOn) {
+      if (dbgEl && dbgEl.parentNode) dbgEl.parentNode.removeChild(dbgEl);
+      dbgEl = null;
+      return;
+    }
+    applyCss();
+    if (!dbgEl) {
+      dbgEl = document.createElement('div');
+      dbgEl.id = 'gaQdbg';
+      (document.body || document.documentElement).appendChild(dbgEl);
+    }
+    renderDebug(read());
+  }
+
+  function renderDebug(s) {
+    if (!dbgOn) return;
+    if (!dbgEl) showDebug(true);
+    if (!dbgEl) return;
+    s = s || api.last || {};
+    var w = s.wheel || {};
+    var mv = s.move || {};
+    var lk = s.look || {};
+    dbgEl.textContent = 'GA Quest dbg'
+      + '\nsrc ' + (s.source || 'none')
+      + '\nwheel dx=' + (w.dx == null ? '-' : (+w.dx).toFixed(1))
+      + ' dy=' + (w.dy == null ? '-' : (+w.dy).toFixed(1))
+      + ' age=' + (w.age == null ? '-' : w.age + 'ms')
+      + (w.ctrl ? ' CTRL' : '')
+      + '\nmove x=' + (mv.x || 0).toFixed(2) + ' y=' + (mv.y || 0).toFixed(2)
+      + ' look x=' + (lk.x || 0).toFixed(2) + ' y=' + (lk.y || 0).toFixed(2)
+      + '\ngamepads ' + (s.n || 0)
+      + '\nkeys ' + ((s.keys && s.keys.length) ? s.keys.join(',') : '-');
+  }
+
+  function onWheel(e) {
+    if (!isQuest()) return;
+    if (e.cancelable) e.preventDefault();
+    lastWheelCtrl = !!(e.ctrlKey || e.metaKey);
+    lastWheelDx = e.deltaX || 0;
+    lastWheelDy = e.deltaY || 0;
+    // ctrl/meta + wheel is browser pinch-zoom: block it, but do not walk.
+    if (lastWheelCtrl) return;
+    // A real finger/mouse drag (not a stale pointerdown) is already steering.
+    if (lastDrag && performance.now() - lastDrag < 100) return;
+    var dx = lastWheelDx, dy = lastWheelDy;
+    if (e.deltaMode === 1) { dx *= 16; dy *= 16; }
+    else if (e.deltaMode === 2) { dx *= 80; dy *= 80; }
+    var nx = clamp(dx / WHEEL_SCALE, -1, 1);
+    var ny = clamp(dy / WHEEL_SCALE, -1, 1);
+    var mag = Math.hypot(nx, ny);
+    if (mag > 1) { nx /= mag; ny /= mag; mag = 1; }
+    // Smooth toward this tick so a held stick (repeating wheel events) walks steadily.
+    wheelX = clamp(wheelX * 0.35 + nx * 0.65, -1, 1);
+    wheelY = clamp(wheelY * 0.35 + ny * 0.65, -1, 1);
+    lastWheel = performance.now();
+    // Don't wait for a later rAF: a heavy play copy can hitch past the 130ms hold.
+    if (isPlayFrame()) applyPlay(read());
+  }
+
   function applyWheelBlock() {
     if (wheelOn) return;
     wheelOn = true;
-    // Capture-phase so a Quest thumbstick-as-wheel cannot zoom the page or the arcade camera.
-    // Pinch-to-zoom on real touch gestures is left alone (this is wheel only).
-    addEventListener('wheel', function (e) {
-      if (!isQuest()) return;
-      if (e.cancelable) e.preventDefault();
-    }, { passive: false, capture: true });
+    addEventListener('wheel', onWheel, { passive: false, capture: true });
+    var drag = function (e) {
+      if (!e) return;
+      if (e.type === 'touchmove' || (e.buttons && e.buttons !== 0) || e.pointerType === 'touch') lastDrag = performance.now();
+    };
+    addEventListener('pointermove', drag, true);
+    addEventListener('touchmove', drag, true);
+  }
+
+  function listenKeys() {
+    if (keyListenOn) return;
+    keyListenOn = true;
+    var moveCodes = /^(ArrowUp|ArrowDown|ArrowLeft|ArrowRight|KeyW|KeyA|KeyS|KeyD|Space|ShiftLeft|ShiftRight)$/;
+    addEventListener('keydown', function (e) {
+      if (!e || !e.code) return;
+      heldKeys[e.code] = 1;
+      if (moveCodes.test(e.code)) lastKey = e.code;
+    }, true);
+    addEventListener('keyup', function (e) {
+      if (!e || !e.code) return;
+      delete heldKeys[e.code];
+    }, true);
+    addEventListener('blur', function () { heldKeys = Object.create(null); }, false);
   }
 
   function isPlayFrame() {
@@ -193,7 +329,7 @@
 
   function tick() {
     loopOn = true;
-    var s = { move: { x: 0, y: 0, mag: 0 }, look: { x: 0, y: 0, mag: 0 }, fire: false, fly: false, zoom: false, n: 0 };
+    var s = { move: { x: 0, y: 0, mag: 0 }, look: { x: 0, y: 0, mag: 0 }, fire: false, fly: false, zoom: false, n: 0, source: 'none', keys: [], wheel: {} };
     if (isQuest()) {
       s = read();
       if (isPlayFrame()) applyPlay(s);
@@ -201,6 +337,7 @@
       applyPlay({ move: { x: 0, y: 0, mag: 0 }, fire: false, fly: false, zoom: false });
     }
     api.last = s;
+    if (dbgOn) renderDebug(s);
     if (typeof api.onFrame === 'function') {
       try { api.onFrame(s); } catch (e) {}
     }
@@ -210,6 +347,8 @@
   function start() {
     applyCss();
     applyWheelBlock();
+    listenKeys();
+    if (wantDebug()) showDebug(true);
     if (!loopOn) requestAnimationFrame(tick);
     return api;
   }
@@ -222,13 +361,13 @@
     applyWheelBlock: applyWheelBlock,
     applyCss: applyCss,
     isPlayFrame: isPlayFrame,
+    showDebug: showDebug,
     last: null,
     onFrame: null
   };
 
-  if (isQuest()) start();
+  if (isQuest() || wantDebug()) start();
   else {
-    // A test (or a late UA) can set __gaForceQuest and call start(); also listen in case the flag is set later.
     try {
       addEventListener('gamepadconnected', function () { if (isQuest()) start(); });
     } catch (e) {}
