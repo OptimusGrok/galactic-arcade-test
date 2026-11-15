@@ -81,6 +81,12 @@ export function startGhostDemo(cab) {
   f.style.cssText = 'position:fixed;left:-700px;top:0;width:304px;height:600px;border:0;pointer-events:none;visibility:hidden';
   const d = { ready: false, frames: 0, running: false, err: null, iframe: f };
   d.attach = () => { if (!f.isConnected) document.body.appendChild(f); };   // t295u: main.js attaches it after the start screen (the iframe's boot froze the phone's first frames)
+  d.detach = () => {
+    try { if (f.contentWindow && f.contentWindow.__gaRelease) f.contentWindow.__gaRelease(); } catch (e) {}
+    try { f.src = 'about:blank'; } catch (e) {}
+    try { f.remove(); } catch (e) {}
+    d.ready = false; d.running = false; };
+
   const blank = document.createElement('canvas'); blank.width = 4; blank.height = 4; cab.userData.crt.uniforms.map.value = new THREE.CanvasTexture(blank);
   f.addEventListener('load', () => {
     try { const w = f.contentWindow, gh = w.__ghost; if (!gh || !w.__bot) throw new Error('ghost hooks missing');

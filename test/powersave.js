@@ -118,12 +118,16 @@ const { open } = require('./lib');
   chk(off.on === false && off.ls === '0', 'API toggle off saved ' + JSON.stringify(off));
   chk(off.dpr <= 1.501, 'mobile dpr cap without power save is 1.5, got ' + off.dpr);
 
-  await page.evaluate(() => { window.__powerSave.set(true); });
-  await page.click('#bOpt');
+  await page.evaluate(() => {
+    window.__powerSave.set(true);
+    document.body.classList.add('upright');
+    const t = document.getElementById('turnHint'); if (t) t.classList.remove('on');
+    const b = document.getElementById('bOpt'); if (b) b.click();
+  });
   await page.waitForSelector('#gOpt.on', { timeout: 10000 });
   const label = await page.evaluate(() => document.getElementById('opCool') && document.getElementById('opCool').textContent.replace(/\s+/g, ' ').trim());
   chk(/COOLER PHONE:\s*ON/.test(label || ''), 'OPTIONS shows COOLER PHONE toggle: ' + label);
-  await page.click('#opCool');
+  await page.evaluate(() => { const b = document.getElementById('opCool'); if (b) b.click(); });
   const after = await page.evaluate(() => ({
     on: window.__powerSave.on,
     ls: localStorage.getItem('neonarcade.powersave'),

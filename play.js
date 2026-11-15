@@ -264,7 +264,7 @@ export function setupPlay(A) {
     P.zooms++;
     if (m.prep) { P.mode = 'prep'; P.t = 0; P.pcam = null; P.cam0 = camera.position.clone(); P.look0 = monkey.position.clone().setY(1.25); m.anim('on', 0); }   // walk-up + headset on first, then zoomIn()
     else zoomIn(m);
-    const f = P.frame = document.createElement('iframe'); f.id = 'game'; const ver = window.__GA_VER || 'v230'; f.src = m.src + (m.src.indexOf('?') >= 0 ? '&' : '?') + 'ga=' + ver; f.allow = 'autoplay; fullscreen'; f.title = m.cab.name;
+    const f = P.frame = document.createElement('iframe'); f.id = 'game'; const ver = window.__GA_VER || 'v231'; f.src = m.src + (m.src.indexOf('?') >= 0 ? '&' : '?') + 'ga=' + ver; f.allow = 'autoplay; fullscreen'; f.title = m.cab.name;
     f.addEventListener('load', () => { P.loaded = true; try { f.contentWindow.addEventListener('keydown', ev => { if (TV.open) { ev.stopImmediatePropagation(); ev.preventDefault(); if (ev.code === 'Escape') closeView(); return; } if (ev.code === 'Escape') { ev.stopImmediatePropagation(); ev.preventDefault(); exit('esc'); return; } if (P.sub === 'demo') { ev.stopImmediatePropagation(); ev.preventDefault(); if (/^(Enter|Space|KeyE)$/.test(ev.code) && !ev.repeat) tryPlay(); } }, true); } catch (e) {} });
     P.loaded = false; document.body.appendChild(f);
   }
@@ -293,6 +293,7 @@ export function setupPlay(A) {
     const f = P.frame; f.classList.remove('on');
     try { if (f.contentWindow && f.contentWindow.__skySnd) f.contentWindow.__skySnd.stop(); } catch (e) {}
     try { if (f.contentWindow && f.contentWindow.__gaRelease) f.contentWindow.__gaRelease(); } catch (e) {}   // t762u: free its GPU / canvas / audio now, not at some later GC (phones)
+    try { f.src = 'about:blank'; } catch (e) {}
     try { if (TV.open) closeView(); } catch (e) {}
     try { f.contentWindow.document.body.style.display = 'none'; } catch (e) {} setTimeout(() => f.remove(), 500); P.frame = null;
     if (P.cur.onExit) P.cur.onExit();
