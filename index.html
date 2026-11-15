@@ -1,7 +1,26 @@
 <!DOCTYPE html>
 <html lang="en"><head>
 <link rel="preload" as="image" href="img/start.webp" type="image/webp" fetchpriority="high">
-<script>window.__GA_VER="v232";</script>
+<script>window.__GA_VER="v233";</script>
+<script>/* t855u / v233: if an older galactic-arcade-v* cache is still on this phone, clear it and reload ONCE
+   before the start screen is interactive — never mid-session (v228 did this 6s after the room started drawing). */
+(function(){if(!('caches'in window)||location.protocol==='file:')return;
+  var want='galactic-arcade-v233',key='gaReloaded.'+want,skip=false;
+  try{skip=!!sessionStorage.getItem(key);}catch(e){skip=true;}
+  window.__gaUpdate={want:want,checked:!!skip,reloading:false};
+  if(skip)return;
+  document.documentElement.classList.add('ga-updating');
+  setTimeout(function(){if(window.__gaUpdate&&!window.__gaUpdate.checked&&!window.__gaUpdate.reloading){document.documentElement.classList.remove('ga-updating');window.__gaUpdate.checked=true;}},2000);
+  caches.keys().then(function(ks){
+    var stale=ks.filter(function(k){return k.indexOf('galactic-arcade-v')===0&&k!==want;});
+    if(!stale.length){document.documentElement.classList.remove('ga-updating');window.__gaUpdate.checked=true;return;}
+    window.__gaUpdate.reloading=true;
+    return Promise.all(stale.map(function(k){return caches.delete(k);})).then(function(){
+      try{sessionStorage.setItem(key,'1');}catch(e){}
+      location.reload();
+    });
+  }).catch(function(){document.documentElement.classList.remove('ga-updating');window.__gaUpdate.checked=true;});
+})();</script>
 <script src="session.js"></script>
 <script src="mute.js"></script>
 <script src="names.js"></script>
@@ -163,6 +182,7 @@ body.ingame #flBtn,body.ingame #wdBtn{display:none}
 <!-- FAST LOAD (t229): fetch the whole module graph in parallel instead of import-by-import (shop.js / windows.js load later on demand) -->
 <link rel="modulepreload" href="main.js"><link rel="modulepreload" href="vendor/three.module.js"><link rel="modulepreload" href="vendor/addons/objects/Reflector.js"><link rel="modulepreload" href="vendor/addons/postprocessing/EffectComposer.js"><link rel="modulepreload" href="vendor/addons/postprocessing/RenderPass.js"><link rel="modulepreload" href="vendor/addons/postprocessing/UnrealBloomPass.js"><link rel="modulepreload" href="vendor/addons/postprocessing/OutputPass.js"><link rel="modulepreload" href="vendor/addons/postprocessing/Pass.js"><link rel="modulepreload" href="vendor/addons/postprocessing/ShaderPass.js"><link rel="modulepreload" href="vendor/addons/postprocessing/MaskPass.js"><link rel="modulepreload" href="vendor/addons/shaders/CopyShader.js"><link rel="modulepreload" href="vendor/addons/shaders/LuminosityHighPassShader.js"><link rel="modulepreload" href="vendor/addons/shaders/OutputShader.js"><link rel="modulepreload" href="vendor/addons/utils/BufferGeometryUtils.js"><link rel="modulepreload" href="grid.js"><link rel="modulepreload" href="strikecab.js"><link rel="modulepreload" href="ghostcab.js"><link rel="modulepreload" href="berserkcab.js"><link rel="modulepreload" href="monkeycab.js"><link rel="modulepreload" href="spacewin.js"><link rel="modulepreload" href="orccab.js"><link rel="modulepreload" href="cybercitycab.js"><link rel="modulepreload" href="blastercab.js"><link rel="modulepreload" href="pipcab.js"><link rel="modulepreload" href="clawcab.js"><link rel="modulepreload" href="mp.js"><link rel="modulepreload" href="novacab.js"><link rel="modulepreload" href="roadstercab.js"><link rel="modulepreload" href="dscab.js"><link rel="modulepreload" href="play.js"><link rel="modulepreload" href="shield.js"><link rel="modulepreload" href="golf.js"><link rel="modulepreload" href="kiosk.js"><link rel="modulepreload" href="opts.js"><link rel="modulepreload" href="teleport.js"><link rel="modulepreload" href="lavapaths.js"><link rel="modulepreload" href="bbcab.js"><link rel="modulepreload" href="rfcab.js"><link rel="modulepreload" href="skytowercab.js">
 <style>
+html.ga-updating #start,html.ga-updating #start *{pointer-events:none!important}
 #start{position:fixed;inset:0;z-index:100;background:#05010c;overflow:hidden;cursor:default;touch-action:none;user-select:none;-webkit-user-select:none;transition:opacity .6s ease}
 #start.out{opacity:0;pointer-events:none}
 #stBg{position:absolute;inset:-6%;background:#05010c url(img/start.jpg) center/cover no-repeat;background-image:image-set(url(img/start.webp) type('image/webp'),url(img/start.jpg) type('image/jpeg'));filter:blur(28px) brightness(.38) saturate(1.2);transform:scale(1.12)}
@@ -329,6 +349,7 @@ body.ingame #flBtn,body.ingame #wdBtn{display:none}
   }
   function release() { evs.forEach(function (t) { window.removeEventListener(t, eat, true); }); }
   function go(how) {
+    if (window.__gaUpdate && (window.__gaUpdate.reloading || (document.documentElement.classList.contains('ga-updating') && !window.__gaUpdate.checked))) return;   // t855u: don't start, then lose it to a cache-bust reload
     S.dismissed = true; S.at = performance.now(); S.how = how;
     try { var AC = window.AudioContext || window.webkitAudioContext, ac = window.__unlockAC = window.__unlockAC || new AC(); ac.resume(); var b = ac.createBuffer(1, 1, 22050), s = ac.createBufferSource(); s.buffer = b; s.connect(ac.destination); s.start(0); S.audio = true; } catch (e) {}
     try { var k = window.__arcade && window.__arcade.keys; if (k) for (var c in k) k[c] = false; } catch (e) {}
@@ -393,11 +414,15 @@ if (document.getElementById('flBtn')) flBtnInit(); else document.addEventListene
 <script src="inventory.js"></script>
 <script src="roomfire.js"></script>
 <script>/* FAST LOAD (t229): register the service worker (its install pre-caches ~7 MB) only after the room is drawing and things settle, so it never competes with the first load */
-if('serviceWorker' in navigator&&location.protocol!=='file:'){(function(){window.__GA_VER=window.__GA_VER||'v232';
-var done=0,want='galactic-arcade-v232',reg=function(){if(done)return;done=1;navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(){
+if('serviceWorker' in navigator&&location.protocol!=='file:'){(function(){window.__GA_VER=window.__GA_VER||'v233';
+var done=0,want='galactic-arcade-v233';
+var reg=function(){if(done)return;done=1;navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(){
   return caches.keys();}).then(function(ks){var stale=ks.filter(function(k){return k.indexOf('galactic-arcade-v')===0&&k!==want;});
-  if(!stale.length)return;return Promise.all(stale.map(function(k){return caches.delete(k);})).then(function(){
-    try{if(!sessionStorage.getItem('gaReloaded.'+want)){sessionStorage.setItem('gaReloaded.'+want,'1');location.reload();}}catch(e){}});
+  if(!stale.length)return;return Promise.all(stale.map(function(k){return caches.delete(k);}));
+    // t855u: the delayed SW path only deletes leftover caches. A one-shot reload for a stale
+    // cache happens in the head script, before the start screen is interactive — never here,
+    // even if the player is still looking at START (they may already be customising).
 }).catch(function(){});};
-var t=setInterval(function(){var A=window.__arcade;if(A&&A.stats&&A.stats.frames>30){clearInterval(t);setTimeout(reg,6000);}},250);setTimeout(reg,45000);})();}</script>
+window.__gaRegisterSW=function(){done=0;reg();};
+var t=setInterval(function(){var A=window.__arcade;if(A&&A.stats&&A.stats.frames>30){clearInterval(t);setTimeout(reg,window.__gaSwSoon?0:6000);}},250);setTimeout(reg,window.__gaSwSoon?200:45000);})();}</script>
 </body></html>

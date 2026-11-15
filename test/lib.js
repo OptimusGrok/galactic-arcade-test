@@ -19,7 +19,15 @@ async function open(opts = {}) {
   if (!opts.randomRoom) await page.addInitScript(() => { window.__noRandomRoom = 1; });   // t779u: the floor/walls shuffle every minute; only test/random_room.js wants it
   if (opts.shieldOpen) await page.addInitScript(() => { window.__sessSeed = Object.assign(window.__sessSeed || {}, { 'neonarcade.shieldOpen': '1' }); });   // hallway tests walk through the doorway
   await page.goto(process.env.GA_URL || `http://localhost:${srv.address().port}/index.html`, { timeout: 180000 });
-  await page.waitForFunction(() => window.__arcade && window.__arcade.stats.frames > 3, null, { timeout: 60000 });
+  // t855u: a stale galactic-arcade-v* cache reloads once in the head script; waitForFunction dies with the old document
+  for (let i = 0; i < 6; i++) {
+    try {
+      await page.waitForFunction(() => window.__arcade && window.__arcade.stats.frames > 3, null, { timeout: 60000 });
+      break;
+    } catch (e) {
+      if (i === 5 || !/Execution context was destroyed|frame was detached/i.test(String(e))) throw e;
+    }
+  }
   await page.evaluate(() => Promise.all([window.__arcade.shopReady, window.__arcade.windowsReady].filter(Boolean).map(p => Promise.resolve(p))));   // t229: shop.js / windows.js load after the first frames
   return { page, errors, requests, close: async () => { await browser.close(); srv.close(); } };
 }
