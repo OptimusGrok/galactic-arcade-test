@@ -109,3 +109,19 @@
     if (navigator.sendBeacon) navigator.sendBeacon = function () { return false; };
   } catch (e) {}
 })();
+
+// t856u / v237: Quest thumbsticks in play iframes (and standalone play copies).
+// Load the shared helper next to this file during parse so it runs before the game.
+(function () {
+  try {
+    var cs = document.currentScript;
+    var url = (cs && cs.src) ? cs.src.replace(/watch-shim\.js(?:\?.*)?$/, 'quest-pad.js') : new URL('quest-pad.js', location.href).href;
+    if (document.readyState === 'loading') {
+      document.write('<script src="' + String(url).replace(/"/g, '') + '"><\/script>');
+    } else {
+      var s = document.createElement('script');
+      s.src = url;
+      (document.head || document.documentElement).appendChild(s);
+    }
+  } catch (e) {}
+})();
