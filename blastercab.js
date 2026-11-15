@@ -3,9 +3,10 @@
 // pixel alien, red ball joystick and a red FIRE button, coin door with two red slots. Screen: a cheap attract loop with INSERT CREDIT.
 // All art is drawn on canvases here (no image files).
 import * as THREE from 'three';
+import { cabWH, flagTex, capLoadedTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos } from './strikecab.js';
-const canvasTex = (w, h, paint, flip) => { const c = document.createElement('canvas'); c.width = w; c.height = h; paint(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
+const canvasTex = (w, h, paint, flip) => { const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } paint(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
 const SHIP = ['....#....', '...###...', '...#.#...', '..#####..', '.###.###.', '#########', '##.#.#.##'];
 const ALIEN = ['..#.....#..', '...#...#...', '..#######..', '.##.###.##.', '###########', '#.#######.#', '#.#.....#.#', '...##.##...'];
 const FRT = ['......########......', '...##############...', '..##.##.##.##.##.##.', '####################', '##..############..##', '....##..####..##....', '......##....##......'];
@@ -28,7 +29,7 @@ function marqueeArt(g, w, h) {
   g.restore(); g.font = 'bold 30px "Courier New", monospace'; g.textAlign = 'center'; g.fillStyle = '#bfe9ff'; g.shadowColor = '#2ae5ff'; g.shadowBlur = 8; g.fillText('1984', w / 2, h - 14);
 }
 function attract(W, H) {
-  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  const c = document.createElement('canvas'); { const sz = cabWH(W, H); c.width = sz[0]; c.height = sz[1]; } const g = c.getContext('2d'); if (c.width !== W || c.height !== H) g.scale(c.width / W, c.height / H);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; const st = Array.from({ length: 50 }, () => [Math.random() * W, Math.random() * H]);
   const visit = { on: false };
   function draw(t) {

@@ -34,7 +34,7 @@ import { setupOpts } from './opts.js';
 import { setupTeleport, WX } from './teleport.js';
 import { lavaPaths, PATH_HW } from './lavapaths.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { detectTier, probeGPU, qualityForTier, persistTier, installContextLossHandler, memSnapshot, ensureLostOverlay, isSoftwareGL } from './tier.js';
+import { detectTier, probeGPU, qualityForTier, persistTier, installContextLossHandler, memSnapshot, ensureLostOverlay, isSoftwareGL, capLoadedTexture, cabWH, flagTex, tierQuality } from './tier.js';
 
 const MOBILE = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches);
 // t767u: iPad (incl. iPadOS 'desktop' Safari = MacIntel + multi-touch) plays as held: no landscape lock, no 'turn sideways' hint
@@ -92,7 +92,7 @@ const C = { pink: 0xff2bd6, mag: 0xff1fa8, cyan: 0x22d8ff, purple: 0x9b4dff, amb
 function canvasTex(w, h, draw, rep) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   draw(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = Q.aniso || 1;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE);
   if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); }
   return t;
 }
@@ -189,9 +189,10 @@ function setWalls(mode) {
   if (r2Ready) { const hw0 = hall.getObjectByName('hallWallW'), hm = hw0.userData.mat0 || hw0.material; if (!hm.userData.map0) hm.userData.map0 = hm.map;
     if (md && !hm.userData.stone) { hm.userData.stone = stoneTex.clone(); hm.userData.stone.repeat.set(+(HALL_L / 6).toFixed(3), +(DOOR_H / 6).toFixed(3)); hm.userData.stone.needsUpdate = true; }
     hm.map = md ? hm.userData.stone : hm.userData.map0; hm.emissiveMap = md ? hm.userData.stone : null; hm.color.setHex(md ? 0x8a8078 : 0x2a1840); hm.emissive.setHex(md ? 0xffffff : 0); hm.emissiveIntensity = md ? 0.55 : 1; hm.roughness = md ? 0.95 : 0.85; hm.needsUpdate = true; }
-  if (v && !vikTex) { vikTex = new THREE.TextureLoader().load('tex/viking_walls.jpg', () => spaceWin && spaceWin.dirty()); vikTex.colorSpace = THREE.SRGBColorSpace; vikTex.wrapS = THREE.RepeatWrapping; vikTex.wrapT = THREE.ClampToEdgeWrapping;
-    vikTex.repeat.set(+(2 * HALF / (H * 928 / 576)).toFixed(3), 1); vikTex.anisotropy = Math.min(Q.aniso || 1, renderer.capabilities.getMaxAnisotropy()); }   // one repeat = wall height
+  if (v && !vikTex) { vikTex = new THREE.TextureLoader().load('tex/viking_walls.jpg', t => { capLoadedTexture(t, THREE); if (spaceWin) spaceWin.dirty(); }); vikTex.colorSpace = THREE.SRGBColorSpace; vikTex.wrapS = THREE.RepeatWrapping; vikTex.wrapT = THREE.ClampToEdgeWrapping;
+    vikTex.repeat.set(+(2 * HALF / (H * 928 / 576)).toFixed(3), 1); flagTex(vikTex, THREE); }   // one repeat = wall height
   wallMat.map = v ? vikTex : md ? stoneTex : wallTex; wallMat.color.setHex(v ? 0x8a7a70 : md ? 0x8a8078 : 0x2a1840); wallMat.roughness = v || md ? 0.95 : 0.85; wallMat.emissiveMap = v ? vikTex : md ? stoneTex : null; wallMat.emissive.setHex(v || md ? 0xffffff : 0x000000); wallMat.emissiveIntensity = v ? 1.6 : md ? 0.55 : 1; wallBands.forEach(m => { m.visible = !v && !po && !md }); wallMat.needsUpdate = true;   // a little dark so the neon pops
+  if (!v && vikTex && TIER.name === 'low') { try { vikTex.dispose(); } catch (e) {} vikTex = null; }
   const tick = po ? () => { portalU.uT.value = performance.now() / 1000; } : () => {};
   for (let i = 0; i < 4; i++) { const w = room.getObjectByName('wall' + i); if (w) { w.material = po ? portalMat : wallMat; w.onBeforeRender = tick; } }
   if (r2Ready) {   // t253: PORTALS in room 2 (same shader + clock; its window wall stays a window) and the hallway (own uv scale, shared uniforms)
@@ -568,9 +569,23 @@ const dsCab = buildDeadSignalStation(); dsCab.rotation.y = Math.PI; room2.add(ds
 }
 // ---------- room 1 floor option: MEDIEVAL COBBLESTONE (default, t341u) or neon reflective / carpet / checkers / lava / ice (Options > FLOOR) ----------
 const FLOOR_KEY = 'neonarcade.floor';
-const carpetTex = new THREE.TextureLoader().load('tex/carpet.webp', () => spaceWin && floorMode === 'carpet' && spaceWin.dirty());
-carpetTex.colorSpace = THREE.SRGBColorSpace; carpetTex.wrapS = carpetTex.wrapT = THREE.RepeatWrapping;   // seamless tile (edge-cut figures removed): plain repeat, never mirrored (mirroring put copies head to head)
-carpetTex.repeat.set(3, 3); carpetTex.anisotropy = Math.min(Q.aniso || 1, renderer.capabilities.getMaxAnisotropy());
+const carpetStub = (() => { const c = document.createElement('canvas'); c.width = 4; c.height = 4; const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+let carpetTex = null;
+function currentCarpetTex() { return carpetTex || carpetStub; }
+function ensureCarpetTex() {
+  if (carpetTex) return carpetTex;
+  carpetTex = new THREE.TextureLoader().load('tex/carpet.webp', t => { capLoadedTexture(t, THREE); if (spaceWin && floorMode === 'carpet') spaceWin.dirty(); });
+  carpetTex.colorSpace = THREE.SRGBColorSpace; carpetTex.wrapS = carpetTex.wrapT = THREE.RepeatWrapping;   // seamless tile (edge-cut figures removed): plain repeat, never mirrored (mirroring put copies head to head)
+  carpetTex.repeat.set(3, 3); flagTex(carpetTex, THREE);
+  if (floorMats.carpet) { floorMats.carpet.map = floorMats.carpet.emissiveMap = carpetTex; floorMats.carpet.needsUpdate = true; }
+  return carpetTex;
+}
+function releaseCarpetTex() {
+  if (!carpetTex || TIER.name !== 'low') return;
+  try { carpetTex.dispose(); } catch (e) {}
+  carpetTex = null;
+  if (floorMats.carpet) { floorMats.carpet.map = floorMats.carpet.emissiveMap = carpetStub; floorMats.carpet.needsUpdate = true; }
+}
 // the carpet covers every walkable floor (Dave: 'when a floor is selected have it cover all floors'): room 1 + hallway (one mesh,
 // UVs in metres so the tile keeps room 1's scale), room 2 (carpet2) and the teleporter white room (carpetW, added in carpetWhite()).
 const worldUV = g => { const p = g.attributes.position, uv = g.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / (HALF * 2) + 0.5, p.getY(i) / (HALF * 2) + 0.5); return g; };
@@ -582,7 +597,7 @@ const carpet2 = new THREE.Mesh(new THREE.PlaneGeometry(HALF * 2, HALF * 2), carp
 let carpetW = null;
 function carpetWhite() {   // white room floor plane lives in teleport.js (shop.js only scales it); the carpet rides on it as a child so it follows the shop's size
   if (carpetW || !tp) return carpetW; const fl = tp.whiteRoom.children.find(o => o.isMesh && o.geometry.type === 'PlaneGeometry' && o.rotation.x < -1.5 && Math.abs(o.position.y) < 1e-3); if (!fl) return null;
-  const t = carpetTex.clone(); t.repeat.set(3 * fl.scale.x, 3 * fl.scale.y); t.needsUpdate = true;
+  const t = currentCarpetTex().clone(); t.repeat.set(3 * fl.scale.x, 3 * fl.scale.y); t.needsUpdate = true;
   const m = floorMats.carpet.clone(); m.map = m.emissiveMap = t;
   carpetW = new THREE.Mesh(fl.geometry, m); carpetW.position.z = 0.005; carpetW.name = 'carpetW'; carpetW.userData.carpetMat = m; carpetW.visible = false; fl.add(carpetW); return carpetW; }
 // ---------- CHECKERS (black + gold 1 m checkerboard, slight gloss) and LAVA ('floor is lava' with cave-rock paths) ----------
@@ -654,11 +669,13 @@ iceMat.onBeforeCompile = sh => { floorWP(sh, `float ih(vec2 p){ return fract(sin
     .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n roughnessFactor = mix(0.08, 0.6, max(frost, crack));'); };
 iceMat.emissive.setHex(0xffffff);
 const floorMats = { carpet: carpet.material, checkers: checkMat, lava: lavaMat, cobble: cobbleMat, ice: iceMat };
+if (TIER.name !== 'low') ensureCarpetTex();
 for (const m of [carpet, carpet2]) m.onBeforeRender = () => { lavaU.uT.value = performance.now() / 1000 % 1000; };
 // with the carpet on, the reflector / hex overlay only cover the hallway (room 1 no longer pays for a mirror pass there)
 let floorMode = 'cobble';   // t341u default; setFloor() below applies the saved choice (or this) once tp exists
 function setFloor(mode) {
   floorMode = floorMats[mode] ? mode : 'neon'; const c = floorMode !== 'neon';
+  if (floorMode === 'carpet') ensureCarpetTex(); else releaseCarpetTex();
   if (c) carpet.material = carpet2.material = floorMats[floorMode];
   carpet.visible = carpet2.visible = c; floorTop.visible = room2.getObjectByName('floorHex2').visible = !c;   // mirrors/bases are hidden per frame in cullRooms
   const cw = carpetWhite(); if (cw) { cw.visible = c; if (c) cw.material = floorMode === 'carpet' ? cw.userData.carpetMat : floorMats[floorMode]; cw.onBeforeRender = carpet.onBeforeRender; }
@@ -2016,7 +2033,7 @@ kiosk = setupKiosk({ room, camera, monkey, st, play, blockers });
       } catch (e) {}
       setWalls(w0); setFloor(f0); try { if (sf == null) localStorage.removeItem(FLOOR_KEY); else localStorage.setItem(FLOOR_KEY, sf); if (sw == null) localStorage.removeItem(WALLS_KEY); else localStorage.setItem(WALLS_KEY, sw); } catch (e) {} },
     step(dt) { if (window.__noRandomRoom) return; const S = window.__start; if (S && S.shown && !S.dismissed) return; if (play.mode !== 'walk') return;
-      RR.t += dt; if (Q.warm && !RR.warmed && RR.t > 20) RR.warm(); if (RR.t >= RR.period) RR.tick(); } };
+      RR.t += dt; if (Q.warm && !RR.warmed && RR.t > 20) RR.warm(); if (TIER.name !== 'low' && RR.t >= RR.period) RR.tick(); } };
   rrStep = dt => RR.step(dt); }
 const opts = setupOpts({ play, kiosk, shield, st, monkey, setFloor, getFloor: () => floorMode, setWalls, getWalls: () => wallsMode, setWindow, getWindow: () => windowMode, HALF, Z2 });
 requestAnimationFrame(frame);

@@ -3,13 +3,14 @@
 // edges glow (thin neon tubes on the corner posts and the top/bottom rims). Glass box with a gantry, a 3-prong claw and a pile of plush
 // inside; a '1 TICKET' price plate on the front (Dave: it costs 1 ticket). tick(t): the claw wanders slowly and bobs (attract).
 import * as THREE from 'three';
+import { cabWH, flagTex, capLoadedTexture } from './tier.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // health fix: bake a static group into one mesh per material (same look, far fewer draw calls)
 function bake(grp) { grp.updateMatrixWorld(true); const inv = new THREE.Matrix4().copy(grp.matrixWorld).invert(), by = new Map();
   grp.traverse(o => { if (!o.isMesh) return; const gm = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone(); gm.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld)); for (const k of Object.keys(gm.attributes)) if (!/^(position|normal|uv)$/.test(k)) gm.deleteAttribute(k); (by.get(o.material) || by.set(o.material, []).get(o.material)).push(gm); });
   grp.userData.baked = grp.children.length; const keep = [...grp.children]; keep.forEach(c => grp.remove(c)); for (const [mat, gs] of by) { const m = new THREE.Mesh(mergeGeometries(gs), mat); grp.add(m); gs.forEach(x => x.dispose()); } return grp; }
 export const CLAW = { W: 1.40, D: 1.00, BASE_H: 0.82, GLASS_H: 0.92, TOP_H: 0.30 };
-const canvasTex = (w, h, paint) => { const c = document.createElement('canvas'); c.width = w; c.height = h; paint(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
+const canvasTex = (w, h, paint) => { const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } paint(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return t; };
 export function buildClawCabinet() {
   const { W, D, BASE_H, GLASS_H, TOP_H } = CLAW, g = new THREE.Group(); g.name = 'clawCabinet';
   const add = (geo, mat, name, p) => { const m = new THREE.Mesh(geo, mat); m.name = name; if (p) m.position.set(...p); g.add(m); return m; };

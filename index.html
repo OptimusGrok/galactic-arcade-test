@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head>
 <link rel="preload" as="image" href="img/start.webp" type="image/webp" fetchpriority="high">
-<script>window.__GA_VER="v231";</script>
+<script>window.__GA_VER="v232";</script>
 <script src="session.js"></script>
 <script src="mute.js"></script>
 <script src="names.js"></script>
@@ -393,8 +393,8 @@ if (document.getElementById('flBtn')) flBtnInit(); else document.addEventListene
 <script src="inventory.js"></script>
 <script src="roomfire.js"></script>
 <script>/* FAST LOAD (t229): register the service worker (its install pre-caches ~7 MB) only after the room is drawing and things settle, so it never competes with the first load */
-if('serviceWorker' in navigator&&location.protocol!=='file:'){(function(){window.__GA_VER=window.__GA_VER||'v231';
-var done=0,want='galactic-arcade-v231',reg=function(){if(done)return;done=1;navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(){
+if('serviceWorker' in navigator&&location.protocol!=='file:'){(function(){window.__GA_VER=window.__GA_VER||'v232';
+var done=0,want='galactic-arcade-v232',reg=function(){if(done)return;done=1;navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(){
   return caches.keys();}).then(function(ks){var stale=ks.filter(function(k){return k.indexOf('galactic-arcade-v')===0&&k!==want;});
   if(!stale.length)return;return Promise.all(stale.map(function(k){return caches.delete(k);})).then(function(){
     try{if(!sessionStorage.getItem('gaReloaded.'+want)){sessionStorage.setItem('gaReloaded.'+want,'1');location.reload();}}catch(e){}});

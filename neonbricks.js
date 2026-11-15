@@ -9,6 +9,7 @@
 // v216: bigger/closer score panel with a live high score; line-clear beam + sound; Level 2 door opens after 3 tetrises in one game;
 // the playfield frame and the panel neon change colour every 30 s, always different colours from each other (t826u).
 // t827u: pinch-to-zoom anywhere while playing (two-finger pinch in/out, clamped; single-touch controls stay the same).
+import { tierQuality, flagTex } from './tier.js';
 export function setupNeonBricks({ THREE, room, HALF, getMonkey, st, canStart, onState }) {
 const HI_KEY = 'neonarcade.neonbricks.hi';
 const TETRIS_LINES = 4;          // a tetris. 5 lines at once is impossible with standard tetrominoes (the I piece spans at most 4).
@@ -125,8 +126,8 @@ const M4 = new THREE.Matrix4(), V3 = new THREE.Vector3(), camBase = { on: false,
 const put = (m, i, x, y, col) => { M4.makeTranslation(x, VIS - 1 - (y - HID), 0); m.setMatrixAt(i, M4); m.setColorAt(i, col); };
 // ---- score / level panel in the right-hand window section ----
 let msg = '', msgT = 0;
-const pc = document.createElement('canvas'); pc.width = 512; pc.height = 640; const px = pc.getContext('2d');
-const ptex = new THREE.CanvasTexture(pc); ptex.colorSpace = THREE.SRGBColorSpace;
+const qNb = tierQuality(); const pc = document.createElement('canvas'); pc.width = qNb.nbW || 512; pc.height = qNb.nbH || 640; const px = pc.getContext('2d');
+const ptex = new THREE.CanvasTexture(pc); ptex.colorSpace = THREE.SRGBColorSpace; flagTex(ptex, THREE);
 const panel = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 5.25), new THREE.MeshBasicMaterial({ map: ptex, transparent: true, depthWrite: false, fog: false }));
 panel.name = 'nbPanel'; panel.position.set(HALF - 0.55, 4.15, 5.15); panel.rotation.y = -Math.PI / 2; panel.renderOrder = 3; room.add(panel);
 let panelKey = '';
@@ -140,7 +141,7 @@ function applyNeon(force) {
 }
 function drawPanel(msg) {
   const nx = G.queue && G.queue[0], key = [G.state, G.score, G.level, G.lines, G.hi, nx, msg || '', panelHex].join('|'); if (key === panelKey) return; panelKey = key;
-  const g = px, w = 512, h = 640; g.clearRect(0, 0, w, h);
+  const g = px, w = 512, h = 640; g.setTransform(pc.width / 512, 0, 0, pc.height / 640, 0, 0); g.clearRect(0, 0, w, h);
   g.fillStyle = 'rgba(8,4,20,0.45)'; g.beginPath(); g.roundRect(8, 8, w - 16, h - 16, 26); g.fill(); g.lineWidth = 6; g.strokeStyle = panelHex; g.shadowColor = panelHex; g.shadowBlur = 18; g.stroke(); g.shadowBlur = 0;
   g.textAlign = 'center'; g.textBaseline = 'middle';
   const neonT = (t, y, size, col, glow) => { g.font = `900 ${size}px "Arial Black", Arial, sans-serif`; g.shadowColor = glow || col; g.shadowBlur = 16; g.fillStyle = col; g.fillText(t, w / 2, y); g.shadowBlur = 0; };

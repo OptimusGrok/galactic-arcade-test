@@ -268,7 +268,7 @@
   // phones drop a second WebGL context under memory pressure (the game's renderer is heavy): the canvas then freezes on its
   // last frame, so hat picks never appear. On loss, swap in a fresh canvas + renderer and keep drawing the same scene.
   function mkR(cv) { var A = window.__arcade, T = A.THREE; try { prev.r = new T.WebGLRenderer({ canvas: cv, alpha: true, antialias: false, powerPreference: 'low-power' }); } catch (e) { prev.r = null; return false; }
-    prev.r.setPixelRatio(Math.min(1.5, devicePixelRatio || 1)); prev.r.outputColorSpace = T.SRGBColorSpace; prev.r.toneMapping = A.renderer.toneMapping; prev.r.toneMappingExposure = A.renderer.toneMappingExposure;
+    var pdpr = 1.5; try { var tq = window.__gaTier && window.__gaTier.quality; if (tq && tq.previewDpr) pdpr = tq.previewDpr; } catch (e) {} prev.r.setPixelRatio(Math.min(pdpr, devicePixelRatio || 1)); prev.r.outputColorSpace = T.SRGBColorSpace; prev.r.toneMapping = A.renderer.toneMapping; prev.r.toneMappingExposure = A.renderer.toneMappingExposure;
     try { if (prev.r.debug) prev.r.debug.checkShaderErrors = false; } catch (e) {}   // t635u perf (Arcade): skip sync shader-error checks on the preview
     // t739u: compile() not compileAsync(): its 10 ms isReady() poll threw ("reading 'isReady'") once the preview renderer was freed on close
     try { if (prev.scene && prev.cam) prev.r.compile(prev.scene, prev.cam); } catch (e) {}
@@ -303,7 +303,7 @@
       prev.root.rotation.y = ry; prev.root.updateMatrixWorld(true); prev.bbTop = bb.isEmpty() ? (alien ? 2.1 : 1.9) : Math.min(3, Math.max(1.2, bb.max.y)); }
     var top = prev.bbTop + 0.06, bot = -0.08, H = top - bot, t = Math.tan(15 * Math.PI / 180), a = prev.cam.aspect;
     var d = Math.max(H / 0.9 / (2 * t), 1.5 / 0.94 / (2 * t * a)); prev.cam.position.set(0, bot + H / 2 + 0.22, d); prev.cam.lookAt(0, bot + H / 2, 0); }
-  function frame() { prev.raf = requestAnimationFrame(frame); var wc = want(); if (!wc || !prev.scene) return; if (!prev.r || prev.r.domElement !== wc) attach(wc); if (!prev.r) return; if (prev.r.getContext().isContextLost()) { if (!prev.lostAt) prev.lostAt = performance.now(); if (performance.now() - prev.lostAt > 600) { prev.lostAt = 0; remake(); } return; } prev.lostAt = 0;
+  function frame() { prev.raf = requestAnimationFrame(frame); var wc = want(); if (!wc) { if (prev.r) freeR(); return; } if (!prev.scene) return; if (!prev.r || prev.r.domElement !== wc) attach(wc); if (!prev.r) return; if (prev.r.getContext().isContextLost()) { if (!prev.lostAt) prev.lostAt = performance.now(); if (performance.now() - prev.lostAt > 600) { prev.lostAt = 0; remake(); } return; } prev.lostAt = 0;
     var cv = prev.r.domElement, w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
     if (cv.width !== Math.round(w * prev.r.getPixelRatio()) || cv.height !== Math.round(h * prev.r.getPixelRatio())) { prev.r.setSize(w, h, false); }
     prev.cam.aspect = w / h; var fit = Math.max(1, 0.62 / prev.cam.aspect); var alienPrev = !!(prev.root && prev.root.getObjectByName('alienBot'));
