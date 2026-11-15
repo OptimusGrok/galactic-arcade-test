@@ -262,13 +262,13 @@ export function setupPlay(A) {
     P.cur = m; refresh(); ui.classList.remove('on'); if (m.onStart) m.onStart();
     if (m.upright) try { window.__orient && window.__orient(true); } catch (e) {}   // t765u: upright game -> phone back to normal portrait, full screen
     P.zooms++;
-    if (m.prep) { P.mode = 'prep'; P.t = 0; P.pcam = null; P.cam0 = camera.position.clone(); P.look0 = monkey.position.clone().setY(1.25); m.anim('on', 0); }   // walk-up + headset on first, then zoomIn()
+    if (m.prep) { P.mode = 'prep'; P.t = 0; P.t0 = performance.now(); P.pcam = null; P.cam0 = camera.position.clone(); P.look0 = monkey.position.clone().setY(1.25); m.anim('on', 0); }   // walk-up + headset on first, then zoomIn()
     else zoomIn(m);
-    const f = P.frame = document.createElement('iframe'); f.id = 'game'; const ver = window.__GA_VER || 'v235'; const tier = (window.__arcade && window.__arcade.tier && window.__arcade.tier.name) || ''; f.src = m.src + (m.src.indexOf('?') >= 0 ? '&' : '?') + 'ga=' + ver + (tier ? '&tier=' + encodeURIComponent(tier) : ''); f.allow = 'autoplay; fullscreen'; f.title = m.cab.name;
+    const f = P.frame = document.createElement('iframe'); f.id = 'game'; const ver = window.__GA_VER || 'v236'; const tier = (window.__arcade && window.__arcade.tier && window.__arcade.tier.name) || ''; f.src = m.src + (m.src.indexOf('?') >= 0 ? '&' : '?') + 'ga=' + ver + (tier ? '&tier=' + encodeURIComponent(tier) : ''); f.allow = 'autoplay; fullscreen'; f.title = m.cab.name;
     f.addEventListener('load', () => { P.loaded = true; try { f.contentWindow.addEventListener('keydown', ev => { if (TV.open) { ev.stopImmediatePropagation(); ev.preventDefault(); if (ev.code === 'Escape') closeView(); return; } if (ev.code === 'Escape') { ev.stopImmediatePropagation(); ev.preventDefault(); exit('esc'); return; } if (P.sub === 'demo') { ev.stopImmediatePropagation(); ev.preventDefault(); if (/^(Enter|Space|KeyE)$/.test(ev.code) && !ev.repeat) tryPlay(); } }, true); } catch (e) {} });
     P.loaded = false; document.body.appendChild(f);
   }
-  function zoomIn(m) { P.mode = 'zoomIn'; P.t = 0;
+  function zoomIn(m) { P.mode = 'zoomIn'; P.t = 0; P.t0 = performance.now();
     const head = monkey.position.clone().setY(monkey.position.y + 1.25), e = endPos(m), mid = head.clone().lerp(e.p, 0.35);
     P.target = e.c; P.end = e.p; curve = new THREE.CatmullRomCurve3([camera.position.clone(), head, mid, e.p]); look0.copy(m.post ? e.c : head); look1.copy(e.c); }
   function launch() {
@@ -288,14 +288,16 @@ export function setupPlay(A) {
     if (sc === 'title') toDemo('title');
   }
   function exit(why) {
-    if (P.mode !== 'game') return; clearInterval(P.poll); clearTimeout(P.holdT); P.holdT = 0; over.style.display = 'none'; hideContinue();
-    P.lastExit = why; P.sub = null; demoUI.classList.remove('on'); P.mode = 'zoomOut'; P.t = 0; bExit.style.display = 'none'; document.body.dataset.cab = '';
-    const f = P.frame; f.classList.remove('on');
-    try { if (f.contentWindow && f.contentWindow.__skySnd) f.contentWindow.__skySnd.stop(); } catch (e) {}
-    try { if (f.contentWindow && f.contentWindow.__gaRelease) f.contentWindow.__gaRelease(); } catch (e) {}   // t762u: free its GPU / canvas / audio now, not at some later GC (phones)
-    try { f.src = 'about:blank'; } catch (e) {}
+    // t854u / v236: also cancel a slow prep / zoom-in (Roadster step-in, Dead Signal headset) so a mid-tween close isn't a no-op
+    if (P.mode !== 'game' && P.mode !== 'prep' && P.mode !== 'zoomIn') return; clearInterval(P.poll); clearTimeout(P.holdT); P.holdT = 0; over.style.display = 'none'; hideContinue();
+    P.lastExit = why; P.sub = null; demoUI.classList.remove('on'); P.mode = 'zoomOut'; P.t = 0; P.t0 = performance.now(); bExit.style.display = 'none'; document.body.dataset.cab = '';
+    const f = P.frame; if (f) f.classList.remove('on');
+    try { if (f && f.contentWindow && f.contentWindow.__skySnd) f.contentWindow.__skySnd.stop(); } catch (e) {}
+    try { if (f && f.contentWindow && f.contentWindow.__gaRelease) f.contentWindow.__gaRelease(); } catch (e) {}   // t762u: free its GPU / canvas / audio now, not at some later GC (phones)
+    try { if (f) f.src = 'about:blank'; } catch (e) {}
     try { if (TV.open) closeView(); } catch (e) {}
-    try { f.contentWindow.document.body.style.display = 'none'; } catch (e) {} setTimeout(() => f.remove(), 500); P.frame = null;
+    try { if (f && f.contentWindow) f.contentWindow.document.body.style.display = 'none'; } catch (e) {}
+    if (f) setTimeout(() => { try { f.remove(); } catch (e) {} }, 500); P.frame = null;
     if (P.cur.onExit) P.cur.onExit();
     if (P.cur.upright || document.body.classList.contains('upright')) try { window.__orient && window.__orient(false); } catch (e) {}
     const m = P.cur, back = monkey.position.clone().setY(monkey.position.y + 1.25), out = back.clone().addScaledVector(m.cab.userData.inward, 2.6).setY(2.1);
@@ -420,21 +422,24 @@ export function setupPlay(A) {
     if (m && (m !== near || (m.key === 'roadster' && P.seatShown !== m.cab.userData.seat))) { near = m; refresh(); } if (!m && P.mode === 'walk') near = null;
     ui.classList.toggle('on', !!m); document.body.classList.toggle('ingame', P.mode === 'game'); { const ck = P.mode === 'game' && P.cur ? P.cur.key : ''; if (document.body.dataset.cab !== ck) { document.body.dataset.cab = ck; try { showVix(); } catch (e) {} } }
     if (P.mode === 'prep' || P.mode === 'post') {   // DEAD SIGNAL: headset on (before the zoom) / off (after it); the camera eases to a 3/4 view of the platform
-      const m = P.cur, dur = P.mode === 'prep' ? m.prep : m.post; P.t = Math.min(1, P.t + dt / dur); const k = ease(P.t);
+      const m = P.cur, dur = P.mode === 'prep' ? m.prep : m.post;
+      // v236: wall-clock, not frame-counted. frame() caps dt at 50ms, so on a slow GPU the 1.8s step-in used to take 30–60s (36 frames).
+      if (P.t0 == null) P.t0 = performance.now(); P.t = Math.min(1, (performance.now() - P.t0) / (dur * 1000)); const k = ease(P.t);
       m.anim(P.mode === 'prep' ? 'on' : 'off', P.t); monkey.visible = true;
       const c = m.cab.userData.centre, head = monkey.position.clone().setY(monkey.position.y + 1.35);
       if (P.mode === 'prep') { const v = m.prepCam ? (P.pcam = P.pcam || m.prepCam()) : new THREE.Vector3(c.x + 1.25, 1.95, c.z + 2.9); camera.position.lerpVectors(P.cam0, v, k); camera.lookAt(P.look0.clone().lerp(head, Math.min(1, k * 1.4))); }
       else { const v = new THREE.Vector3(c.x + 0.6, 2.3, c.z + 5.6); camera.position.lerpVectors(P.cam0, v, k); camera.lookAt(head); }
-      if (P.t >= 1) { if (P.mode === 'prep') zoomIn(m); else { m.anim('reset', 1); P.mode = 'walk'; P.cur = null; near = null; monkey.position.y = 0; st.camInit = true; st.lookT = st.t; st.yaw = 0; } }
+      if (P.t >= 1) { if (P.mode === 'prep') zoomIn(m); else { m.anim('reset', 1); P.mode = 'walk'; P.t0 = null; P.cur = null; near = null; monkey.position.y = 0; st.camInit = true; st.lookT = st.t; st.yaw = 0; } }
       return true;
     }
     if (P.mode === 'zoomIn' || P.mode === 'zoomOut') {
-      const dur = P.mode === 'zoomIn' ? 1.6 : 1.4; P.t = Math.min(1, P.t + dt / dur); const k = ease(P.t);
+      const dur = P.mode === 'zoomIn' ? 1.6 : 1.4;
+      if (P.t0 == null) P.t0 = performance.now(); P.t = Math.min(1, (performance.now() - P.t0) / (dur * 1000)); const k = ease(P.t);
       camera.position.copy(curve.getPointAt(k));
       camera.lookAt(P.mode === 'zoomIn' ? look0.clone().lerp(look1, Math.min(1, k * 1.6)) : look1.clone().lerp(look0, Math.min(1, k * 1.5)));
       monkey.visible = camera.position.distanceTo(monkey.position.clone().setY(1.0)) > 0.75 && !(P.mode === 'zoomIn' && k > 0.3) && !(P.mode === 'zoomOut' && k < 0.65);
       if (P.cur && P.cur.post) monkey.visible = P.mode === 'zoomIn' ? k < 0.85 : k > 0.3;   // headset sequence: he stays in shot until the camera is at the visor
-      if (P.t >= 1) { if (P.mode === 'zoomIn') launch(); else if (P.cur && P.cur.post) { P.mode = 'post'; P.t = 0; P.cam0 = camera.position.clone(); monkey.visible = true; } else { P.mode = 'walk'; P.cur = null; near = null; monkey.visible = true; st.camInit = true; st.lookT = st.t; } }
+      if (P.t >= 1) { if (P.mode === 'zoomIn') launch(); else if (P.cur && P.cur.post) { P.mode = 'post'; P.t = 0; P.t0 = performance.now(); P.cam0 = camera.position.clone(); monkey.visible = true; } else { P.mode = 'walk'; P.t0 = null; P.cur = null; near = null; monkey.visible = true; st.camInit = true; st.lookT = st.t; } }
       return true;
     }
     return P.mode === 'game';
