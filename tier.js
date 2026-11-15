@@ -1,0 +1,165 @@
+// t854u / v231: low-end GPU tier. Cheap phones were crashing (coloured streaks =
+// WebGL context loss / GPU memory exhaustion). Detect a weak device, cap pixel
+// ratio and post-processing, skip live cabinet-demo iframes, and reload at the
+// lower tier if the context is lost.
+export const TIER_KEY = 'galacticarcade.tier';
+
+const WEAK_GPU = /Mali-4|Mali-T[67]|Mali-G[3-5][0-9](?![6-9])|Adreno \(TM\) [2-5]\d{2}|Adreno [2-5]\d{2}|PowerVR|VideoCore|GC\d{3,4}/i;
+const SOFTWARE_GL = /SwiftShader|llvmpipe|Microsoft Basic Render|softpipe/i;
+
+export function isSoftwareGL(gpu) { return SOFTWARE_GL.test(gpu || ''); }
+
+export function probeGPU() {
+  const out = { renderer: '', maxTex: 0 };
+  let gl = null, lose = null;
+  try {
+    const c = document.createElement('canvas');
+    gl = c.getContext('webgl', { failIfMajorPerformanceCaveat: false }) || c.getContext('experimental-webgl');
+    if (!gl) return out;
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    out.renderer = (ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '') || gl.getParameter(gl.RENDERER) || '';
+    out.maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 0;
+    lose = gl.getExtension('WEBGL_lose_context');
+  } catch (e) {}
+  try { if (lose) lose.loseContext(); } catch (e) {}
+  return out;
+}
+
+function forcedTier() {
+  try {
+    const q = new URLSearchParams(location.search).get('tier');
+    if (q === 'low' || q === 'mid' || q === 'high') return q;
+  } catch (e) {}
+  try {
+    const s = localStorage.getItem(TIER_KEY);
+    if (s === 'low' || s === 'mid' || s === 'high') return s;
+  } catch (e) {}
+  return null;
+}
+
+export function detectTier(opt = {}) {
+  const forced = forcedTier();
+  const gpu = opt.renderer || '';
+  const maxTex = opt.maxTex || 0;
+  const mem = (typeof navigator.deviceMemory === 'number') ? navigator.deviceMemory : null;
+  const cores = navigator.hardwareConcurrency || 8;
+  const mobile = !!opt.mobile;
+  const why = [];
+  let name = 'high';
+  if (forced) { why.push('forced:' + forced); name = forced; }
+  else if (mem != null && mem <= 2) { name = 'low'; why.push('deviceMemory=' + mem); }
+  else if (mem != null && mem <= 4 && cores <= 4) { name = 'low'; why.push('deviceMemory=' + mem + ',cores=' + cores); }
+  else if (maxTex && maxTex <= 2048) { name = 'low'; why.push('MAX_TEXTURE_SIZE=' + maxTex); }
+  else if (WEAK_GPU.test(gpu) && (mem == null || mem <= 4)) { name = 'low'; why.push('gpu=' + gpu); }
+  else if (mobile && cores <= 2) { name = 'low'; why.push('mobile,cores=' + cores); }
+  else if (mobile && mem != null && mem <= 4) { name = 'mid'; why.push('mobile,deviceMemory=' + mem); }
+  else if (mobile) { name = 'mid'; why.push('mobile'); }
+  else { name = 'high'; why.push('desktop'); }
+  return { name, why, gpu, maxTex, mem, cores, mobile, software: isSoftwareGL(gpu), forced: !!forced };
+}
+
+export function qualityForTier(tier, { mobile = false, powerSave = false } = {}) {
+  if (tier === 'low') return { dpr: 1, refl: 0, bloom: 0, post: false, samples: 0, cabDemos: false, aniso: 1, fps: 30, warm: false, windowQ: 0.28, rtFloat: false };
+  if (tier === 'mid' && powerSave) return { dpr: 1.25, refl: 0.22, bloom: 0.28, post: true, samples: 0, cabDemos: true, aniso: 2, fps: 30, warm: true, windowQ: 0.5, rtFloat: false };
+  if (tier === 'mid') return { dpr: 1.5, refl: 0.35, bloom: 0.5, post: true, samples: 0, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false };
+  if (powerSave) return { dpr: mobile ? 1.25 : 1.5, refl: mobile ? 0.22 : 0.35, bloom: 0.28, post: true, samples: 0, cabDemos: true, aniso: 4, fps: 30, warm: true, windowQ: 0.75, rtFloat: false };
+  if (mobile) return { dpr: 1.5, refl: 0.35, bloom: 0.5, post: true, samples: 2, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false };
+  return { dpr: 2, refl: 0.6, bloom: 0.5, post: true, samples: 4, cabDemos: true, aniso: 8, fps: 60, warm: true, windowQ: 1, rtFloat: true };
+}
+
+export function persistTier(name) {
+  try { if (name) localStorage.setItem(TIER_KEY, name); else localStorage.removeItem(TIER_KEY); } catch (e) {}
+}
+
+export function installContextLossHandler(canvas, { onLost, onRestored } = {}) {
+  if (!canvas || canvas.__gaCtxLoss) return;
+  canvas.__gaCtxLoss = true;
+  canvas.addEventListener('webglcontextlost', ev => {
+    try { ev.preventDefault(); } catch (e) {}
+    persistTier('low');
+    try { if (onLost) onLost(ev); } catch (e) {}
+    const el = document.getElementById('glLost');
+    if (el) { el.hidden = false; el.classList.add('on'); }
+    setTimeout(() => { try { location.reload(); } catch (e) {} }, 700);
+  });
+  canvas.addEventListener('webglcontextrestored', ev => { try { if (onRestored) onRestored(ev); } catch (e) {} });
+}
+
+export function memSnapshot({ THREE, renderer, scene, composer, extras = {} } = {}) {
+  const T = THREE, r = renderer, gl = r && r.getContext();
+  const seen = new Set();
+  let texBytes = 0, texN = 0, rtBytes = 0, rtN = 0, geoN = 0, geoBytes = 0;
+  const bppOf = typ => (T && (typ === T.HalfFloatType || typ === T.FloatType)) ? 8 : 4;
+  const addTex = t => {
+    if (!t || seen.has(t)) return; seen.add(t);
+    const img = t.image;
+    const w = (img && (img.width || img.videoWidth)) || t.image && t.image.data && t.source && 0 || (img && img.data ? Math.sqrt(img.data.length / 4) : 0) || 0;
+    const h = (img && (img.height || img.videoHeight)) || w;
+    const ww = (typeof w === 'number' && isFinite(w)) ? w : 0;
+    const hh = (typeof h === 'number' && isFinite(h)) ? h : 0;
+    const k = t.generateMipmaps ? 4 / 3 : 1;
+    texBytes += ww * hh * bppOf(t.type) * k; texN++;
+  };
+  const addRT = rt => {
+    if (!rt || seen.has(rt)) return; seen.add(rt);
+    const w = rt.width || 0, h = rt.height || 0;
+    const typ = rt.texture && rt.texture.type;
+    const samples = rt.samples || 0;
+    rtBytes += w * h * bppOf(typ) * (samples ? samples + 1 : 1); rtN++;
+    if (rt.texture) seen.add(rt.texture);
+  };
+  if (scene) scene.traverse(o => {
+    const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+    for (const m of mats) if (m) {
+      for (const k of Object.keys(m)) if (m[k] && m[k].isTexture) addTex(m[k]);
+      if (m.uniforms) for (const u of Object.values(m.uniforms)) if (u && u.value && u.value.isTexture) addTex(u.value);
+    }
+    if (o.isReflector && o.getRenderTarget) addRT(o.getRenderTarget());
+    if (o.geometry) {
+      geoN++;
+      const a = o.geometry.attributes; for (const k in a) if (a[k] && a[k].array) geoBytes += a[k].array.byteLength;
+      if (o.geometry.index && o.geometry.index.array) geoBytes += o.geometry.index.array.byteLength;
+    }
+  });
+  if (composer) {
+    if (composer.readBuffer) addRT(composer.readBuffer);
+    if (composer.writeBuffer) addRT(composer.writeBuffer);
+    if (composer.renderTarget1) addRT(composer.renderTarget1);
+    if (composer.renderTarget2) addRT(composer.renderTarget2);
+    try {
+      for (const p of composer.passes || []) {
+        if (p.renderTargets) for (const t of p.renderTargets) addRT(t);
+        if (p.renderTargetX) addRT(p.renderTargetX);
+        if (p.renderTargetY) addRT(p.renderTargetY);
+      }
+    } catch (e) {}
+  }
+  const canvases = [...document.querySelectorAll('canvas')].map(c => ({ id: c.id, w: c.width, h: c.height, bytes: c.width * c.height * 4 }));
+  const iframes = [...document.querySelectorAll('iframe')].map(f => ({ src: f.getAttribute('src'), connected: f.isConnected }));
+  let lights = 0, lightsOn = 0;
+  if (scene) scene.traverse(o => { if (o.isLight) { lights++; if (o.visible && o.intensity > 0) lightsOn++; } });
+  const mem = (typeof performance !== 'undefined' && performance.memory) || null;
+  const dpr = r ? r.getPixelRatio() : 0;
+  const dbw = gl ? gl.drawingBufferWidth : 0, dbh = gl ? gl.drawingBufferHeight : 0;
+  return Object.assign({
+    dpr, drawingBuffer: [dbw, dbh],
+    maxTex: gl ? gl.getParameter(gl.MAX_TEXTURE_SIZE) : 0,
+    info: r ? { tex: r.info.memory.textures, geo: r.info.memory.geometries, prog: (r.info.programs || []).length, calls: r.info.render.calls, tris: r.info.render.triangles } : null,
+    texMB: +(texBytes / 1e6).toFixed(2), texN,
+    rtMB: +(rtBytes / 1e6).toFixed(2), rtN,
+    geoMB: +(geoBytes / 1e6).toFixed(2), geoN,
+    lights, lightsOn,
+    canvasMB: +(canvases.reduce((s, c) => s + c.bytes, 0) / 1e6).toFixed(2), canvases: canvases.length,
+    iframes: iframes.length, iframeSrc: iframes.map(i => i.src),
+    jsMB: mem ? +(mem.usedJSHeapSize / 1e6).toFixed(1) : null,
+    audio: document.querySelectorAll('audio').length
+  }, extras);
+}
+
+export function ensureLostOverlay() {
+  if (document.getElementById('glLost')) return;
+  const el = document.createElement('div');
+  el.id = 'glLost'; el.hidden = true; el.setAttribute('role', 'alert');
+  el.innerHTML = '<b>GRAPHICS RESET</b><span>This device ran out of graphics memory. Reloading a lighter version so the arcade can keep running.</span>';
+  document.body.appendChild(el);
+}

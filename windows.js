@@ -7,7 +7,8 @@ export function setupWindows({ THREE, room, room2, Z2, camera, HALF, H, DOOR_W, 
   const CYCLE = 240, DW = 2048, VW = HALF * 2, DH = Math.round(DW * H / VW), M = 170;   // design units; M = parallax margin
   const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
   const dpr = Math.min(2, (typeof devicePixelRatio === 'number' && devicePixelRatio) || 1);
-  const Q = coarse ? Math.min(0.75, 0.42 * dpr) : 1;   // canvas scale: phones get a lighter canvas (texture upload is the cost)
+  const cap = (typeof window !== 'undefined' && window.__gaTier && window.__gaTier.quality && window.__gaTier.quality.windowQ) || 1;
+  const Q = Math.min(cap, coarse ? Math.min(0.75, 0.42 * dpr) : 1);   // canvas scale: phones get a lighter canvas; low tier is even smaller
   const PW = Math.round(DW * Q), PH = Math.round(DH * Q);
   const mk = (w, h) => { const c = document.createElement('canvas'); c.width = Math.round(w * Q); c.height = Math.round(h * Q); const x = c.getContext('2d'); x.scale(Q, Q); return { c, x, w, h }; };
   const pano = document.createElement('canvas'); pano.width = PW; pano.height = PH; const px = pano.getContext('2d');

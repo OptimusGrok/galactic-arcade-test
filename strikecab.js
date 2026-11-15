@@ -215,6 +215,12 @@ export function startStrikeDemo(cab) {
   f.style.cssText = `position:fixed;left:-${300 * S + 50}px;top:0;width:${270 * S}px;height:${480 * S}px;border:0;pointer-events:none;visibility:hidden`;
   const demo = { ready: false, frames: 0, texture: null, running: false, iframe: f, err: null };
   demo.attach = () => { if (!f.isConnected) document.body.appendChild(f); };   // t295u: main.js attaches it after the start screen (the iframe's boot froze the phone's first frames)
+  demo.detach = () => {   // t854u: drop the off-screen WebGL/canvas on the low tier / context-loss downgrade
+    try { if (f.contentWindow && f.contentWindow.__gaRelease) f.contentWindow.__gaRelease(); } catch (e) {}
+    try { f.src = 'about:blank'; } catch (e) {}
+    try { f.remove(); } catch (e) {}
+    demo.ready = false; demo.running = false; };
+
   const blank = document.createElement('canvas'); blank.width = 4; blank.height = 4;
   cab.userData.crt.uniforms.map.value = new THREE.CanvasTexture(blank);
   f.addEventListener('load', () => {

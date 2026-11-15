@@ -627,9 +627,9 @@ function drawIcon(g, key, S) {
   }
 }
 
-function makeIconAtlas() {
+function makeIconAtlas(S = 256) {
   const keys = ['strike', 'ghost', 'cyber', 'orc', 'pip', 'berserker', 'monkey', 'nova', 'blaster', 'bb', 'rockfall', 'skytower', 'roadster', 'claw'];
-  const S = 256, COLS = 4, W = S * COLS, H = S * 4;
+  const COLS = 4, W = S * COLS, H = S * 4;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const g = cv.getContext('2d');
   const rects = {};
@@ -650,7 +650,7 @@ function makeIconAtlas() {
 export function buildNeonSigns(THREE, mergeGeometries, list, opt = {}) {
   const A = NEON_ATLAS, MAXW = opt.maxW || 3.7, HALF = opt.HALF, WALL_D = 0.06;
   const quads = [], info = [], iconQuads = [], iconInfo = [];
-  const atlas = makeIconAtlas();
+  const atlas = makeIconAtlas(opt.iconS || 256);
   // t840u / v223: icons are much bigger and fill the space up to just under the cyan ceiling band (y=6.2, small gap).
   // Kept centred on the sign; width shrinks if needed so neighbours and the east/west window planes stay clear.
   const ICON_GAP = 0.08, ICON_CEIL_GAP = 0.15, ICON_MAX_TOP = 6.2 - ICON_CEIL_GAP, ICON_MIN = 0.28, ICON_SIDE_GAP = 0.16, ICON_WIN_MARGIN = 0.2;
@@ -715,7 +715,17 @@ export function buildNeonSigns(THREE, mergeGeometries, list, opt = {}) {
     for (let k = 0; k < iuv.count; k++) iuv.setXY(k, iuv.getX(k) ? iu1 : iu0, iuv.getY(k) ? iv1 : iv0);
     ig.rotateY(Math.atan2(n.x, n.z)); ig.translate(ip.x, ip.y, ip.z); iconQuads.push(ig);
   }
-  const tex = new THREE.TextureLoader().load(opt.src || 'tex/neon_signs.webp', t => { try { if (opt.renderer) opt.renderer.initTexture(t); } catch (err) {} if (opt.onLoad) opt.onLoad(t); });
+  const tex = new THREE.TextureLoader().load(opt.src || 'tex/neon_signs.webp', t => { try {
+    if (opt.atlasMax && t.image && t.image.width > opt.atlasMax) {
+      const c = document.createElement('canvas');
+      const r = opt.atlasMax / t.image.width;
+      c.width = opt.atlasMax; c.height = Math.max(1, Math.round(t.image.height * r));
+      c.getContext('2d').drawImage(t.image, 0, 0, c.width, c.height);
+      t.image = c; t.needsUpdate = true;
+    }
+    if (opt.lowMips === false || opt.atlasMax) t.generateMipmaps = false;
+    if (opt.renderer) opt.renderer.initTexture(t);
+  } catch (err) {} if (opt.onLoad) opt.onLoad(t); });
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = opt.aniso || 4;
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false, color: new THREE.Color(1, 1, 1).multiplyScalar(opt.k || 0.55) });   // t782u: 0.55 (t775u: 0.85, v188: 1.3), dimmer + the atlas itself is sharper / thinner
   mat.name = 'neonSigns';

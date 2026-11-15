@@ -34,28 +34,32 @@ import { setupOpts } from './opts.js';
 import { setupTeleport, WX } from './teleport.js';
 import { lavaPaths, PATH_HW } from './lavapaths.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { detectTier, probeGPU, qualityForTier, persistTier, installContextLossHandler, memSnapshot, ensureLostOverlay, isSoftwareGL } from './tier.js';
 
 const MOBILE = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches);
 // t767u: iPad (incl. iPadOS 'desktop' Safari = MacIntel + multi-touch) plays as held: no landscape lock, no 'turn sideways' hint
 const IPAD = /iPad/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 window.__isIPad = IPAD;
+// t854u / v231: probe the GPU before allocating the real renderer so a Mali / 2 GB phone
+// starts in the low tier (no bloom, no live demo iframes, dpr 1) instead of crashing.
+const _gpu = probeGPU();
+const TIER = window.__gaTier = detectTier({ renderer: _gpu.renderer, maxTex: _gpu.maxTex, mobile: MOBILE });
 // Phone power-save (Dave: cooler-running mode). On by default on touch/mobile. Caps draws at ~30fps
 // (physics still uses real dt), clamps pixel ratio, uses a cheaper bloom/reflection budget, and
 // throttles far cabinet screen updates. Toggle lives in OPTIONS (neonarcade.powersave).
 const PS_KEY = 'neonarcade.powersave';
 function readPowerSave() {
   try { const v = localStorage.getItem(PS_KEY); if (v === '0' || v === 'off') return false; if (v === '1' || v === 'on') return true; } catch (e) {}
-  return MOBILE;
+  return MOBILE || TIER.name === 'low';
 }
 function qualityFor(on) {
-  if (on) return { dpr: MOBILE ? 1.25 : 1.5, refl: MOBILE ? 0.22 : 0.35, bloom: 0.28 };
-  return MOBILE ? { dpr: 1.5, refl: 0.35, bloom: 0.5 } : { dpr: 2, refl: 0.6, bloom: 0.5 };
+  return qualityForTier(TIER.name, { mobile: MOBILE, powerSave: on });
 }
-const PS = window.__powerSave = { on: readPowerSave(), key: PS_KEY, fps: 30, cabNear: 7, cabFar: 14, cabNearMs: 200, cabFarMs: 450, draws: 0, skipped: 0, hiddenSkips: 0, lastDraw: 0 };
-let Q = qualityFor(PS.on);
+const PS = window.__powerSave = { on: readPowerSave(), key: PS_KEY, fps: TIER.name === 'low' ? 30 : 30, cabNear: 7, cabFar: 14, cabNearMs: 200, cabFarMs: 450, draws: 0, skipped: 0, hiddenSkips: 0, lastDraw: 0 };
+let Q = qualityFor(PS.on); TIER.quality = Q;
 
 // ---------- renderer / scene ----------
-const renderer = new THREE.WebGLRenderer({ antialias: !MOBILE, powerPreference: PS.on ? 'low-power' : 'high-performance' }); renderer.localClippingEnabled = true; if (!/[?&]glcheck/.test(location.search)) renderer.debug.checkShaderErrors = false;   // t295u: no sync getProgramInfoLog per shader (~3.9 s of the start-screen freeze at 4x CPU); ?glcheck turns it back on   // teleporter dissolve
+const renderer = new THREE.WebGLRenderer({ antialias: !MOBILE && TIER.name === 'high' && !PS.on, powerPreference: (PS.on || TIER.name === 'low') ? 'low-power' : 'high-performance' }); renderer.localClippingEnabled = true; if (!/[?&]glcheck/.test(location.search)) renderer.debug.checkShaderErrors = false;   // t295u: no sync getProgramInfoLog per shader (~3.9 s of the start-screen freeze at 4x CPU); ?glcheck turns it back on   // teleporter dissolve
 let dpr = Math.min(devicePixelRatio || 1, Q.dpr);
 renderer.setPixelRatio(dpr);
 renderer.setSize(innerWidth, innerHeight, false);   // CSS (100vw x 100dvh) owns the on-screen size; resize() matches the buffer to it
@@ -88,11 +92,11 @@ const C = { pink: 0xff2bd6, mag: 0xff1fa8, cyan: 0x22d8ff, purple: 0x9b4dff, amb
 function canvasTex(w, h, draw, rep) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   draw(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = Q.aniso || 1;
   if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); }
   return t;
 }
-const hexTex = canvasTex(512, 512, (g, w, h) => {
+const hexTex = canvasTex(TIER.name === 'low' ? 256 : 512, TIER.name === 'low' ? 256 : 512, (g, w, h) => {
   g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
   const r = 32, dx = r * Math.sqrt(3), dy = r * 1.5;
   g.lineWidth = 2;
@@ -116,7 +120,7 @@ const room = new THREE.Group(); room.name = 'room'; scene.add(room);
 // reflective floor + glossy hex overlay
 const floorGeo = mergeGeometries([new THREE.PlaneGeometry(HALF * 2, HALF * 2), new THREE.PlaneGeometry(DOOR_W, HALL_L + 0.02).translate(0, HALF + HALL_L / 2, 0)]); // room + hallway (plane is rotated -90deg about x: +y -> -z)
 const mirror = new Reflector(floorGeo, {
-  textureWidth: Math.round(innerWidth * dpr * Q.refl), textureHeight: Math.round(innerHeight * dpr * Q.refl), color: 0x8a8a96,
+  textureWidth: Math.max(32, Math.round(innerWidth * dpr * (Q.refl || 0))), textureHeight: Math.max(32, Math.round(innerHeight * dpr * (Q.refl || 0))), color: 0x8a8a96,
 });
 mirror.rotation.x = -Math.PI / 2; mirror.name = 'floorMirror'; room.add(mirror);
 const floorTop = new THREE.Mesh(floorGeo, new THREE.MeshStandardMaterial({
@@ -186,7 +190,7 @@ function setWalls(mode) {
     if (md && !hm.userData.stone) { hm.userData.stone = stoneTex.clone(); hm.userData.stone.repeat.set(+(HALL_L / 6).toFixed(3), +(DOOR_H / 6).toFixed(3)); hm.userData.stone.needsUpdate = true; }
     hm.map = md ? hm.userData.stone : hm.userData.map0; hm.emissiveMap = md ? hm.userData.stone : null; hm.color.setHex(md ? 0x8a8078 : 0x2a1840); hm.emissive.setHex(md ? 0xffffff : 0); hm.emissiveIntensity = md ? 0.55 : 1; hm.roughness = md ? 0.95 : 0.85; hm.needsUpdate = true; }
   if (v && !vikTex) { vikTex = new THREE.TextureLoader().load('tex/viking_walls.jpg', () => spaceWin && spaceWin.dirty()); vikTex.colorSpace = THREE.SRGBColorSpace; vikTex.wrapS = THREE.RepeatWrapping; vikTex.wrapT = THREE.ClampToEdgeWrapping;
-    vikTex.repeat.set(+(2 * HALF / (H * 928 / 576)).toFixed(3), 1); vikTex.anisotropy = renderer.capabilities.getMaxAnisotropy(); }   // one repeat = wall height
+    vikTex.repeat.set(+(2 * HALF / (H * 928 / 576)).toFixed(3), 1); vikTex.anisotropy = Math.min(Q.aniso || 1, renderer.capabilities.getMaxAnisotropy()); }   // one repeat = wall height
   wallMat.map = v ? vikTex : md ? stoneTex : wallTex; wallMat.color.setHex(v ? 0x8a7a70 : md ? 0x8a8078 : 0x2a1840); wallMat.roughness = v || md ? 0.95 : 0.85; wallMat.emissiveMap = v ? vikTex : md ? stoneTex : null; wallMat.emissive.setHex(v || md ? 0xffffff : 0x000000); wallMat.emissiveIntensity = v ? 1.6 : md ? 0.55 : 1; wallBands.forEach(m => { m.visible = !v && !po && !md }); wallMat.needsUpdate = true;   // a little dark so the neon pops
   const tick = po ? () => { portalU.uT.value = performance.now() / 1000; } : () => {};
   for (let i = 0; i < 4; i++) { const w = room.getObjectByName('wall' + i); if (w) { w.material = po ? portalMat : wallMat; w.onBeforeRender = tick; } }
@@ -500,7 +504,7 @@ const room2 = new THREE.Group(); room2.name = 'room2'; room2.position.set(0, 0, 
   const skip = new Set([mirror, floorTop, floorBase1, ...cabinets, ...featured, ...spots]);
   for (const ch of room.children) if (!skip.has(ch)) room2.add(ch.clone());
   const plane = new THREE.PlaneGeometry(HALF * 2, HALF * 2);
-  const m2 = new Reflector(plane, { textureWidth: Math.round(innerWidth * dpr * Q.refl), textureHeight: Math.round(innerHeight * dpr * Q.refl), color: 0x8a8a96 });
+  const m2 = new Reflector(plane, { textureWidth: Math.max(32, Math.round(innerWidth * dpr * (Q.refl || 0))), textureHeight: Math.max(32, Math.round(innerHeight * dpr * (Q.refl || 0))), color: 0x8a8a96 });
   m2.rotation.x = -Math.PI / 2; m2.name = 'floorMirror2'; room2.add(m2); room2.userData.mirror = m2;
   const base = new THREE.Mesh(plane, new THREE.MeshStandardMaterial({ color: 0x05030a, roughness: 0.3, metalness: 0.6 })); base.rotation.x = -Math.PI / 2; base.position.y = -0.002; base.name = 'floorBase2'; room2.add(base); room2.userData.base = base;
   const ft = new THREE.Mesh(plane, floorTop.material); ft.rotation.x = -Math.PI / 2; ft.position.y = 0.004; ft.name = 'floorHex2'; room2.add(ft);
@@ -566,7 +570,7 @@ const dsCab = buildDeadSignalStation(); dsCab.rotation.y = Math.PI; room2.add(ds
 const FLOOR_KEY = 'neonarcade.floor';
 const carpetTex = new THREE.TextureLoader().load('tex/carpet.webp', () => spaceWin && floorMode === 'carpet' && spaceWin.dirty());
 carpetTex.colorSpace = THREE.SRGBColorSpace; carpetTex.wrapS = carpetTex.wrapT = THREE.RepeatWrapping;   // seamless tile (edge-cut figures removed): plain repeat, never mirrored (mirroring put copies head to head)
-carpetTex.repeat.set(3, 3); carpetTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+carpetTex.repeat.set(3, 3); carpetTex.anisotropy = Math.min(Q.aniso || 1, renderer.capabilities.getMaxAnisotropy());
 // the carpet covers every walkable floor (Dave: 'when a floor is selected have it cover all floors'): room 1 + hallway (one mesh,
 // UVs in metres so the tile keeps room 1's scale), room 2 (carpet2) and the teleporter white room (carpetW, added in carpetWhite()).
 const worldUV = g => { const p = g.attributes.position, uv = g.attributes.uv; for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / (HALF * 2) + 0.5, p.getY(i) / (HALF * 2) + 0.5); return g; };
@@ -665,7 +669,7 @@ function setFloor(mode) {
 }
 window.__setFloor = setFloor;   // the saved/default floor is applied after setupTeleport (carpetWhite reads tp, still in its temporal dead zone here)   // the start screen's Options menu calls this
 // pre-compile the CHECKERS / LAVA shaders a few seconds after load so the first tap on those tiles doesn't stall the phone
-setTimeout(() => { try { const m0 = carpet.material, v0 = carpet.visible; carpet.visible = true;
+if (Q.warm) setTimeout(() => { try { const m0 = carpet.material, v0 = carpet.visible; carpet.visible = true;
   for (const m of [carpet.material, checkMat, lavaMat, cobbleMat, iceMat]) { carpet.material = m; compileForPlay(carpet, camera, scene).catch(() => {}); }   // t768u: just the floor, for the composer's target
   carpet.material = m0; carpet.visible = v0; } catch (e) {} }, 4000);
 
@@ -685,7 +689,7 @@ function cullRooms(fr) {
   room2.visible = !in1 || fr.intersectsBox(doorBox1);
   const deep = !in1; room2.userData.mirror.visible = deep; room2.userData.base.visible = !deep; // far room seen through the door: no second reflector pass
   mirror.visible = !in2; floorBase1.visible = in2;
-  if (floorMode !== 'neon') mirror.visible = floorBase1.visible = room2.userData.mirror.visible = room2.userData.base.visible = false;   // carpet everywhere: no reflector passes
+  if (floorMode !== 'neon' || !Q.refl) mirror.visible = floorBase1.visible = room2.userData.mirror.visible = room2.userData.base.visible = false;   // carpet / low-tier: no reflector passes
   const want = monkey.position.z < -HALF - HALL_L / 2 ? 2 : 1; // the 6 room lights follow the monkey (constant light count: no shader recompiles)
   if (want !== lightsIn) { lightsIn = want; for (const l of roomLights) { const [x, y, zz] = l.userData.p1; if (want === 1) l.position.set(x, y, zz); else l.position.set(-x, y, Z2 - zz); } }
 }
@@ -1258,12 +1262,26 @@ document.getElementById('bFs').onclick = toggleFs;
 if (matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) document.getElementById('bFs').style.display = 'none';
 
 // ---------- post ----------
-const rt = new THREE.WebGLRenderTarget(innerWidth * dpr, innerHeight * dpr, { type: THREE.HalfFloatType, samples: PS.on ? 0 : (MOBILE ? 2 : 4) });
-const composer = new EffectComposer(renderer, rt);
-composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth * Q.bloom, innerHeight * Q.bloom), 0.52, 0.22, 0.46); bloom.highPassUniforms.smoothWidth.value = 0.35;   // t782u: tighter, shorter bloom so the thinner tubes read as sharp lines, not a soft haze
-composer.addPass(bloom);
-composer.addPass(new OutputPass());
+// t854u: low tier skips the composer (half-float targets + bloom mip chain were a big part of the cheap-phone GPU crash).
+let rt = null, composer = null, bloom = null, usePost = !!Q.post;
+function makeComposer() {
+  if (composer) return composer;
+  rt = new THREE.WebGLRenderTarget(Math.max(1, innerWidth * dpr), Math.max(1, innerHeight * dpr), { type: Q.rtFloat ? THREE.HalfFloatType : THREE.UnsignedByteType, samples: Q.samples || 0 });
+  composer = new EffectComposer(renderer, rt);
+  composer.addPass(new RenderPass(scene, camera));
+  bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth * (Q.bloom || 0.28), innerHeight * (Q.bloom || 0.28)), 0.52, 0.22, 0.46); bloom.highPassUniforms.smoothWidth.value = 0.35;   // t782u: tighter, shorter bloom so the thinner tubes read as sharp lines, not a soft haze
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
+  return composer;
+}
+function disposeComposer() {
+  try { if (composer && composer.dispose) composer.dispose(); } catch (e) {}
+  try { if (rt) rt.dispose(); } catch (e) {}
+  composer = null; bloom = null; rt = null; usePost = false;
+}
+if (Q.post) makeComposer();
+ensureLostOverlay();
+installContextLossHandler(renderer.domElement, {});
 // iPad Safari fix: setSize used to write inline px width/height from innerWidth/innerHeight at load, which on iPad can be
 // a stale, short height (toolbar not settled, no later 'resize'), so the canvas covered only the top ~70%. Now the CSS
 // sizes the canvas and we track its real box via ResizeObserver + resize/orientationchange/visualViewport.
@@ -1281,17 +1299,45 @@ function resize(force) {
   if (MOBILE && !st.fp && !st.distUser) st.dist = camera.aspect > 1.15 ? DIST_WIDE : DIST_PORTRAIT;
   camera.updateProjectionMatrix();
   updateTurn(); syncJoyArm();
-  renderer.setPixelRatio(dpr); renderer.setSize(W, H, false); composer.setPixelRatio(dpr); composer.setSize(W, H);
-  bloom.resolution.set(W * Q.bloom, H * Q.bloom);
-  room2.userData.mirror?.getRenderTarget().setSize(Math.round(W * dpr * Q.refl), Math.round(H * dpr * Q.refl));
-  mirror.getRenderTarget().setSize(Math.round(W * dpr * Q.refl), Math.round(H * dpr * Q.refl));
+  renderer.setPixelRatio(dpr); renderer.setSize(W, H, false);
+  if (composer) { composer.setPixelRatio(dpr); composer.setSize(W, H); if (bloom) bloom.resolution.set(W * (Q.bloom || 0.28), H * (Q.bloom || 0.28)); }
+  const rw = Math.max(32, Math.round(W * dpr * (Q.refl || 0))), rh = Math.max(32, Math.round(H * dpr * (Q.refl || 0)));
+  try { room2.userData.mirror?.getRenderTarget().setSize(rw, rh); } catch (e) {}
+  try { mirror.getRenderTarget().setSize(rw, rh); } catch (e) {}
 }
 const resizeSoon = () => { resize(); setTimeout(resize, 120); setTimeout(resize, 600); };
 addEventListener('resize', resizeSoon); addEventListener('orientationchange', resizeSoon); addEventListener('pageshow', resizeSoon);
 window.visualViewport?.addEventListener('resize', resizeSoon);
 if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(renderer.domElement);
 resize(true);
-function applyQuality() { Q = qualityFor(PS.on); dpr = Math.min(devicePixelRatio || 1, Q.dpr); resize(true); }
+function applyQuality() {
+  Q = qualityFor(PS.on); TIER.quality = Q; dpr = Math.min(devicePixelRatio || 1, Q.dpr);
+  usePost = !!Q.post;
+  if (!usePost && composer) disposeComposer();
+  else if (usePost && !composer) makeComposer();
+  applyLowBudget();
+  resize(true);
+}
+function applyLowBudget() {
+  const low = TIER.name === 'low';
+  if (low) { PS.fps = Q.fps || 30; PS.on = true; }
+  try {
+    scene.traverse(o => { if (o.isPointLight && (o.name === 'screenGlow' || /Spot$/.test(o.name))) { o.visible = !low; if (low) o.intensity = 0; } });
+  } catch (e) {}
+  if (low) {
+    try { if (demo && demo.detach) demo.detach(); } catch (e) {}
+    try { if (ghostDemo && ghostDemo.detach) ghostDemo.detach(); } catch (e) {}
+    try { if (typeof nb !== 'undefined' && nb && nb.pause) nb.pause(); } catch (e) {}
+  }
+}
+function dropToLow(why) {
+  if (TIER.name === 'low') return TIER;
+  TIER.name = 'low'; TIER.why = (TIER.why || []).concat(['drop:' + why]); TIER.dropped = why;
+  persistTier('low'); applyQuality();
+  return TIER;
+}
+TIER.drop = dropToLow;
+
 function setPowerSave(on) { PS.on = !!on; try { localStorage.setItem(PS_KEY, PS.on ? '1' : '0'); } catch (e) {} applyQuality(); try { if (window.__powerSaveUI) window.__powerSaveUI.sync(); } catch (e) {} return PS.on; }
 PS.set = setPowerSave;
 
@@ -1708,12 +1754,13 @@ function idlePose(dt, u, sw) {
 
 // ---------- loop + adaptive quality ----------
 const demo = startStrikeDemo(strikeCab), ghostDemo = startGhostDemo(ghostCab), _v = new THREE.Vector3();
+try { applyLowBudget(); } catch (e) {}
 // t295u start-screen freeze: the two attract-demo iframes (strike-demo ~1.8 s pix + ~1.2 s cityDecor at 4x CPU, ghost-demo) booted on the main
 // thread during the start screen's first frames. Load them only once the start screen is gone (or skipped), one per idle slot.
 { const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 2000 }) : setTimeout(f, 300));
   const t = setInterval(() => { const S = window.__start; if (!(window.__skipStart || (S && S.dismissed) || !document.getElementById('start'))) return; clearInterval(t);
     // t768u: not in the first seconds of play either (the strike demo's boot was ~0.4 s+ at 4x CPU right as the player arrived)
-    setTimeout(() => idle(() => { demo.attach(); setTimeout(() => idle(() => ghostDemo.attach()), 1500); }), window.__skipStart ? 0 : 4000); }, 200); }
+    setTimeout(() => idle(() => { if (Q.cabDemos) { demo.attach(); setTimeout(() => idle(() => { if (Q.cabDemos) ghostDemo.attach(); }), 1500); } applyLowBudget(); }), window.__skipStart ? 0 : 4000); }, 200); }
 const _frus = new THREE.Frustum(), _pm = new THREE.Matrix4(), _sph = new THREE.Sphere();
 const stats = { frames: 0, cpu: 0, cpuAvg: 0, gapAvg: 16, quality: dpr, draws: 0, skipped: 0 };
 let last = performance.now(), slow = 0, fast = 0;
@@ -1765,8 +1812,8 @@ function frame(now) {
   { const dtc = Math.min(gap / 1000, 0.05); if (play.update(dtc, kiosk && kiosk.mode !== 'walk' && kiosk.mode !== 'pick' ? null : nearCab) || (kiosk && kiosk.update(dtc))) { flyGuard(); stepClock(dtc); } else step(dtc); }
   shield.update(Math.min(gap / 1000, 0.05));
   if (golf) { golf.update(Math.min(gap / 1000, 0.05)); golf.cam(camera, Math.min(gap / 1000, 0.05)); }   // t275u: putting camera
-  bloom.strength = camera.position.x > WX / 2 ? 0.08 : 0.52;   // white room: no glare; t782u dimmer / sharper bloom
-  if (window.__camOverride && window.__camOverride.bloom != null) bloom.strength = window.__camOverride.bloom; // screenshots / tests
+  if (bloom) { bloom.strength = camera.position.x > WX / 2 ? 0.08 : 0.52;   // white room: no glare; t782u dimmer / sharper bloom
+    if (window.__camOverride && window.__camOverride.bloom != null) bloom.strength = window.__camOverride.bloom; } // screenshots / tests
   if (shop) { const gb = golf && golf.below, gx = monkey.position.x, gz = monkey.position.z; shop.update(Math.min(gap / 1000, 0.05)); if (gb) { monkey.position.x = gx; monkey.position.z = gz; } }   // golf basement: the shop's own prop push-out (east wall obstacles, x<=93.6) must not apply under its floor
   winds.update();
   if (tp && !st.beamed && window.__start && window.__start.dismissed && !(window.__skipStart && !window.__beamTest)) { st.beamed = true; const b = beamSpot(); tp.beamIn(b.x, b.z); }   // t282u: once per session, first Play
@@ -1793,13 +1840,18 @@ function frame(now) {
   }
   if (spaceWin) spaceWin.update(now);
   if (window.__neonSigns && window.__neonSigns.userData.tick) window.__neonSigns.userData.tick(now / 1000);   // t850u: claw icon prongs
-  if (draw && ((warm.done && !warm.drawn) || !document.getElementById('start') || (window.__start && window.__start.dismissed))) { if (warm.done) warm.drawn = true; composer.render(); PS.lastDraw = now; PS.draws++; stats.draws = PS.draws; }   // t295u: the opaque start screen hides the room; let its shaders compile in slices first
+  if (draw && ((warm.done && !warm.drawn) || !document.getElementById('start') || (window.__start && window.__start.dismissed))) { if (warm.done) warm.drawn = true; if (composer && usePost) composer.render(); else renderer.render(scene, camera); PS.lastDraw = now; PS.draws++; stats.draws = PS.draws; }   // t295u: the opaque start screen hides the room; let its shaders compile in slices first
   else if (!draw) { PS.skipped++; stats.skipped = PS.skipped; }
   const cpu = performance.now() - t0;
   stats.frames++; stats.cpu = cpu; stats.cpuAvg += (cpu - stats.cpuAvg) * 0.05; stats.gapAvg += (gap - stats.gapAvg) * 0.05;
   if (!window.__noAdapt) {
     if (stats.gapAvg > 24) { if (++slow > 90 && dpr > 0.75) { dpr = Math.max(0.75, dpr - 0.25); resize(); slow = 0; } } else slow = 0;
-    if (!PS.on && stats.gapAvg < 14) { if (++fast > 400 && dpr < Math.min(devicePixelRatio || 1, Q.dpr)) { dpr += 0.25; resize(); fast = 0; } } else fast = 0;
+    if (!PS.on && TIER.name === 'high' && stats.gapAvg < 14) { if (++fast > 400 && dpr < Math.min(devicePixelRatio || 1, Q.dpr)) { dpr += 0.25; resize(); fast = 0; } } else fast = 0;
+    // t854u: real weak devices (not SwiftShader test boxes) that stay slow drop to the low tier and stay there.
+    if (TIER.name !== 'low' && !isSoftwareGL(TIER.gpu) && stats.frames > 240 && stats.gapAvg > 50) {
+      TIER._slow = (TIER._slow || 0) + 1;
+      if (TIER._slow > 90) dropToLow('slow-frames:' + stats.gapAvg.toFixed(0) + 'ms');
+    } else TIER._slow = 0;
     stats.quality = dpr;
   }
   requestAnimationFrame(frame);
@@ -1858,7 +1910,7 @@ kiosk = setupKiosk({ room, camera, monkey, st, play, blockers });
   const list = Object.keys(FEATURED).map(k => { const [cab, key] = FEATURED[k]; return { cab, key, title: T[key][0], color: T[key][1], wall: true }; });
   list.push({ cab: clawCab, key: 'claw', title: 'CLAW MACHINE', color: 0xff2bd6, scale: 0.7, normal: new THREE.Vector3(0, 0, 1) });
   // DEAD SIGNAL: no extra sign; the VR station already carries its own game-styled DEAD SIGNAL / VR sign above the screen (dscab.js)
-  const signs = buildNeonSigns(THREE, mergeGeometries, list, { HALF, renderer, aniso: Math.min(8, renderer.capabilities.getMaxAnisotropy()) });
+  const signs = buildNeonSigns(THREE, mergeGeometries, list, { HALF, renderer, aniso: Math.min(Q.aniso || 1, renderer.capabilities.getMaxAnisotropy()), iconS: TIER.name === 'low' ? 128 : 256, atlasMax: TIER.name === 'low' ? 512 : 0 });
   scene.add(signs); window.__neonSigns = signs; }
 // ---------- t776u-t779u NEON BRICKS: Dave's Lego-brick Tetris in the middle pane of room 1's big window (neonbricks.js) ----------
 { const css = document.createElement('style');
@@ -1906,7 +1958,7 @@ kiosk = setupKiosk({ room, camera, monkey, st, play, blockers });
     if (e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'KeyX') { if (!e.repeat) nb.rotate(); } else if (e.code === 'Space') { if (!e.repeat) nb.hardDrop(); } else if (e.code === 'Escape') nb.stop('exit'); });
   const canNb = () => play.mode === 'walk' && !(tp && tp.locked) && !(shop && shop.open) && !document.body.classList.contains('ingame') && !(window.__start && window.__start.shown && !window.__start.dismissed) && !document.querySelector('#inv.on');
   nbHud = () => { bPlay.classList.toggle('on', nb.near && canNb()); if (nb.near && !PF.warm) nbWarm(); };
-  setTimeout(nbWarm, 9000);   // usually long before anyone reaches the window
+  if (Q.warm) setTimeout(nbWarm, 9000);   // usually long before anyone reaches the window; skipped on the low tier
   // t827u: two-finger pinch anywhere (canvas, HUD, D-pad) zooms the playfield; one finger still moves / rotates / swipes
   const NBP = { on: false, d0: 1, z0: 0 };
   function nbPinchDist(list) { if (!list || list.length < 2) return 0; return Math.hypot(list[0].clientX - list[1].clientX, list[0].clientY - list[1].clientY) || 1; }
@@ -1964,13 +2016,13 @@ kiosk = setupKiosk({ room, camera, monkey, st, play, blockers });
       } catch (e) {}
       setWalls(w0); setFloor(f0); try { if (sf == null) localStorage.removeItem(FLOOR_KEY); else localStorage.setItem(FLOOR_KEY, sf); if (sw == null) localStorage.removeItem(WALLS_KEY); else localStorage.setItem(WALLS_KEY, sw); } catch (e) {} },
     step(dt) { if (window.__noRandomRoom) return; const S = window.__start; if (S && S.shown && !S.dismissed) return; if (play.mode !== 'walk') return;
-      RR.t += dt; if (!RR.warmed && RR.t > 20) RR.warm(); if (RR.t >= RR.period) RR.tick(); } };
+      RR.t += dt; if (Q.warm && !RR.warmed && RR.t > 20) RR.warm(); if (RR.t >= RR.period) RR.tick(); } };
   rrStep = dt => RR.step(dt); }
 const opts = setupOpts({ play, kiosk, shield, st, monkey, setFloor, getFloor: () => floorMode, setWalls, getWalls: () => wallsMode, setWindow, getWindow: () => windowMode, HALF, Z2 });
 requestAnimationFrame(frame);
 
 // hooks for tests / future art work
-window.__arcade = { powerSave: PS, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, floorMats, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, skyTowerCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, joyFrom, joyClear, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, get neonBricks() { return nb; }, nbFade: dt => nbFade(dt), get playerFade() { return PF.k; }, get pfClones() { return PF.clones; }, nbWarm: () => nbWarm(), get randomRoom() { return window.__randomRoom; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow) };
+window.__arcade = { powerSave: PS, tier: TIER, mem: () => memSnapshot({ THREE, renderer, scene, composer, extras: { tier: TIER.name, why: TIER.why, gpu: TIER.gpu, post: !!usePost, cabDemos: !!Q.cabDemos, gapAvg: stats.gapAvg, cpuAvg: stats.cpuAvg } }), setTier: name => { if (name !== 'low' && name !== 'mid' && name !== 'high') return TIER; TIER.name = name; TIER.forced = true; persistTier(name); applyQuality(); return TIER; }, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, floorMats, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, skyTowerCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, joyFrom, joyClear, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, get neonBricks() { return nb; }, nbFade: dt => nbFade(dt), get playerFade() { return PF.k; }, get pfClones() { return PF.clones; }, nbWarm: () => nbWarm(), get randomRoom() { return window.__randomRoom; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow) };
 const mp = setupMP({ scene, camera, monkey, makeMonkey, makeAlien, st, play, getTp: () => tp, HALF, Z2, HALL_L, WX: 80 }); window.__arcade.mp = mp;   // multiplayer step 1: public room, 10 players
 // after the first room frames: pull in the shop, then the window scenery, off the critical path
 { const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 1500 }) : setTimeout(f, 200));
