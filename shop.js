@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { capLoadedTexture, flagTex, tierQuality } from './tier.js';
+import { setupChessTable } from './chesstable.js';   // Dave via Arcade: chess table + chairs between the ACCESSORIES island and the pool tables
 
 let api_sky = null;
 export const SHOP_HALF = 14;
@@ -730,6 +731,10 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
       g.shadowColor = '#ff4fd8'; g.shadowBlur = 26; g.lineWidth = 12; g.strokeStyle = gr; g.strokeText('ACCESSORIES', w / 2, h / 2); g.shadowColor = '#00e5ff'; g.shadowBlur = 12; g.lineWidth = 5; g.strokeText('ACCESSORIES', w / 2, h / 2); g.shadowBlur = 0; g.lineWidth = 2; g.strokeStyle = '#ffffff'; g.strokeText('ACCESSORIES', w / 2, h / 2); });
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), new THREE.MeshBasicMaterial({ map: sgT.t, transparent: true, depthWrite: false, toneMapped: false })); sign.position.set(0.1, 3.2, 0.08); sign.name = 'wardrobeSign'; wd.add(sign);
   }
+  // ---------- CHESS TABLE (chesstable.js): table + 2 chairs between the wardrobe island and the pool tables; borrows this Grok to sit opposite ----------
+  const chess = setupChessTable({ THREE, mergeGeometries, flagTex, G, WXp, grok: _gk, home: { x: QX - 0.15, z: QZ + 0.1, yaw: GYAW }, st: st || (window.__arcade && window.__arcade.st), camera: camera || (window.__arcade && window.__arcade.camera), getMonkey,
+    clearKeys: () => { const k = window.__arcade && window.__arcade.keys; if (k) for (const c in k) k[c] = false; } });
+  window.__chess = chess;
   // ---------- bounds + obstacles ----------
   const R = 0.3, L = HS - 0.35, KX = 0, KZ = 0;
   const extraBounds = { x0: WXp - L, x1: WXp + L, z0: Z0 + SD / 2 + R, z1: L };
@@ -738,7 +743,7 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
   const OBST = [{ x0: Math.min(...cc.map(c => c[0])), x1: Math.max(...cc.map(c => c[0])), z0: Math.min(...cc.map(c => c[1])), z1: Math.max(...cc.map(c => c[1])) },
     { x0: -SXW - 0.1, x1: -SXW + 0.1, z0: ZW, z1: ZF }, { x0: SXW - 0.1, x1: SXW + 0.1, z0: ZW, z1: ZF },
     ...[PZ, PZ2].map(z => ({ x0: PX - PLW - 0.18, x1: PX + PLW + 0.18, z0: z - PLL - 0.18, z1: z + PLL + 0.18 })),   // pool tables
-    { x0: WDX - WDD - 0.05, x1: WDX + 0.08, z0: WDZ - WDW, z1: WDZ + WDW }, { x0: WDX - WDD - 0.05, x1: WDX + 0.08, z0: WDZ + WDW - 0.1, z1: WDZ + WDW + 0.66 * WDS }];   // wardrobe island + mirror wing
+    { x0: WDX - WDD - 0.05, x1: WDX + 0.08, z0: WDZ - WDW, z1: WDZ + WDW }, { x0: WDX - WDD - 0.05, x1: WDX + 0.08, z0: WDZ + WDW - 0.1, z1: WDZ + WDW + 0.66 * WDS }, ...chess.obst];   // wardrobe island + mirror wing, chess table + chairs
   const NP = { x: QX + Math.sin(GYAW) * (RO + 0.55), z: QZ + Math.cos(GYAW) * (RO + 0.55) };
   function pushOut(p) { const lx = p.x - WXp, lz = p.z;
     const dx = lx - QX, dz = lz - QZ, d = Math.hypot(dx, dz); if (d < RO + R) { const k = (RO + R) / (d || 1); p.x = WXp + QX + dx * k; p.z = QZ + dz * k; return; }
@@ -1146,10 +1151,10 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
     syncHeld(); applyHeldVis();
     const inRoom = m.position.x > WXp / 2;
     if (inRoom && !wasIn && st) { st.pitch = 0.04; st.dist = Math.max(st.dist, 5.0); }   // shop-local camera: level, a bit closer (once per visit)
-    wasIn = inRoom; if (!inRoom) { if (chat.near.clerk) chat.setNear('clerk', false); if (chat.open && chat.ctx && chat.ctx.source === 'clerk') chat.close('left'); if (btn.classList.contains('on')) btn.classList.remove('on'); for (const b of poolBtns) b.classList.remove('on'); poolApi.near = false; wardBtn.classList.remove('on'); wardApi.near = false; if (api.open) closeShop(); return; }
+    wasIn = inRoom; if (!inRoom) { if (chat.near.clerk) chat.setNear('clerk', false); if (chat.open && chat.ctx && chat.ctx.source === 'clerk') chat.close('left'); if (btn.classList.contains('on')) btn.classList.remove('on'); for (const b of poolBtns) b.classList.remove('on'); poolApi.near = false; wardBtn.classList.remove('on'); wardApi.near = false; if (api.open) closeShop(); chess.update(dt, null); chess.btn.classList.remove('on'); chess.near = false; return; }
     if (!goldClaimed) { goldG.rotation.y = t * 0.7; goldG.position.y = GOLD_Y + Math.sin(t * 1.5) * 0.1; }
     pushOut(m.position);
-    const busy = (tp && tp.locked) || (play && play.mode && play.mode !== 'walk') || !!document.querySelector('#inv.on') || chat.open;   // t810u: typing Enter in the chat must not open the shop / pool / wardrobe
+    const busy = (tp && tp.locked) || (play && play.mode && play.mode !== 'walk') || !!document.querySelector('#inv.on') || chat.open || chess.locked();   // t810u: typing Enter in the chat must not open the shop / pool / wardrobe
     if (!goldClaimed && !busy && st && st.fly && st.fly.air) {
       const gp = window.__gaPlayer;
       if (gp && gp.p && gp.p.back === 'jetpack') {
@@ -1157,7 +1162,8 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
         if (dx * dx + dy * dy + dz * dz < GOLD_R2) claimDomeTicket();
       }
     }
-    api.near = !busy && Math.hypot(m.position.x - WXp - NP.x, m.position.z - NP.z) < 1.9;
+    chess.update(dt, m, { busy: busy || api.open || poolApi.open || !!(window.__wardrobe && window.__wardrobe.isOpen) });   // after pushOut: owns the seated player's pose + the camera
+    api.near = !busy && !chess.borrowed && Math.hypot(m.position.x - WXp - NP.x, m.position.z - NP.z) < 1.9;   // no SHOP while Grok is at the chess table
     btn.classList.toggle('on', api.near && !api.open); if (api.open && !api.near && !busy) closeShop();
     chat.setNear('clerk', api.near && !api.open);   // t810u: CHAT sits above SHOP while you're at the counter
     { const lx = m.position.x - WXp, lz = m.position.z, dx = Math.max(0, Math.abs(lx - PX) - PLW - 0.16), ds = POOLS.map(z => Math.hypot(dx, Math.max(0, Math.abs(lz - z) - PLL - 0.16)));
@@ -1167,18 +1173,22 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
       const dx = Math.max(0, (WDX - WDD) - lx, lx - (WDX + 0.08)), dz = Math.max(0, Math.abs(lz - WDZ) - WDW); wardApi.dist = Math.hypot(dx, dz);   // any side of the island (was front only: lx > WDX gave 9)
       wardApi.near = !busy && !wo && !poolApi.open && !api.open && !poolApi.near && wardApi.dist < 1.55; wardBtn.classList.toggle('on', wardApi.near); }
     // Grok idle: gentle bob + sway, head turns toward the player, blinks, mouth moves while talking
+    if (!chess.borrowed) {   // chesstable.js walks / seats Grok while he plays
     grok.position.y = Math.sin(t * 1.6) * 0.015; grok.rotation.z = Math.sin(t * 0.9) * 0.02;
     grok.getWorldPosition(tmp); const want = Math.atan2(m.position.x - tmp.x, m.position.z - tmp.z) - grok.rotation.y - 0 ;
     const yaw = THREE.MathUtils.clamp(((want + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI, -0.7, 0.7);
     const chatting = chat.open && chat.ctx && chat.ctx.source === 'clerk';
     if (chatting) { grok.rotation.y = THREE.MathUtils.clamp(grok.rotation.y + yaw * Math.min(1, dt * 3), GYAW - 0.9, GYAW + 0.9); } else grok.rotation.y += (GYAW - grok.rotation.y) * Math.min(1, dt * 4);   // t810u: turns to you while chatting, back after
     head.rotation.y += ((api.near || api.open || chatting ? yaw : Math.sin(t * 0.4) * 0.35) - head.rotation.y) * Math.min(1, dt * 4); head.rotation.x = Math.sin(t * 1.1) * 0.04;
+    }
     blinkT -= dt; if (blinkT < -0.12) blinkT = 2 + Math.random() * 3; talkT = Math.max(0, talkT - dt); happyT = Math.max(0, happyT - dt);
     const playing = !greetA.paused && !greetA.ended; const talking = talkT > 0 || playing, happy = happyT > 0 || playing || api.open;
     const tk = talking ? [0.15, 0.7, 1, 0.4][Math.floor(t * 11) % 4] : 0;
+    if (!chess.borrowed) {
     // small wave while greeting
     const wv = arms[1]; if (happyT > 0.8 && talking) { wv.sh.rotation.z += (2.4 - wv.sh.rotation.z) * Math.min(1, dt * 6); wv.el.rotation.z = Math.sin(t * 9) * 0.45; wv.el.rotation.x += (-0.3 - wv.el.rotation.x) * Math.min(1, dt * 6); }
     else { wv.sh.rotation.z += (0.12 - wv.sh.rotation.z) * Math.min(1, dt * 4); wv.el.rotation.z *= 0.9; wv.el.rotation.x += (-1.2 - wv.el.rotation.x) * Math.min(1, dt * 4); }
+    }
     const fs = (happy ? 'h' : blinkT < 0 ? 'b' : 'o') + tk;
     if (fs !== faceState) { faceState = fs; drawFace(faceTex.g, blinkT < 0, tk, happy); faceTex.t.needsUpdate = true; }
   };
