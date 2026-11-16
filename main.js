@@ -1366,6 +1366,7 @@ function wantWide() {
   if (document.body.classList.contains('upright')) { updateTurn(); return; }   // an upright game is open: its exit restores landscape
   lockTo('landscape');
 }
+window.__fsNow = () => { if (MOBILE && !IPAD) goFs(); };   // t876u: chess (re)enters fullscreen inside its PLAY tap, locks portrait later at game start
 window.__wantWide = wantWide; window.__orient = orient; window.__updateTurn = updateTurn;
 document.getElementById('bView').onclick = toggleView;
 document.getElementById('bFs').onclick = toggleFs;

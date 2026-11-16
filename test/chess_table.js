@@ -18,14 +18,16 @@ const fs = require('fs');
   // (same stub as portrait_three.js): lock() only works in fullscreen; the arcade starts in its side (landscape) view.
   await ev(() => { const F = window.__F = { el: null, log: [], cur: 'natural', pend: null, delay: {} }, so = screen.orientation, D = document;
     Object.defineProperty(Document.prototype, 'fullscreenElement', { get() { return F.el; }, configurable: true });
-    D.documentElement.requestFullscreen = function () { F.log.push('fs'); return new Promise(r => setTimeout(() => { if (!F.el) { F.el = D.documentElement; D.dispatchEvent(new Event('fullscreenchange')); } r(); }, 30)); };
+    // t876u: strict like Android Chrome once set up: fullscreen only from a user gesture; lock() needs fullscreen but no gesture
+    D.documentElement.requestFullscreen = function () { F.log.push('fs'); if (F.strict && !(navigator.userActivation && navigator.userActivation.isActive)) { F.log.push('fs-denied'); return Promise.reject(new TypeError('no gesture')); } return new Promise(r => setTimeout(() => { if (!F.el) { F.el = D.documentElement; D.dispatchEvent(new Event('fullscreenchange')); } r(); }, 30)); };
     const abort = () => { if (F.pend) { const p = F.pend; F.pend = null; p.rej(new DOMException('aborted', 'AbortError')); } };
-    so.lock = k => { F.log.push('lock:' + k); if (!F.el) return Promise.reject(new DOMException('not fullscreen', 'SecurityError')); abort();
+    so.lock = k => { F.log.push('lock:' + k); (F.at = F.at || []).push([k, !!(window.__chess && window.__chess.open), window.__chess && window.__chess.state]); if (!F.el) return Promise.reject(new DOMException('not fullscreen', 'SecurityError')); abort();
       return new Promise((res, rej) => { const me = { rej }; F.pend = me; setTimeout(() => { if (F.pend !== me) return; F.pend = null; F.cur = k; F.log.push('=>' + k); res(); }, F.delay[k] || 20); }); };
     so.unlock = () => { F.log.push('unlock'); abort(); F.cur = 'natural'; };
+    F.drop = () => { F.el = null; F.cur = 'natural'; abort(); F.log.push('fs-lost'); D.dispatchEvent(new Event('fullscreenchange')); };
     window.__wantWide && window.__wantWide(); });
-  await page.waitForTimeout(400);
-  const or = () => ev(() => ({ up: document.body.classList.contains('upright'), cur: __F.cur, fs: !!__F.el, cup: window.__chess.upright, log: __F.log.slice(-6), all: __F.log.slice(), n: __F.log.length }));
+  await page.waitForTimeout(400); await ev(() => { __F.strict = true; });
+  const or = () => ev(() => ({ up: document.body.classList.contains('upright'), cur: __F.cur, fs: !!__F.el, cup: window.__chess.upright, at: (__F.at || []).filter(a => a[0] === 'portrait'), log: __F.log.slice(-6), all: __F.log.slice(), n: __F.log.length }));
   // ---- layout: between the wardrobe island and the pool tables, clear of both, far from the pad ----
   const g = await ev(() => { const C = window.__chess, S = window.__shop, t = S.G.getObjectByName('chessTable'), W = window.__tp.whiteRoom.position.x, P = window.__tp.PAD2, wd = S.wardrobe, pl = window.__pool;
     const parts = ['chessBoard', 'chessPiecesWhite', 'chessPiecesBlack', 'chessBody', 'chessCushions', 'chessChrome', 'chessNeon', 'chessLamp', 'chessSign'].filter(n => t.getObjectByName(n));
@@ -54,14 +56,26 @@ const fs = require('fs');
   chk(Math.abs(sol[0]) > 0.7 || Math.abs(sol[1]) > 0.7, 'table is solid ' + JSON.stringify(sol));
   // ---- PLAY: player sits, Grok walks over (fast test speed) and sits opposite ----
   const home = await ev(() => { const r = window.__shop.grok; return [r.position.x, r.position.z, r.rotation.y]; });
-  await ev(() => { window.__chess.fast = true; window.__chess.hold = 'both'; });
+  await ev(() => { window.__chess.fast = true; window.__chess.hold = 'gsit'; });
   let [x, y] = await center('#chessBtn'); await page.touchscreen.tap(x, y);
   const s1 = await ev(() => ({ st: window.__chess.state, g: window.__chess.gstate, seated: window.__arcade.st.seated, x: !!document.querySelector('#chessX.on') }));
   chk(s1.st !== 'idle' && s1.seated === 'chess' && s1.g === 'out' && s1.x, 'PLAY: player heads for the chair, Grok leaves the counter, ✕ shown ' + JSON.stringify(s1));
   await page.waitForTimeout(300); const o1 = await or();
-  chk(o1.up && o1.cup && o1.cur === 'portrait' && o1.fs, 'PLAY tap turns the phone upright (portrait lock, full screen) like Ghost 256 / Strike / Cybercity ' + JSON.stringify(o1));
-  const walk = await page.waitForFunction(() => { const C = window.__chess, r = window.__shop.grok; (window.__gpath = window.__gpath || []).push([r.position.x, r.position.z]); return C.state === 'both' && C.gstate === 'seated' ? window.__gpath : null; }, null, { timeout: 60000, polling: 50 }).then(h => h.jsonValue()).catch(() => null);
-  chk(!!walk && walk.length > 3, 'Grok walked over in steps (' + (walk ? walk.length : 0) + ' samples) and sat down');
+  chk(!o1.up && !o1.cup && o1.cur === 'landscape' && o1.fs && !o1.at.length, 't876u: PLAY tap keeps the phone sideways (full screen held, no portrait lock yet) ' + JSON.stringify(o1));
+  // t876u: Grok walks up BESIDE his chair, turns to the board and lowers himself in sideways (parked mid-sit)
+  const walk = await page.waitForFunction(() => { const C = window.__chess, r = window.__shop.grok; (window.__gpath = window.__gpath || []).push([r.position.x, r.position.z, C.gstate]); return C.gstate === 'sitting' && C.gsit >= 0.6 ? window.__gpath : null; }, null, { timeout: 60000, polling: 30 }).then(h => h.jsonValue()).catch(() => null);
+  chk(!!walk && walk.length > 3, 'Grok walked over in steps (' + (walk ? walk.length : 0) + ' samples)');
+  const gs = await ev(() => { const C = window.__chess, r = window.__shop.grok, L = (r.userData && r.userData.legs) || null; const s0 = window.__gpath.find(p => p[2] === 'sitting');
+    const hip = window.__shop.grok.children.filter(c => c.isGroup)[0].rotation.x;
+    return { start: s0 ? [s0[0] - C.TX, s0[1] - C.TZ] : null, now: [r.position.x - C.TX, r.position.z - C.TZ], yaw: r.rotation.y, lean: r.rotation.x, hip, gsit: C.gsit, frames: window.__gpath.filter(p => p[2] === 'sitting').length }; });
+  chk(gs.start && Math.abs(gs.start[0] - 1.16) < 0.08 && gs.start[1] < -0.55 && gs.now[1] < -0.05 && gs.now[1] > -0.55 && Math.abs(gs.yaw + Math.PI / 2) < 0.15 && gs.hip < -0.2 && gs.hip > -1.4 && gs.lean > 0.05,
+    'Grok steps up beside the chair, faces the board and is half-way through a sideways sit (bent, sliding in) ' + JSON.stringify(gs));
+  await page.waitForTimeout(500); await frames(3); await shot((process.env.SHOTDIR || '/workspace/shots') + '/chess_grok_side_sit.png');
+  await ev(() => { window.__chess.fast = false; window.__chess.hold = 'both'; });   // finish the sit at real speed (smoothness check)
+  await page.waitForFunction(() => { const C = window.__chess, r = window.__shop.grok; window.__gpath.push([r.position.x, r.position.z, C.gstate]); return C.state === 'both' && C.gstate === 'seated'; }, null, { timeout: 60000, polling: 30 }).catch(() => {});
+  await ev(() => { window.__chess.fast = true; });
+  const gsN = await ev(() => { const C = window.__chess, P = window.__gpath.filter(p => p[2] === 'sitting'); let mono = true; for (let i = 1; i < P.length; i++) if (P[i][1] < P[i - 1][1] - 1e-6) mono = false; const mid = new Set(P.map(p => p[1] - C.TZ).filter(z => z > -0.6 && z < -0.03).map(z => z.toFixed(2))).size; return { n: P.length, mid, mono }; });
+  chk(gsN.n >= 8 && gsN.mid >= 6 && gsN.mono, 'sit is a smooth sideways slide through many in-between positions, no snap into the seat ' + JSON.stringify(gsN));
   await page.waitForTimeout(300); await frames(3);
   const s2 = await ev(() => { const A = window.__arcade, W = window.__tp.whiteRoom.position.x, C = window.__chess, r = window.__shop.grok, u = A.monkey.userData;
     return { p: [A.monkey.position.x - W - C.TX, A.monkey.position.z - C.TZ], face: A.st.face, hips: u.hips.position.y, knee: u.legs[0].knee.rotation.x, g: [r.position.x - C.TX, r.position.z - C.TZ], gyaw: r.rotation.y, gHip: window.__shop.grok.children.filter(c => c.isGroup)[0].rotation.x,
@@ -79,6 +93,9 @@ const fs = require('fs');
     return { cx: c.x - W - C.TX, cy: c.y, cz: c.z - C.TZ, dy: d.y, ov: document.getElementById('chessOv').classList.contains('on') }; });
   chk(Math.abs(z.cx) < 1 && z.cy > 1.2 && z.cy < 2.2 && z.dy < -0.7 && !z.ov, 'camera zoomed in over the board, looking down ' + JSON.stringify(z));
   await shot((process.env.SHOTDIR || '/workspace/shots') + '/chess_zoom_board.png');
+  const oz = await or();
+  chk(!oz.up && oz.cur === 'landscape' && !oz.at.length, 't876u: still sideways through the sit and the zoom, right up to the game ' + JSON.stringify([oz.up, oz.cur, oz.at]));
+  await shot((process.env.SHOTDIR || '/workspace/shots') + '/chess_zoom_sideways.png');
   await ev(() => { window.__chess.hold = null; });
   await page.waitForFunction(() => window.__chess.state === 'game' && window.__chess.open, null, { timeout: 30000 });
   const okG = await page.waitForFunction(() => { try { const d = window.__chess.frame.contentDocument, w = window.__chess.frame.contentWindow; return d && d.readyState === 'complete' && d.title === 'Chess' && d.querySelectorAll('.sq').length === 64 && w.chessApp; } catch (e) { return false; } }, null, { timeout: 60000 }).then(() => true).catch(() => false);
@@ -89,6 +106,8 @@ const fs = require('fs');
   chk(okG && ov.w === ov.iw && ov.h === ov.ih && /chess-play\/index\.html$/.test(ov.src) && ov.cv === 'hidden', 'chess opens full-screen over the zoomed board');
   chk(ov.mode === 'hvc' && ov.robot === 'on' && ov.battles === 'on' && ov.pieces >= 32, 'same game: vs computer, robot hand + battles on, 32 pieces');
   chk(ov.x[0] <= 8 && ov.x[1] <= 8 && ov.x[2] >= 36 && ov.xTop === 'chessX', 'close ✕ tight in the top-left and on top');
+  await page.waitForTimeout(200); const og = await or();
+  chk(og.up && og.cup && og.cur === 'portrait' && og.fs && og.at.length === 1 && og.at[0][1] === true && og.at[0][2] === 'game', 't876u: turns upright exactly as the game appears (portrait locked with the game open, no gesture needed) ' + JSON.stringify([og.up, og.cur, og.at]));
   // play e2-e4; the computer answers (robot hand)
   const fr = page.frameLocator('#chessOv iframe');
   await fr.locator('.sq[data-sq="20"]').tap(); await fr.locator('.sq[data-sq="52"]').tap();
@@ -96,7 +115,7 @@ const fs = require('fs');
   chk(!!reply && reply[0] === 'e4', 'e2-e4 played and the computer answered ' + JSON.stringify(reply));
   await page.waitForTimeout(2500);
   await shot((process.env.SHOTDIR || '/workspace/shots') + '/chess_game_open.png');
-  const o2 = await or(), n1 = o1.n;   // seconds into the game: play.js's upright safety net must leave chess alone
+  const o2 = await or(), n1 = og.n;   // seconds into the game: play.js's upright safety net must leave chess alone
   chk(o2.up && o2.cur === 'portrait' && !o2.all.slice(n1).includes('lock:landscape'), 'still upright during the game (no safety-net revert) ' + JSON.stringify([o2.up, o2.cur, o2.log]));
   // Dave t874u: the game options sit UNDER the board, nothing overlaps, all fits on screen, ✕ clear
   const layout = async tag => { const L = await ev(() => { const d = window.__chess.frame.contentDocument, w = window.__chess.frame.contentWindow, R = s => { const b = d.querySelector(s).getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom }; };
@@ -123,6 +142,7 @@ const fs = require('fs');
   // ---- Esc while Grok is still on his way: everything resets ----
   await ev(() => { const A = window.__arcade, W = window.__tp.whiteRoom.position.x, C = window.__chess; A.monkey.position.set(W + C.TX - 2.2, 0, C.TZ); A.st.vel.set(0, 0, 0); C.fast = false; });
   await page.waitForFunction(() => !!document.querySelector('#chessBtn.on'), null, { timeout: 30000 }).catch(() => {});
+  await ev(() => __F.drop()); await page.waitForTimeout(200);   // fullscreen was lost: the E / PLAY gesture must win it back for the later lock
   await page.keyboard.press('KeyE');
   await page.waitForFunction(() => window.__chess.state === 'wait', null, { timeout: 30000 }).catch(() => {});
   const w1 = await ev(() => ({ st: window.__chess.state, g: window.__chess.gstate }));
@@ -132,7 +152,7 @@ const fs = require('fs');
   const e1 = await ev(() => ({ st: window.__chess.state, g: window.__chess.gstate, seated: window.__arcade.st.seated, fr: document.querySelectorAll('#chessOv iframe').length, opens: window.__chess.opens }));
   chk(w1.st === 'wait' && w1.g === 'out' && e1.st === 'idle' && e1.g === 'home' && !e1.seated && e1.fr === 0, 'E sits down, Esc while Grok walks over cancels cleanly ' + JSON.stringify([w1, e1]));
   await page.waitForTimeout(300); const o4 = await or();
-  chk(!o4.up && o4.cur === 'landscape', 'Esc also restores the side view ' + JSON.stringify(o4));
+  chk(!o4.up && o4.cur === 'landscape' && o4.fs && !o4.at.slice(1).length && !o4.all.includes('fs-denied'), 'cancel before the game: fullscreen won back in the gesture, phone stays sideways, never locked upright ' + JSON.stringify([o4.up, o4.cur, o4.fs, o4.at, o4.log]));
   // ---- portrait phone (390x844): upright game, ✕ reachable, no turn-sideways screen, board maximised (t875u) ----
   await page.setViewportSize({ width: 390, height: 844 });
   await ev(() => { const A = window.__arcade, W = window.__tp.whiteRoom.position.x, C = window.__chess; A.monkey.position.set(W + C.TX - 2.2, 0, C.TZ); A.st.vel.set(0, 0, 0); C.fast = true; });

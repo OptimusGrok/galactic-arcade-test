@@ -107,8 +107,11 @@ export function setupChessTable(o) {
   // idle -> sit (player walks to the chair, sits) -> wait (Grok walks over) -> gsit (Grok sits) -> zoom -> game -> unzoom -> (player stands, free) ; Grok: back -> home
   const api = { state: 'idle', gstate: 'home', near: false, open: false, opens: 0, closes: 0, frame: null, src: SRC, hold: null,   /* hold: tests / screenshots park the sequence at 'both' or 'zoom' */ TX, TZ, obst: OBST, group: tbl, btn, fast: false, t: 0, gt: 0 };
   const V = (x, y, z) => new THREE.Vector3(x, y, z), W = (x, y, z) => V(WXp + TX + x, y, TZ + z);
-  const P_SEAT = () => W(-SIT, 0, 0), P_STAND = () => W(-SIT - 0.5, 0, 0);
-  const G_SEAT = V(TX + SIT, 0, TZ), G_STAND = V(TX + SIT + 0.55, 0, TZ);
+  // t876u: both sit into their chair FROM THE SIDE: step up beside the chair (clear of its arm, SIDE m along z), face the board,
+  // then slide sideways into the seat while bending at the hips and knees; standing up is the exact reverse.
+  const SIDE = 0.64; let pSide = -1;   // the player uses whichever side of the chair they came from
+  const P_SEAT = () => W(-SIT, 0, 0), P_STAND = () => W(-SIT, 0, pSide * SIDE);
+  const G_SEAT = V(TX + SIT, 0, TZ), G_STAND = V(TX + SIT, 0, TZ - SIDE);   // Grok comes in on the north side (his route's side)
   // Grok's walk from behind the counter (out through its open east side) to the far chair. Shop-local points.
   const route = () => [V(home.x + 2.4, 0, home.z + 0.35), V(TX + SIT + 1.0, 0, TZ - 2.4), G_STAND.clone()];
   const camOver = () => ({ pos: W(-1.75, 1.85, 2.15), at: W(0.15, 0.7, -0.15) });
@@ -125,18 +128,21 @@ export function setupChessTable(o) {
     if (api.state !== 'idle' || api.gstate !== 'home' || !api.near) return false;
     const m = getMonkey(); if (!m) return false;
     api.opens++; api.state = 'sit'; api.t = 0; btn.classList.remove('on'); bx.classList.add('on'); clearKeys();
-    pFrom = m.position.clone(); pFace0 = st.face; st.seated = 'chess'; st.vel.set(0, 0, 0);
+    pFrom = m.position.clone(); pFace0 = st.face; pSide = (pFrom.z - TZ) > 0 ? 1 : -1; st.seated = 'chess'; st.vel.set(0, 0, 0);
     try { if (st.fly) { st.fly.air = false; st.fly.thrust = false; st.fly.hold = false; st.fly.vy = 0; } st.jump = null; } catch (e) {}
     camTo(camOver(), api.fast ? 0.2 : 1.1);
-    upright(true);   // t875u: chess plays upright on a phone, asked for inside the PLAY tap (like Ghost 256 / Strike / Cybercity); iPad / PC: no lock
+    // t876u: the phone stays SIDEWAYS while everyone sits down and the camera zooms in; it turns upright the moment the game appears
+    // (showFrame). Android only locks orientation in fullscreen and only enters fullscreen from a user gesture, so (re)enter fullscreen
+    // here inside the PLAY tap; the later portrait lock then needs no gesture. iOS (no lock): the upright fallback also switches at game start.
+    try { window.__fsNow && window.__fsNow(); } catch (e) {}
     api.gstate = 'out'; walkI = -1; gPos0.copy(grok.root.position); gYaw0 = grok.root.rotation.y; nextLeg(); return true; }
   function leave(why) {
     if (api.state === 'idle' || api.state === 'unzoom') return false;
-    api.lastExit = why || 'x'; closeFrame(); upright(false);   // back to the arcade's side view, inside the ✕ / Esc gesture
+    api.lastExit = why || 'x'; closeFrame(); if (api.upright) upright(false);   // back to the side view inside the ✕ / Esc gesture (never turned upright before the game: nothing to undo)
     api.state = 'unzoom'; api.t = 0; bx.classList.remove('on'); camTo(camOver(), api.fast ? 0.2 : 1.0); return true; }
   function openFrame() { if (api.frame) return; const f = api.frame = document.createElement('iframe'); f.src = SRC; f.title = 'Chess'; f.allow = 'autoplay'; ov.appendChild(f);
     f.addEventListener('load', () => { try { f.contentWindow.addEventListener('keydown', e => { if (e.code === 'Escape') { e.preventDefault(); leave('esc'); } }, true); } catch (e) {} }); }
-  function showFrame() { api.open = true; ov.classList.add('on'); try { api.frame && api.frame.contentWindow.focus(); } catch (e) {}
+  function showFrame() { api.open = true; ov.classList.add('on'); if (!api.upright) upright(true);   // t876u: rotate upright just as the game starts try { api.frame && api.frame.contentWindow.focus(); } catch (e) {}
     const cv = window.__arcade && window.__arcade.renderer && window.__arcade.renderer.domElement; if (cv) cv.style.visibility = 'hidden'; try { window.__updateTurn && window.__updateTurn(); } catch (e) {} }
   function closeFrame() { const was = api.open || !!api.frame; api.open = false; ov.classList.remove('on'); const f = api.frame; api.frame = null;
     if (f) { try { f.src = 'about:blank'; } catch (e) {} f.remove(); }   // unload: stops the chess engine worker, battles + audio
@@ -155,6 +161,7 @@ export function setupChessTable(o) {
     for (const L of gl) { L.hip.rotation.x = -1.45 * k; L.thigh.rotation.x = 0; if (L.shin) L.shin.rotation.x = 1.45 * k; }
     for (const a of ga) { a.sh.rotation.x = -0.1 - 0.75 * k; a.sh.rotation.z = a.sd * (0.14 + 0.1 * k); a.el.rotation.x = -1.0 + 0.35 * k + Math.sin(t * 1.3 + a.sd) * 0.04 * k; }
     gh.rotation.x = 0.3 * k + Math.sin(t * 0.9) * 0.03; gh.rotation.y = Math.sin(t * 0.37) * 0.25 * k; }
+  function grokLean(a) { grok.root.rotation.x = a; }   // lean the body forward while lowering / rising (weight over the knees)
   function grokWalk(gait, stride) { const r = grok.root;
     r.position.y = Math.abs(Math.sin(gait)) * 0.028 * stride; r.rotation.z = Math.sin(gait) * 0.03 * stride; r.rotation.x = -Math.abs(Math.sin(gait)) * 0.02 * stride;
     for (const L of gl) { const ph = gait + (L.sd > 0 ? 0 : Math.PI); L.hip.rotation.x = Math.sin(ph) * 0.55 * stride; L.thigh.rotation.x = Math.max(0, -Math.sin(ph)) * 0.35 * stride; if (L.shin) L.shin.rotation.x = 0; }
@@ -184,12 +191,17 @@ export function setupChessTable(o) {
       if (k >= 1 && !nextLeg()) { grokRest(); if (api.gstate === 'out') { api.gstate = 'sitting'; api.gsit = 0; gPos0.copy(r.position); gYaw0 = r.rotation.y; }
         else { api.gstate = 'turn'; api.gsit = 0; gYaw0 = r.rotation.y; } } }
     else if (api.gstate === 'sitting' || api.gstate === 'seated') {
-      if (api.gstate === 'sitting') api.gsit = Math.min(1, api.gsit + dt / (fast ? 0.15 : 0.9)); const k = sm(api.gsit);
-      r.position.lerpVectors(gPos0, G_SEAT, k); r.rotation.y = lerpA(gYaw0, -Math.PI / 2, Math.min(1, k * 1.6)); grokSit(k, t);
-      if (api.gstate === 'sitting' && api.gsit >= 1) api.gstate = 'seated';
+      if (api.gstate === 'sitting') api.gsit = Math.min(api.hold === 'gsit' ? 0.6 : 1, api.gsit + dt / (fast ? 0.2 : 1.6));   /* hold 'gsit': tests park him mid-sit */
+      const p = api.gstate === 'seated' ? 1 : api.gsit, kT = sm(Math.min(1, p / 0.3)), q = Math.max(0, (p - 0.25) / 0.75);   // turn to face the board beside the chair, then
+      r.position.lerpVectors(gPos0, G_SEAT, sm(Math.min(1, q * 1.1))); r.rotation.y = lerpA(gYaw0, -Math.PI / 2, kT);           // side-step into the seat while lowering
+      grokSit(sm(Math.max(0, Math.min(1, (q - 0.08) / 0.92))), t); grokLean(Math.sin(Math.PI * Math.min(1, q)) * 0.22);
+      api.gside = Math.abs(r.position.z - TZ);
+      if (api.gstate === 'sitting' && api.gsit >= 1) { api.gstate = 'seated'; grokLean(0); }
       if (api.gstate === 'seated' && (api.state === 'idle' || (api.state === 'unzoom' && api.standG))) { api.gstate = 'standing'; api.gsit = 1; } }   // player left (or never waited): Grok gets up too
     else if (api.gstate === 'standing') {
-      api.gsit = Math.max(0, api.gsit - dt / (fast ? 0.15 : 0.7)); const k = sm(api.gsit); r.position.lerpVectors(G_STAND, G_SEAT, k); grokSit(k, t);
+      api.gsit = Math.max(0, api.gsit - dt / (fast ? 0.2 : 1.2)); const q = api.gsit;   // reverse: rise and side-step out beside the chair
+      r.position.lerpVectors(G_STAND, G_SEAT, sm(Math.min(1, q * 1.15))); r.rotation.y = -Math.PI / 2;
+      grokSit(sm(Math.max(0, Math.min(1, (q - 0.08) / 0.92))), t); grokLean(Math.sin(Math.PI * q) * 0.22); api.gside = Math.abs(r.position.z - TZ);
       if (api.gsit <= 0) { grokRest(); api.gstate = 'back'; walkI = -1; nextLeg(); } }
     else if (api.gstate === 'turn') { api.gsit = Math.min(1, api.gsit + dt / 0.5); r.rotation.y = lerpA(gYaw0, home.yaw, sm(api.gsit)); r.position.set(home.x, 0, home.z);
       if (api.gsit >= 1) { grokRest(); gh.rotation.set(0, 0, 0); api.gstate = 'home'; api.homes = (api.homes || 0) + 1; } }
@@ -201,18 +213,19 @@ export function setupChessTable(o) {
       btn.classList.toggle('on', api.near); return; }
     st.vel.set(0, 0, 0); st.speed = 0; st.play = 0; m.visible = true;
     const seat = P_SEAT(), stand = P_STAND(), FACE = Math.PI / 2;
-    if (api.state === 'sit') { const D1 = fast ? 0.15 : Math.max(0.5, Math.min(1.4, pFrom.distanceTo(stand) / 2.2)), D2 = fast ? 0.15 : 0.6;
+    if (api.state === 'sit') { const D1 = fast ? 0.15 : Math.max(0.5, Math.min(1.4, pFrom.distanceTo(stand) / 2.2)), D2 = fast ? 0.2 : 1.1;
       if (api.t < D1) { const k = sm(api.t / D1); m.position.lerpVectors(pFrom, stand, k); m.position.y = 0; st.face = lerpA(pFace0, Math.atan2(stand.x - pFrom.x, stand.z - pFrom.z) || FACE, Math.min(1, k * 3)); if (k > 0.7) st.face = lerpA(st.face, FACE, (k - 0.7) / 0.3); walkLegs(m, api.t * 9); }
-      else { const k = sm(Math.min(1, (api.t - D1) / D2)); m.position.lerpVectors(stand, seat, k); m.position.y = 0; st.face = FACE; playerSit(m, k); if (k >= 1) { api.state = 'wait'; api.t = 0; } } }
+      else { const q = Math.min(1, (api.t - D1) / D2); m.position.lerpVectors(stand, seat, sm(Math.min(1, q * 1.1))); m.position.y = 0; st.face = FACE; playerSit(m, sm(Math.max(0, (q - 0.08) / 0.92))); if (q >= 1) { api.state = 'wait'; api.t = 0; } } }
     else if (api.state === 'wait') { m.position.copy(seat); st.face = FACE; playerSit(m, 1);
       if (api.gstate === 'seated') { api.state = 'both'; api.t = 0; } }
     else if (api.state === 'both') { m.position.copy(seat); st.face = FACE; playerSit(m, 1); if (api.t > (fast ? 0.1 : 0.9) && api.hold !== 'both') { api.state = 'zoom'; api.t = 0; openFrame(); camTo(camBoard(), fast ? 0.2 : 1.5); } }
     else if (api.state === 'zoom') { m.position.copy(seat); st.face = FACE; playerSit(m, 1); if (camT && camT.t >= 1 && api.hold !== 'zoom') { api.state = 'game'; api.t = 0; showFrame(); } }
     else if (api.state === 'game') { m.position.copy(seat); st.face = FACE; playerSit(m, 1); }
-    else if (api.state === 'unzoom') { const D = fast ? 0.2 : 1.0, S = fast ? 0.15 : 0.6;
+    else if (api.state === 'unzoom') { const D = fast ? 0.2 : 1.0, S = fast ? 0.2 : 1.0;
       if (api.t < D) { m.position.copy(seat); playerSit(m, 1); }
-      else { const k = sm(Math.min(1, (api.t - D) / S)); m.position.lerpVectors(seat, stand, k); playerSit(m, 1 - k); api.standG = true;
-        if (k >= 1) { api.state = 'idle'; st.seated = null; camT = null; api.standG = false; if (api.gstate === 'seated') { api.gstate = 'standing'; api.gsit = 1; }
+      else { const q = Math.min(1, (api.t - D) / S), r1 = 1 - q;   // reverse of the sit: rise, side-step out beside the chair
+        m.position.lerpVectors(stand, seat, sm(Math.min(1, r1 * 1.1))); playerSit(m, sm(Math.max(0, (r1 - 0.08) / 0.92))); api.standG = true;
+        if (q >= 1) { api.state = 'idle'; st.seated = null; camT = null; api.standG = false; if (api.gstate === 'seated') { api.gstate = 'standing'; api.gsit = 1; }
           const u = m.userData; if (u && u.hips) u.hips.position.y = 0.8; st.yaw = -Math.PI / 2; st.pitch = 0.3; st.lookT = st.t; clearKeys(); return; } }
       st.face = FACE; }
     m.rotation.y = st.face;
