@@ -1,4 +1,4 @@
-/* t856u / v237 + t857u / v238 + t858u / v239 + t859u / v240: Quest thumbsticks must move the player.
+/* t856u / v237 + t857u / v238 + t858u / v239 + t859u / v240 + t864u / v241: Quest thumbsticks must move the player.
    v237 reads getGamepads(); v238 translates stick-as-wheel; v239 also catches
    document/sentinel scroll (Quest's official 2D mapping), ctrl+wheel and
    visualViewport scale (browser zoom), gesturestart/change, two-finger pinch,
@@ -6,7 +6,7 @@
    off. Play copies get the same helper. ?qdbg=1 shows UA, scale, pads, counts. */
 const { open } = require('./lib');
 
-const QUEST_UA = 'Mozilla/5.0 (Linux; Android 12; Quest 3) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/36.0.0.0.0 Chrome/122.0.6261.132 Mobile Safari/537.36';
+const QUEST_UA = 'Mozilla/5.0 (X11; Linux x86_64; Quest 3) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/36.0.0.0.0 Chrome/122.0.6261.132 VR Safari/537.36';
 
 function initPads() {
   function btn() { return { pressed: false, touched: false, value: 0 }; }
@@ -26,7 +26,7 @@ function initPads() {
   let ok = true;
   const chk = (c, m, x) => { console.log((c ? 'PASS ' : 'FAIL ') + m + (x !== undefined ? ' ' + JSON.stringify(x).slice(0, 400) : '')); if (!c) ok = false; };
 
-  const o = await open({ phone: true, w: 1280, h: 720, ua: QUEST_UA, init: initPads });
+  const o = await open({ w: 1280, h: 720, ua: QUEST_UA, init: initPads });
   const { page, errors, close } = o;
 
   const detected = await page.evaluate(() => {
@@ -176,6 +176,129 @@ function initPads() {
 
   await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
 
+  // t864u / v241: Dave's Quest 3 overlay (in game, left stick held):
+  // wheel=238 dx=-37.5 dy=0 age="-", src none, move 0, touch=134, gamepads 0.
+  // The controller ray keeps firing pointermove (pointerType "touch") which used
+  // to latch lastDrag and skip ingest.
+  const rayDx = await page.evaluate(() => {
+    const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
+    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.vel.set(0, 0, 0); st.joy.on = false;
+    const d0 = st.dist;
+    for (let i = 0; i < 8; i++) {
+      window.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch',
+        clientX: 200 + i, clientY: 200, buttons: 0, isPrimary: true
+      }));
+    }
+    for (let i = 0; i < 4; i++) {
+      window.dispatchEvent(new WheelEvent('wheel', { deltaX: -37.5, deltaY: 0, deltaMode: 0, bubbles: true, cancelable: true }));
+    }
+    const r = Q.read();
+    A.applyQuestPad(1 / 60);
+    for (let i = 0; i < 45; i++) A.step(1 / 60);
+    return {
+      source: r.source, age: r.wheel && r.wheel.age, ua: /OculusBrowser/.test(r.ua) && /Quest 3/.test(r.ua) && /VR Safari/.test(r.ua),
+      x: +A.monkey.position.x.toFixed(3), z: +A.monkey.position.z.toFixed(3),
+      on: st.joy.on, joyX: +st.joy.x.toFixed(3), joyY: +st.joy.y.toFixed(3),
+      dist: st.dist, d0, dx: r.wheel && r.wheel.dx, dy: r.wheel && r.wheel.dy
+    };
+  });
+  chk(rayDx.ua && rayDx.source === 'wheel' && rayDx.age != null && rayDx.on && rayDx.joyX < -0.3 && rayDx.x < -0.3 && rayDx.dist === rayDx.d0,
+    'Quest-ray pointermove + deltaX-only wheel strafes and records age', rayDx);
+
+  await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
+
+  const rayDy = await page.evaluate(() => {
+    const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
+    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.vel.set(0, 0, 0); st.joy.on = false;
+    for (let i = 0; i < 4; i++) {
+      window.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch',
+        clientX: 210, clientY: 200 + i, buttons: 0, isPrimary: true
+      }));
+    }
+    for (let i = 0; i < 4; i++) {
+      window.dispatchEvent(new WheelEvent('wheel', { deltaX: 0, deltaY: -80, deltaMode: 0, bubbles: true, cancelable: true }));
+    }
+    const r = Q.read();
+    A.applyQuestPad(1 / 60);
+    for (let i = 0; i < 45; i++) A.step(1 / 60);
+    return { source: r.source, age: r.wheel && r.wheel.age, on: st.joy.on, y: +st.joy.y.toFixed(3), z: +A.monkey.position.z.toFixed(3) };
+  });
+  chk(rayDy.source === 'wheel' && rayDy.age != null && rayDy.on && rayDy.y < -0.5 && rayDy.z < 4.2,
+    'Quest-ray hover + deltaY-only wheel walks forward', rayDy);
+
+  await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
+
+  const staleDrag = await page.evaluate(() => {
+    const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
+    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.vel.set(0, 0, 0); st.joy.on = false;
+    const ev = (type, extra) => window.dispatchEvent(new PointerEvent(type, Object.assign({
+      bubbles: true, cancelable: true, pointerId: 2, pointerType: 'mouse', isPrimary: true, clientX: 100, clientY: 100
+    }, extra)));
+    ev('pointerdown', { buttons: 1, button: 0 });
+    ev('pointermove', { buttons: 1, button: 0, clientX: 130, clientY: 120 });
+    ev('pointerup', { buttons: 0, button: 0, clientX: 130, clientY: 120 });
+    for (let i = 0; i < 4; i++) {
+      window.dispatchEvent(new WheelEvent('wheel', { deltaX: 0, deltaY: -80, deltaMode: 0, bubbles: true, cancelable: true }));
+    }
+    const r = Q.read();
+    A.applyQuestPad(1 / 60);
+    return { source: r.source, age: r.wheel && r.wheel.age, on: st.joy.on, y: +st.joy.y.toFixed(3) };
+  });
+  chk(staleDrag.source === 'wheel' && staleDrag.age != null && staleDrag.on && staleDrag.y < -0.5,
+    'pointerup clears a stale drag so the next wheel still walks', staleDrag);
+
+  await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
+
+  const pinchThenWheel = await page.evaluate(() => {
+    const Q = window.__gaQuestPad;
+    const fire = (type, touches) => {
+      const ev = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(ev, 'touches', { value: touches });
+      window.dispatchEvent(ev);
+    };
+    const two = [{ identifier: 1, clientX: 100, clientY: 100 }, { identifier: 2, clientX: 180, clientY: 100 }];
+    fire('touchstart', two);
+    fire('touchmove', two);
+    window.dispatchEvent(new WheelEvent('wheel', { deltaX: 0, deltaY: -80, deltaMode: 0, bubbles: true, cancelable: true }));
+    const mid = Q.read();
+    fire('touchend', []);
+    window.dispatchEvent(new WheelEvent('wheel', { deltaX: 0, deltaY: -80, deltaMode: 0, bubbles: true, cancelable: true }));
+    const after = Q.read();
+    return {
+      midSrc: mid.source, midY: mid.move && +((mid.move.y) || 0).toFixed(3),
+      afterSrc: after.source, afterY: after.move && +((after.move.y) || 0).toFixed(3)
+    };
+  });
+  chk(pinchThenWheel.midSrc !== 'wheel' && pinchThenWheel.afterSrc === 'wheel' && pinchThenWheel.afterY < -0.3,
+    'wheel is ignored only while a real two-finger pinch is active', pinchThenWheel);
+
+  await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
+
+  const startGate = await page.evaluate(() => {
+    const Q = window.__gaQuestPad;
+    const el = document.createElement('div');
+    el.id = 'start';
+    el.style.cssText = 'position:fixed;inset:0;z-index:100;background:#010101';
+    document.body.appendChild(el);
+    window.__start = Object.assign(window.__start || {}, { shown: true, dismissed: false });
+    window.dispatchEvent(new WheelEvent('wheel', { deltaX: 0, deltaY: -80, deltaMode: 0, bubbles: true, cancelable: true }));
+    const blocked = Q.read();
+    el.classList.add('out');
+    el.style.opacity = '0';
+    el.style.pointerEvents = 'none';
+    window.__start.dismissed = true;
+    window.dispatchEvent(new WheelEvent('wheel', { deltaX: 0, deltaY: -80, deltaMode: 0, bubbles: true, cancelable: true }));
+    const after = Q.read();
+    el.remove();
+    return { blockedSrc: blocked.source, afterSrc: after.source, afterY: after.move && +((after.move.y) || 0).toFixed(3) };
+  });
+  chk(startGate.blockedSrc !== 'wheel' && startGate.afterSrc === 'wheel' && startGate.afterY < -0.3,
+    'start-screen gate uses #start visibility and clears once it is dismissed', startGate);
+
+  await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
+
   const scrollWalk = await page.evaluate(() => {
     const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
     A.monkey.position.set(0, 0, 5); st.yaw = 0; st.vel.set(0, 0, 0); st.joy.on = false;
@@ -254,20 +377,18 @@ function initPads() {
     const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
     A.monkey.position.set(0, 0, 5); st.yaw = 0; st.vel.set(0, 0, 0); st.joy.on = false;
     const d0 = st.dist;
-    const fire = (type, a, b) => {
+    const fire = (type, pts) => {
       const ev = new Event(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(ev, 'touches', { value: [
-        { identifier: 1, clientX: a.x, clientY: a.y },
-        { identifier: 2, clientX: b.x, clientY: b.y }
-      ] });
+      Object.defineProperty(ev, 'touches', { value: (pts || []).map((p, i) => ({ identifier: i + 1, clientX: p.x, clientY: p.y })) });
       window.dispatchEvent(ev);
       return ev.defaultPrevented;
     };
-    fire('touchstart', { x: 100, y: 100 }, { x: 180, y: 100 });
-    const blocked = fire('touchmove', { x: 100, y: 100 }, { x: 280, y: 100 });
+    fire('touchstart', [{ x: 100, y: 100 }, { x: 180, y: 100 }]);
+    const blocked = fire('touchmove', [{ x: 100, y: 100 }, { x: 280, y: 100 }]);
     const r = Q.read();
     A.applyQuestPad(1 / 60);
     for (let i = 0; i < 45; i++) A.step(1 / 60);
+    fire('touchend', []);
     return {
       blocked, source: r.source, on: st.joy.on, y: +st.joy.y.toFixed(3),
       z: +A.monkey.position.z.toFixed(3), dist: st.dist, d0,
@@ -297,7 +418,7 @@ function initPads() {
     return { has: !!el, text: (text || ''), source: r.source, n: r.n, scale: r.scale, pads: r.pads, ua: r.ua, counts: r.counts };
   });
   chk(dbg.has
-    && /GA Quest dbg v240/.test(dbg.text)
+    && /GA Quest dbg v241/.test(dbg.text)
     && /UA /.test(dbg.text) && /OculusBrowser|Quest/.test(dbg.text)
     && /src wheel/.test(dbg.text)
     && /vv\.scale=/.test(dbg.text) && /dpr=/.test(dbg.text)
@@ -305,7 +426,7 @@ function initPads() {
     && /keys /.test(dbg.text)
     && /counts wheel=/.test(dbg.text) && /scroll=/.test(dbg.text)
     && /vvR=/.test(dbg.text) && /gest=/.test(dbg.text) && /pinch=/.test(dbg.text)
-    && /xr inline=/.test(dbg.text), '?qdbg overlay shows UA, vv.scale, pad ids, and event counts', { text: dbg.text.slice(0, 800), n: dbg.n, scale: dbg.scale, pads: dbg.pads, counts: dbg.counts });
+    && /start=/.test(dbg.text) && /pinch=/.test(dbg.text) && /xr inline=/.test(dbg.text), '?qdbg overlay shows UA, vv.scale, pad ids, and event counts', { text: dbg.text.slice(0, 800), n: dbg.n, scale: dbg.scale, pads: dbg.pads, counts: dbg.counts });
 
   // --- play copy: left stick synthesizes WASD; wheel is also blocked ---
   // Resolve against the arcade page path so this works on GitHub Pages

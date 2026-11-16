@@ -3,7 +3,7 @@
 // Usage: node test/start.js [phone]
 const { open, play } = require('./lib');
 const fs = require('fs');
-const QUEST_UA = 'Mozilla/5.0 (Linux; Android 12; Quest 3) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/36.0.0.0.0 Chrome/122.0.6261.132 Mobile Safari/537.36';
+const QUEST_UA = 'Mozilla/5.0 (X11; Linux x86_64; Quest 3) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/36.0.0.0.0 Chrome/122.0.6261.132 VR Safari/537.36';
 const ARG = process.argv[2];
 const PH = ARG === 'phone';
 const QUEST = ARG === 'quest' || process.env.GA_QUEST === '1';
