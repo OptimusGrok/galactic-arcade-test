@@ -1,4 +1,4 @@
-// t856u / v237 + t857u / v238 + t858u / v239: Quest 2D thumbstick support.
+// t856u / v237 + t857u / v238 + t858u / v239 + t859u / v240: Quest 2D thumbstick support.
 // Research (Meta Browser specs, Meta input mappings, WebXR issues #995/#1347, Chromium wheel routing):
 //  - In 2D Quest Browser the thumbstick is a SCROLL device (like a mouse wheel), not a Gamepad.
 //    XR controllers are typically exposed via getGamepads() only inside a WebXR session.
@@ -9,6 +9,10 @@
 //    there was no scroll target.
 //  - wheel may never reach JS (compositor scroll / only first event cancelable). A scrollable
 //    sentinel + visualViewport/gesture/pinch/key fallbacks are needed.
+//  - v240: do NOT make html/body overflow:scroll or inject a 300vw spacer — that recentres
+//    the document and can slide position:fixed #start off-screen. Do NOT style all canvases
+//    as fullscreen (that blew #gaCv, the start-screen player preview, over the PLAY button).
+//    Isolated #gaQscroll sentinel only; pin only the room canvas (body > canvas) behind #start.
 //  - An "Enter VR controls" WebXR session is NOT added: immersive-vr would leave the 2D arcade,
 //    and inline sessions do not expose XR thumbsticks. Flag support in ?qdbg=1 instead.
 (function (root) {
@@ -23,7 +27,7 @@
   var lastWheelDx = 0, lastWheelDy = 0, lastWheelCtrl = false;
   var heldKeys = Object.create(null);
   var dbgEl = null, dbgOn = false, unlocked = false, recentring = false;
-  var sentinel = null, spacer = null, midX = 0, midY = 0, midSX = 0, midSY = 0;
+  var sentinel = null, midSX = 0, midSY = 0;
   var lastScale = 1, lastVvX = 0, lastVvY = 0, pinchDist0 = 0, gestureScale0 = 1;
   var lastWheelStamp = 0;
   var counts = { wheel: 0, mousewheel: 0, scroll: 0, vvresize: 0, vvscroll: 0, gesture: 0, touch: 0, pinch: 0, key: 0, gamepad: 0, pointer: 0 };
@@ -35,6 +39,22 @@
       var ua = navigator.userAgent || '';
       return /OculusBrowser/i.test(ua) || /\bQuest\b/i.test(ua);
     } catch (e) { return false; }
+  }
+
+  function startUp() {
+    try {
+      var el = document.getElementById('start');
+      if (el && window.__start && window.__start.shown && !window.__start.dismissed) return true;
+    } catch (e) {}
+    return false;
+  }
+
+  function fromStartUI(e) {
+    var t = e && e.target;
+    try {
+      if (t && t.closest && t.closest('#start, #gaP, #opt, #turnHint, #homeQ')) return true;
+    } catch (err) {}
+    return false;
   }
 
   function wantDebug() {
@@ -211,14 +231,12 @@
     try {
       var s = document.createElement('style');
       s.setAttribute('data-ga-quest', '1');
-      // Desktop-mode Quest ignores the viewport meta, so user-scalable=no cannot stop browser zoom.
-      // Give the compositor a scroll target (unlocked overflow + spacer) and pin the canvas so the
-      // room does not slide away. touch-action/overscroll are relaxed so stick-as-scroll is not
-      // remapped to page zoom.
-      s.textContent = 'html.gaQuest,html.gaQuest body{overflow:scroll!important;overscroll-behavior:auto!important;touch-action:pan-x pan-y!important}'
-        + 'html.gaQuest canvas{position:fixed!important;inset:0;width:100%!important;height:100%!important;z-index:1}'
+      // Never unlock document overflow or inflate the layout: position:fixed #start / HUD would
+      // scroll off, and a blanket canvas rule made #gaCv (start preview) cover PLAY.
+      s.textContent = 'html.gaQuest,html.gaQuest body{overflow:hidden!important;overscroll-behavior:none!important}'
+        + 'html.gaQuest body>canvas,html.gaQuest canvas.gaQuestRoom{position:fixed!important;inset:0;width:100%!important;height:100%!important;z-index:0}'
+        + 'html.gaQuest #start{z-index:100!important}'
         + '#gaQscroll{position:fixed;inset:0;overflow:scroll;z-index:0;pointer-events:none;opacity:0;overscroll-behavior:auto}'
-        + '#gaQspacer{position:absolute;left:0;top:0;width:300vw;height:300vh;pointer-events:none;z-index:-1}'
         + '#gaQdbg{position:fixed;top:max(4px,env(safe-area-inset-top));left:max(4px,env(safe-area-inset-left));z-index:2147483000;pointer-events:none;background:#000c;color:#9ff;font:11px/1.35 ui-monospace,Menlo,Consolas,monospace;padding:6px 8px;border:1px solid #0ff6;border-radius:6px;white-space:pre;max-width:min(96vw,420px)}';
       (document.head || document.documentElement).appendChild(s);
     } catch (e) {}
@@ -252,7 +270,7 @@
     var c = s.counts || counts;
     var ua = (s.ua || '').slice(0, 180);
     var xr = s.xr || {};
-    dbgEl.textContent = 'GA Quest dbg v239'
+    dbgEl.textContent = 'GA Quest dbg v240'
       + '\nUA ' + (ua || '-')
       + '\nsrc ' + (s.source || 'none')
       + ' unlocked=' + (s.unlocked ? '1' : '0')
@@ -298,6 +316,7 @@
     // v239: ctrl/meta+wheel is how Chromium pinch/page-zoom often arrives. That is the stick
     // in desktop-mode Quest, not a user pinch — map it to movement and keep the camera still.
     if (lastDrag && performance.now() - lastDrag < 100) return;
+    if (startUp() || fromStartUI(e)) return;
     var a = deltaToAxis(lastWheelDx, lastWheelDy, e.deltaMode || 0);
     ingest('wheel', a.x, a.y);
   }
@@ -305,9 +324,9 @@
   function recen() {
     recentring = true;
     try {
-      var se = document.scrollingElement || document.documentElement;
-      if (se && midX != null) { se.scrollLeft = midX; se.scrollTop = midY; }
       if (sentinel) { sentinel.scrollLeft = midSX; sentinel.scrollTop = midSY; }
+      var se = document.scrollingElement || document.documentElement;
+      if (se && (se.scrollLeft || se.scrollTop)) { se.scrollLeft = 0; se.scrollTop = 0; }
     } catch (e) {}
     recentring = false;
   }
@@ -319,12 +338,12 @@
     lastScrollStamp = stamp;
     bump('scroll');
     if (recentring) return;
+    if (startUp()) { recen(); return; }
     if (performance.now() - lastWheelEvt < 50) { recen(); return; }
     if (lastDrag && performance.now() - lastDrag < 100) { recen(); return; }
     var isSent = sentinel && (e.target === sentinel);
-    var el = isSent ? sentinel : (document.scrollingElement || document.documentElement);
-    var cx = isSent ? midSX : midX, cy = isSent ? midSY : midY;
-    var dx = (el.scrollLeft || 0) - cx, dy = (el.scrollTop || 0) - cy;
+    if (!isSent) { recen(); return; }
+    var dx = (sentinel.scrollLeft || 0) - midSX, dy = (sentinel.scrollTop || 0) - midSY;
     recen();
     if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
     var a = deltaToAxis(dx, dy, 0);
@@ -339,6 +358,7 @@
     var dScale = scale - lastScale;
     var dx = x - lastVvX, dy = y - lastVvY;
     lastScale = scale; lastVvX = x; lastVvY = y;
+    if (startUp()) return;
     if (performance.now() - lastWheelEvt < 50) return;
     if (lastDrag && performance.now() - lastDrag < 100) return;
     // Zoom in (scale up) -> forward (negative joy.y), matching "stick up zooms in".
@@ -349,6 +369,7 @@
   function onGesture(e) {
     bump('gesture');
     if (e.cancelable) e.preventDefault();
+    if (startUp() || fromStartUI(e)) return;
     if (e.type === 'gesturestart') { gestureScale0 = e.scale || 1; return; }
     var sc = e.scale || 1;
     var d = sc - (e.type === 'gestureend' ? sc : gestureScale0);
@@ -373,6 +394,7 @@
       if (Math.abs(dd) > 2) {
         bump('pinch');
         if (e.cancelable) e.preventDefault();
+        if (startUp() || fromStartUI(e)) return;
         ingest('pinch', 0, -clamp(dd / 80, -1, 1));
       }
     } else {
@@ -389,12 +411,6 @@
   function installScrollCatcher() {
     try { document.documentElement.classList.add('gaQuest'); } catch (e) {}
     if (!document.body) return;
-    if (!spacer) {
-      spacer = document.createElement('div');
-      spacer.id = 'gaQspacer';
-      spacer.setAttribute('aria-hidden', 'true');
-      document.body.insertBefore(spacer, document.body.firstChild);
-    }
     if (!sentinel) {
       sentinel = document.createElement('div');
       sentinel.id = 'gaQscroll';
@@ -404,10 +420,6 @@
       sentinel.appendChild(inner);
       document.body.appendChild(sentinel);
     }
-    midX = Math.floor((spacer.offsetWidth - (root.innerWidth || 0)) / 2);
-    midY = Math.floor((spacer.offsetHeight - (root.innerHeight || 0)) / 2);
-    if (midX < 10) midX = 400;
-    if (midY < 10) midY = 400;
     midSX = Math.floor((sentinel.scrollWidth - sentinel.clientWidth) / 2);
     midSY = Math.floor((sentinel.scrollHeight - sentinel.clientHeight) / 2);
     recen();
@@ -540,7 +552,7 @@
     if (isQuest()) {
       if (!sentinel && document.body) installScrollCatcher();
       var cv = document.querySelector('canvas');
-      if (cv && !cv.__gaQWheel) { cv.__gaQWheel = 1; attachWheel(cv); }
+      if (cv && !cv.__gaQWheel) { cv.__gaQWheel = 1; try { cv.classList.add('gaQuestRoom'); } catch (e) {} attachWheel(cv); }
       s = read();
       if (isPlayFrame()) applyPlay(s);
     } else {

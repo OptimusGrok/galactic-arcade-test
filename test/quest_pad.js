@@ -1,4 +1,4 @@
-/* t856u / v237 + t857u / v238 + t858u / v239: Quest thumbsticks must move the player.
+/* t856u / v237 + t857u / v238 + t858u / v239 + t859u / v240: Quest thumbsticks must move the player.
    v237 reads getGamepads(); v238 translates stick-as-wheel; v239 also catches
    document/sentinel scroll (Quest's official 2D mapping), ctrl+wheel and
    visualViewport scale (browser zoom), gesturestart/change, two-finger pinch,
@@ -191,13 +191,13 @@ function initPads() {
     const joy = { on: st.joy.on, x: +st.joy.x.toFixed(3), y: +st.joy.y.toFixed(3), source: r.source };
     for (let i = 0; i < 45; i++) A.step(1 / 60);
     return {
-      hasSent: !!sent, hasSpacer: !!spacer, mid,
+      hasSent: !!sent, hasSpacer: !!spacer, mid, overflow: getComputedStyle(document.documentElement).overflow,
       x: +A.monkey.position.x.toFixed(3), z: +A.monkey.position.z.toFixed(3),
       joy, dist: +st.dist.toFixed(3), recentred: Math.abs(sent.scrollTop - mid) < 2,
       counts: r.counts && r.counts.scroll
     };
   });
-  chk(scrollWalk.hasSent && scrollWalk.hasSpacer && scrollWalk.joy.source === 'scroll' && scrollWalk.joy.on && scrollWalk.joy.y < -0.3 && scrollWalk.z < 4.2 && scrollWalk.recentred, 'scroll sentinel turns offset into forward and recentres', scrollWalk);
+  chk(scrollWalk.hasSent && !scrollWalk.hasSpacer && /hidden/.test(scrollWalk.overflow) && scrollWalk.joy.source === 'scroll' && scrollWalk.joy.on && scrollWalk.joy.y < -0.3 && scrollWalk.z < 4.2 && scrollWalk.recentred, 'scroll sentinel turns offset into forward and recentres without a page spacer', scrollWalk);
 
   await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
 
@@ -297,7 +297,7 @@ function initPads() {
     return { has: !!el, text: (text || ''), source: r.source, n: r.n, scale: r.scale, pads: r.pads, ua: r.ua, counts: r.counts };
   });
   chk(dbg.has
-    && /GA Quest dbg v239/.test(dbg.text)
+    && /GA Quest dbg v240/.test(dbg.text)
     && /UA /.test(dbg.text) && /OculusBrowser|Quest/.test(dbg.text)
     && /src wheel/.test(dbg.text)
     && /vv\.scale=/.test(dbg.text) && /dpr=/.test(dbg.text)
