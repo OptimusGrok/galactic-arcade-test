@@ -81,6 +81,14 @@ const fs = require('fs');
   chk(!!reply && reply[0] === 'e4', 'e2-e4 played and the computer answered ' + JSON.stringify(reply));
   await page.waitForTimeout(2500);
   await shot((process.env.SHOTDIR || '/workspace/shots') + '/chess_game_open.png');
+  // Dave t874u: the game options sit UNDER the board, nothing overlaps, all fits on screen, ✕ clear
+  const layout = async tag => { const L = await ev(() => { const d = window.__chess.frame.contentDocument, w = window.__chess.frame.contentWindow, R = s => { const b = d.querySelector(s).getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom }; };
+      return { vw: w.innerWidth, vh: w.innerHeight, frame: R('#frame'), bot: R('#barBottom'), panel: R('aside.panel'), cap: R('#barTop'), newBtn: R('#newBtn'), set: R('#settings summary'), sh: d.documentElement.scrollHeight }; });
+    const inV = r => r.l >= 0 && r.t >= 0 && r.r <= L.vw + 0.5 && r.b <= L.vh + 0.5, clearX = r => r.l > 44 || r.t > 44;
+    chk(L.panel.t >= L.bot.b - 0.5 && L.panel.t >= L.frame.b && inV(L.frame) && inV(L.panel) && inV(L.newBtn) && inV(L.set) && clearX(L.frame) && clearX(L.cap) && clearX(L.panel) && L.sh <= L.vh + 1,
+      tag + ': options under the board, board + options fully on screen, ✕ clear ' + JSON.stringify(L)); };
+  await layout('landscape phone');
+  await shot((process.env.SHOTDIR || '/workspace/shots') + '/chess_options_bottom.png');
   const keys = await ev(() => { const w = window.__chess.frame.contentWindow; return Object.keys(w.localStorage).filter(k => /chess/.test(k)); });
   chk(keys.length && keys.every(k => k.startsWith('arcade_chess.')), 'arcade copy saves under its own keys ' + keys.join(','));
   // ---- ✕: game closes, camera pulls back, player stands, Grok walks home ----
@@ -112,6 +120,11 @@ const fs = require('fs');
   await page.waitForFunction(() => window.__chess.state === 'game', null, { timeout: 60000 }).catch(() => {});
   const pt = await ev(() => { const x = document.getElementById('chessX').getBoundingClientRect(); return { st: window.__chess.state, x: [x.left, x.top], top: document.elementFromPoint(x.left + 19, x.top + 19).id, turn: document.getElementById('turnHint') ? document.getElementById('turnHint').classList.contains('on') : false }; });
   chk(pt.st === 'game' && pt.x[0] <= 8 && pt.top === 'chessX' && !pt.turn, 'portrait phone: game open, ✕ on top, no turn-sideways ' + JSON.stringify(pt));
+  await page.waitForFunction(() => { try { return window.__chess.frame.contentDocument.querySelectorAll('.sq').length === 64; } catch (e) { return false; } }, null, { timeout: 60000 }).catch(() => {});
+  await layout('portrait phone');
+  await page.setViewportSize({ width: 820, height: 1180 }); await page.waitForTimeout(400); await layout('iPad portrait');
+  await page.setViewportSize({ width: 1280, height: 720 }); await page.waitForTimeout(400); await layout('PC');
+  await page.setViewportSize({ width: 390, height: 780 }); await page.waitForTimeout(300);
   await ev(() => window.__chess.leave('test'));
   await page.waitForFunction(() => window.__chess.state === 'idle' && window.__chess.gstate === 'home', null, { timeout: 60000 }).catch(() => {});
   const off = requests.filter(u => !/^(http:\/\/localhost|data:|blob:|about:)/.test(u) && !/supabase/i.test(u));
