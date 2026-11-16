@@ -264,7 +264,7 @@ export function setupPlay(A) {
     P.zooms++;
     if (m.prep) { P.mode = 'prep'; P.t = 0; P.t0 = performance.now(); P.pcam = null; P.cam0 = camera.position.clone(); P.look0 = monkey.position.clone().setY(1.25); m.anim('on', 0); }   // walk-up + headset on first, then zoomIn()
     else zoomIn(m);
-    const f = P.frame = document.createElement('iframe'); f.id = 'game'; const ver = window.__GA_VER || 'v244'; const tier = (window.__arcade && window.__arcade.tier && window.__arcade.tier.name) || ''; f.src = m.src + (m.src.indexOf('?') >= 0 ? '&' : '?') + 'ga=' + ver + (tier ? '&tier=' + encodeURIComponent(tier) : ''); f.allow = 'autoplay; fullscreen'; f.title = m.cab.name;
+    const f = P.frame = document.createElement('iframe'); f.id = 'game'; const ver = window.__GA_VER || 'v245'; const tier = (window.__arcade && window.__arcade.tier && window.__arcade.tier.name) || ''; f.src = m.src + (m.src.indexOf('?') >= 0 ? '&' : '?') + 'ga=' + ver + (tier ? '&tier=' + encodeURIComponent(tier) : ''); f.allow = 'autoplay; fullscreen'; f.title = m.cab.name;
     f.addEventListener('load', () => { P.loaded = true; try { f.contentWindow.addEventListener('keydown', ev => { if (TV.open) { ev.stopImmediatePropagation(); ev.preventDefault(); if (ev.code === 'Escape') closeView(); return; } if (ev.code === 'Escape') { ev.stopImmediatePropagation(); ev.preventDefault(); exit('esc'); return; } if (P.sub === 'demo') { ev.stopImmediatePropagation(); ev.preventDefault(); if (/^(Enter|Space|KeyE)$/.test(ev.code) && !ev.repeat) tryPlay(); } }, true); } catch (e) {} });
     P.loaded = false; document.body.appendChild(f);
   }
@@ -398,7 +398,7 @@ export function setupPlay(A) {
   ['pointerdown', 'touchstart'].forEach(t => ui.addEventListener(t, e => e.stopPropagation(), { passive: true }));
   bExit.addEventListener('click', () => exit('x'));
   // t766u: safety net - an upright game's portrait view never outlives the game (any exit path)
-  setInterval(() => { if (P.mode !== 'game' && P.mode !== 'zoomIn' && P.mode !== 'prep' && document.body.classList.contains('upright')) try { window.__orient && window.__orient(false); } catch (e) {} }, 400);
+  setInterval(() => { if (P.mode !== 'game' && P.mode !== 'zoomIn' && P.mode !== 'prep' && document.body.classList.contains('upright') && !(window.__chess && window.__chess.upright)) try { window.__orient && window.__orient(false); } catch (e) {} }, 400);
   // HUD home button: confirm, then leave any cabinet game / demo and show the start screen again (credits, tickets, floor kept)
   const homeQ = document.getElementById('homeQ'), homeN = document.getElementById('homeN');
   const homeAsk = on => { homeQ.classList.toggle('on', on); homeQ.setAttribute('aria-hidden', on ? 'false' : 'true'); P.homeAsk = on;

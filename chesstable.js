@@ -120,6 +120,7 @@ export function setupChessTable(o) {
   function camStep(dt) { if (!camT) return; camT.t = Math.min(1, camT.t + dt / camT.dur); const k = sm(camT.t);
     camera.position.lerpVectors(cam0.pos, camT.to.pos, k); camT.cur.lerpVectors(cam0.at, camT.to.at, k); camera.lookAt(camT.cur); }
   const locked = () => api.state !== 'idle';
+  api.upright = 0; const upright = on => { api.upright = on ? 1 : 0; api.orients = (api.orients || 0) + 1; try { window.__orient && window.__orient(!!on); } catch (e) {} };
   function play() {
     if (api.state !== 'idle' || api.gstate !== 'home' || !api.near) return false;
     const m = getMonkey(); if (!m) return false;
@@ -127,10 +128,11 @@ export function setupChessTable(o) {
     pFrom = m.position.clone(); pFace0 = st.face; st.seated = 'chess'; st.vel.set(0, 0, 0);
     try { if (st.fly) { st.fly.air = false; st.fly.thrust = false; st.fly.hold = false; st.fly.vy = 0; } st.jump = null; } catch (e) {}
     camTo(camOver(), api.fast ? 0.2 : 1.1);
+    upright(true);   // t875u: chess plays upright on a phone, asked for inside the PLAY tap (like Ghost 256 / Strike / Cybercity); iPad / PC: no lock
     api.gstate = 'out'; walkI = -1; gPos0.copy(grok.root.position); gYaw0 = grok.root.rotation.y; nextLeg(); return true; }
   function leave(why) {
     if (api.state === 'idle' || api.state === 'unzoom') return false;
-    api.lastExit = why || 'x'; closeFrame();
+    api.lastExit = why || 'x'; closeFrame(); upright(false);   // back to the arcade's side view, inside the ✕ / Esc gesture
     api.state = 'unzoom'; api.t = 0; bx.classList.remove('on'); camTo(camOver(), api.fast ? 0.2 : 1.0); return true; }
   function openFrame() { if (api.frame) return; const f = api.frame = document.createElement('iframe'); f.src = SRC; f.title = 'Chess'; f.allow = 'autoplay'; ov.appendChild(f);
     f.addEventListener('load', () => { try { f.contentWindow.addEventListener('keydown', e => { if (e.code === 'Escape') { e.preventDefault(); leave('esc'); } }, true); } catch (e) {} }); }

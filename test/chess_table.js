@@ -1,7 +1,8 @@
 // Chess table in the GROK SHOP (Dave via Arcade): big table + 2 chairs between the ACCESSORIES island and the pool tables, no overlap.
 // Walk up -> ♟ PLAY CHESS -> the player sits, shop Grok walks over from the counter and sits opposite, the camera zooms onto the board and
 // chess-play/index.html (arcade copy of Chess: medieval pieces, battles, robot hand, vs computer) opens; ✕ / Esc -> the player stands up, Grok
-// walks back to the counter. Phone landscape emulator. NOSHOTS=1 skips screenshots. node test/chess_table.js
+// walks back to the counter. t875u: on a phone the game plays upright (portrait lock, like Ghost 256), side view restored on exit;
+// the board is as big as fits (portrait phone: full width). Phone landscape emulator. NOSHOTS=1 skips screenshots. node test/chess_table.js
 const { open } = require('./lib');
 const fs = require('fs');
 (async () => {
@@ -13,6 +14,18 @@ const fs = require('fs');
   const frames = async n => { const f0 = await ev(() => window.__arcade.stats.frames); await page.waitForFunction(([f, n]) => window.__arcade.stats.frames > f + n, [f0, n], { timeout: 60000 }).catch(() => {}); };
   const center = async sel => ev(s => { const b = document.querySelector(s).getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; }, sel);
   await page.waitForFunction(() => window.__chess && window.__shop && window.__pool && window.__arcade, null, { timeout: 60000 });
+  // t875u: chess plays UPRIGHT on a phone like Ghost 256 / Strike / Cybercity. screen.orientation + fullscreen stubbed like Android Chrome
+  // (same stub as portrait_three.js): lock() only works in fullscreen; the arcade starts in its side (landscape) view.
+  await ev(() => { const F = window.__F = { el: null, log: [], cur: 'natural', pend: null, delay: {} }, so = screen.orientation, D = document;
+    Object.defineProperty(Document.prototype, 'fullscreenElement', { get() { return F.el; }, configurable: true });
+    D.documentElement.requestFullscreen = function () { F.log.push('fs'); return new Promise(r => setTimeout(() => { if (!F.el) { F.el = D.documentElement; D.dispatchEvent(new Event('fullscreenchange')); } r(); }, 30)); };
+    const abort = () => { if (F.pend) { const p = F.pend; F.pend = null; p.rej(new DOMException('aborted', 'AbortError')); } };
+    so.lock = k => { F.log.push('lock:' + k); if (!F.el) return Promise.reject(new DOMException('not fullscreen', 'SecurityError')); abort();
+      return new Promise((res, rej) => { const me = { rej }; F.pend = me; setTimeout(() => { if (F.pend !== me) return; F.pend = null; F.cur = k; F.log.push('=>' + k); res(); }, F.delay[k] || 20); }); };
+    so.unlock = () => { F.log.push('unlock'); abort(); F.cur = 'natural'; };
+    window.__wantWide && window.__wantWide(); });
+  await page.waitForTimeout(400);
+  const or = () => ev(() => ({ up: document.body.classList.contains('upright'), cur: __F.cur, fs: !!__F.el, cup: window.__chess.upright, log: __F.log.slice(-6), all: __F.log.slice(), n: __F.log.length }));
   // ---- layout: between the wardrobe island and the pool tables, clear of both, far from the pad ----
   const g = await ev(() => { const C = window.__chess, S = window.__shop, t = S.G.getObjectByName('chessTable'), W = window.__tp.whiteRoom.position.x, P = window.__tp.PAD2, wd = S.wardrobe, pl = window.__pool;
     const parts = ['chessBoard', 'chessPiecesWhite', 'chessPiecesBlack', 'chessBody', 'chessCushions', 'chessChrome', 'chessNeon', 'chessLamp', 'chessSign'].filter(n => t.getObjectByName(n));
@@ -45,6 +58,8 @@ const fs = require('fs');
   let [x, y] = await center('#chessBtn'); await page.touchscreen.tap(x, y);
   const s1 = await ev(() => ({ st: window.__chess.state, g: window.__chess.gstate, seated: window.__arcade.st.seated, x: !!document.querySelector('#chessX.on') }));
   chk(s1.st !== 'idle' && s1.seated === 'chess' && s1.g === 'out' && s1.x, 'PLAY: player heads for the chair, Grok leaves the counter, ✕ shown ' + JSON.stringify(s1));
+  await page.waitForTimeout(300); const o1 = await or();
+  chk(o1.up && o1.cup && o1.cur === 'portrait' && o1.fs, 'PLAY tap turns the phone upright (portrait lock, full screen) like Ghost 256 / Strike / Cybercity ' + JSON.stringify(o1));
   const walk = await page.waitForFunction(() => { const C = window.__chess, r = window.__shop.grok; (window.__gpath = window.__gpath || []).push([r.position.x, r.position.z]); return C.state === 'both' && C.gstate === 'seated' ? window.__gpath : null; }, null, { timeout: 60000, polling: 50 }).then(h => h.jsonValue()).catch(() => null);
   chk(!!walk && walk.length > 3, 'Grok walked over in steps (' + (walk ? walk.length : 0) + ' samples) and sat down');
   await page.waitForTimeout(300); await frames(3);
@@ -81,11 +96,13 @@ const fs = require('fs');
   chk(!!reply && reply[0] === 'e4', 'e2-e4 played and the computer answered ' + JSON.stringify(reply));
   await page.waitForTimeout(2500);
   await shot((process.env.SHOTDIR || '/workspace/shots') + '/chess_game_open.png');
+  const o2 = await or(), n1 = o1.n;   // seconds into the game: play.js's upright safety net must leave chess alone
+  chk(o2.up && o2.cur === 'portrait' && !o2.all.slice(n1).includes('lock:landscape'), 'still upright during the game (no safety-net revert) ' + JSON.stringify([o2.up, o2.cur, o2.log]));
   // Dave t874u: the game options sit UNDER the board, nothing overlaps, all fits on screen, ✕ clear
   const layout = async tag => { const L = await ev(() => { const d = window.__chess.frame.contentDocument, w = window.__chess.frame.contentWindow, R = s => { const b = d.querySelector(s).getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom }; };
-      return { vw: w.innerWidth, vh: w.innerHeight, frame: R('#frame'), bot: R('#barBottom'), panel: R('aside.panel'), cap: R('#barTop'), newBtn: R('#newBtn'), set: R('#settings summary'), sh: d.documentElement.scrollHeight }; });
+      return { vw: w.innerWidth, vh: w.innerHeight, frame: R('#frame'), bot: R('#barBottom'), panel: R('aside.panel'), cap: R('#barTop'), newBtn: R('#newBtn'), set: R('#settings summary'), sh: d.documentElement.scrollHeight, capPad: parseFloat(w.getComputedStyle(d.getElementById('barTop')).paddingLeft) }; });
     const inV = r => r.l >= 0 && r.t >= 0 && r.r <= L.vw + 0.5 && r.b <= L.vh + 0.5, clearX = r => r.l > 44 || r.t > 44;
-    chk(L.panel.t >= L.bot.b - 0.5 && L.panel.t >= L.frame.b && inV(L.frame) && inV(L.panel) && inV(L.newBtn) && inV(L.set) && clearX(L.frame) && clearX(L.cap) && clearX(L.panel) && L.sh <= L.vh + 1,
+    chk(L.panel.t >= L.bot.b - 0.5 && L.panel.t >= L.frame.b && inV(L.frame) && inV(L.panel) && inV(L.newBtn) && inV(L.set) && clearX(L.frame) && (clearX(L.cap) || L.capPad >= 44) && clearX(L.panel) && L.sh <= L.vh + 1,
       tag + ': options under the board, board + options fully on screen, ✕ clear ' + JSON.stringify(L)); };
   await layout('landscape phone');
   await shot((process.env.SHOTDIR || '/workspace/shots') + '/chess_options_bottom.png');
@@ -96,6 +113,8 @@ const fs = require('fs');
   await page.waitForFunction(() => window.__chess.state === 'idle', null, { timeout: 30000 }).catch(() => {});
   const c1 = await ev(() => ({ st: window.__chess.state, open: window.__chess.open, fr: document.querySelectorAll('#chessOv iframe').length, ov: document.getElementById('chessOv').classList.contains('on'), cv: window.__arcade.renderer.domElement.style.visibility, seated: window.__arcade.st.seated, x: !!document.querySelector('#chessX.on'), hips: window.__arcade.monkey.userData.hips.position.y }));
   chk(c1.st === 'idle' && !c1.open && c1.fr === 0 && !c1.ov && c1.cv === '' && !c1.seated && !c1.x && Math.abs(c1.hips - 0.8) < 0.05, '✕ closes the game, the player stands up ' + JSON.stringify(c1));
+  await page.waitForTimeout(300); const o3 = await or();
+  chk(!o3.up && !o3.cup && o3.cur === 'landscape', '✕ goes back to the arcade\'s side (landscape) view ' + JSON.stringify(o3));
   const back = await page.waitForFunction(() => window.__chess.gstate === 'home', null, { timeout: 60000 }).then(() => true).catch(() => false);
   const gh = await ev(() => { const r = window.__shop.grok; return [r.position.x, r.position.z, r.rotation.y]; });
   chk(back && Math.hypot(gh[0] - home[0], gh[1] - home[1]) < 0.05 && Math.abs(gh[2] - home[2]) < 0.05, 'Grok walked back behind his counter ' + JSON.stringify([home, gh]));
@@ -112,8 +131,10 @@ const fs = require('fs');
   await page.waitForFunction(() => window.__chess.state === 'idle' && window.__chess.gstate === 'home', null, { timeout: 60000 }).catch(() => {});
   const e1 = await ev(() => ({ st: window.__chess.state, g: window.__chess.gstate, seated: window.__arcade.st.seated, fr: document.querySelectorAll('#chessOv iframe').length, opens: window.__chess.opens }));
   chk(w1.st === 'wait' && w1.g === 'out' && e1.st === 'idle' && e1.g === 'home' && !e1.seated && e1.fr === 0, 'E sits down, Esc while Grok walks over cancels cleanly ' + JSON.stringify([w1, e1]));
-  // ---- portrait phone: ✕ reachable over the open game, no turn-sideways screen ----
-  await page.setViewportSize({ width: 390, height: 780 });
+  await page.waitForTimeout(300); const o4 = await or();
+  chk(!o4.up && o4.cur === 'landscape', 'Esc also restores the side view ' + JSON.stringify(o4));
+  // ---- portrait phone (390x844): upright game, ✕ reachable, no turn-sideways screen, board maximised (t875u) ----
+  await page.setViewportSize({ width: 390, height: 844 });
   await ev(() => { const A = window.__arcade, W = window.__tp.whiteRoom.position.x, C = window.__chess; A.monkey.position.set(W + C.TX - 2.2, 0, C.TZ); A.st.vel.set(0, 0, 0); C.fast = true; });
   await page.waitForFunction(() => !!document.querySelector('#chessBtn.on'), null, { timeout: 30000 }).catch(() => {});
   await ev(() => window.__chess.play());
@@ -122,12 +143,25 @@ const fs = require('fs');
   chk(pt.st === 'game' && pt.x[0] <= 8 && pt.top === 'chessX' && !pt.turn, 'portrait phone: game open, ✕ on top, no turn-sideways ' + JSON.stringify(pt));
   await page.waitForFunction(() => { try { return window.__chess.frame.contentDocument.querySelectorAll('.sq').length === 64; } catch (e) { return false; } }, null, { timeout: 60000 }).catch(() => {});
   await layout('portrait phone');
+  const bsz = () => ev(() => { const d = window.__chess.frame.contentDocument, f = d.getElementById('frame').getBoundingClientRect(), sq = d.querySelector('.sq').getBoundingClientRect(), p = d.querySelector('aside.panel').getBoundingClientRect();
+    return { vw: innerWidth, vh: innerHeight, board: Math.round(f.width), sq: Math.round(sq.width), panelH: Math.round(p.height) }; });
+  const B1 = await bsz(), o5 = await or();
+  chk(B1.board >= B1.vw - 8 && B1.sq >= 46 && o5.up, 'portrait phone: upright, board fills the width (' + B1.board + 'px of ' + B1.vw + ') ' + JSON.stringify([B1, o5]));
+  await page.waitForTimeout(1500); await shot((process.env.SHOTDIR || '/workspace/shots') + '/chess_upright_phone.png');
+  await page.setViewportSize({ width: 375, height: 667 }); await page.waitForTimeout(400); await layout('small phone 375x667');
   await page.setViewportSize({ width: 820, height: 1180 }); await page.waitForTimeout(400); await layout('iPad portrait');
+  const B2 = await bsz();
+  chk(B2.board >= 780, 'iPad portrait: board as big as fits, options still under it ' + JSON.stringify(B2));
+  await page.waitForTimeout(800); await shot((process.env.SHOTDIR || '/workspace/shots') + '/chess_ipad_board.png');
+  await page.setViewportSize({ width: 1180, height: 820 }); await page.waitForTimeout(400); await layout('iPad landscape');
   await page.setViewportSize({ width: 1280, height: 720 }); await page.waitForTimeout(400); await layout('PC');
-  await page.setViewportSize({ width: 390, height: 780 }); await page.waitForTimeout(300);
+  const B3 = await bsz(); chk(B3.board >= 460, 'PC: board as big as fits ' + JSON.stringify(B3));
+  await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(300);
   await ev(() => window.__chess.leave('test'));
   await page.waitForFunction(() => window.__chess.state === 'idle' && window.__chess.gstate === 'home', null, { timeout: 60000 }).catch(() => {});
-  const off = requests.filter(u => !/^(http:\/\/localhost|data:|blob:|about:)/.test(u) && !/supabase/i.test(u));
+  const o6 = await or(); chk(!o6.up && o6.cur === 'landscape', 'leaving from portrait also restores the side view ' + JSON.stringify(o6));
+  const home0 = process.env.GA_URL ? new URL(process.env.GA_URL).origin : 'http://localhost';   // live run: the site's own origin
+  const off = requests.filter(u => !u.startsWith(home0) && !/^(http:\/\/localhost|data:|blob:|about:)/.test(u) && !/supabase/i.test(u));
   chk(off.length === 0, 'no off-site requests ' + off.slice(0, 3).join(' '));
   const errs = errors;
   chk(errs.length === 0, 'no page errors ' + errs.join(' | '));
