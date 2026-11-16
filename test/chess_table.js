@@ -127,7 +127,8 @@ const fs = require('fs');
   await page.setViewportSize({ width: 390, height: 780 }); await page.waitForTimeout(300);
   await ev(() => window.__chess.leave('test'));
   await page.waitForFunction(() => window.__chess.state === 'idle' && window.__chess.gstate === 'home', null, { timeout: 60000 }).catch(() => {});
-  const off = requests.filter(u => !/^(http:\/\/localhost|data:|blob:|about:)/.test(u) && !/supabase/i.test(u));
+  const home0 = process.env.GA_URL ? new URL(process.env.GA_URL).origin : 'http://localhost';   // live run: the site's own origin
+  const off = requests.filter(u => !u.startsWith(home0) && !/^(http:\/\/localhost|data:|blob:|about:)/.test(u) && !/supabase/i.test(u));
   chk(off.length === 0, 'no off-site requests ' + off.slice(0, 3).join(' '));
   const errs = errors;
   chk(errs.length === 0, 'no page errors ' + errs.join(' | '));
