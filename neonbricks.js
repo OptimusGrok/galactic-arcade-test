@@ -255,7 +255,9 @@ const api = { G, grp, panel, HEX, TETRIS_LINES, TETRISES_TO_OPEN, NEON_PERIOD, N
     G.lines += n; addScore(([0, 100, 300, 500, 800][n] || 0) * G.level);
     emit('clear', { rows, n, cleared, ts: 0, b2b: false, combo: 0, pts: 0, perfect: false }); boardDirty = true; drain(); return { n, tetrises: G.stats.tetrises, hi: G.hi, score: G.score }; },
   update(dt) {
-    const m = getMonkey(); api.near = !!(m && !api.playing && m.position.x > HALF - 4.2 && Math.abs(m.position.z - ZC) < 2.4 && m.position.y < 1);
+    // t878u: also require x < HALF so the zone stops at the east window. The old half-space (x > HALF-4.2 only)
+    // leaked into the Grok shop (WX=80), which shares the window's |z| < 2.4 strip (shelves / counter sit around z=-2).
+    const m = getMonkey(); api.near = !!(m && !api.playing && m.position.x > HALF - 4.2 && m.position.x < HALF && Math.abs(m.position.z - ZC) < 2.4 && m.position.y < 1);
     if (api.playing) { update(Math.min(dt, 0.1)); drain(); }
     if (msgT > 0) { msgT -= dt; if (msgT <= 0) msg = ''; }
     if (hideT > 0 && !api.playing) { hideT -= dt; if (hideT <= 0) { hideT = 0; show(false); } }
