@@ -1,4 +1,4 @@
-// t856u / v237 + t857u / v238 + t858u / v239 + t859u / v240: Quest 2D thumbstick support.
+// t856u / v237 + t857u / v238 + t858u / v239 + t859u / v240 + t864u / v241: Quest 2D thumbstick support.
 // Research (Meta Browser specs, Meta input mappings, WebXR issues #995/#1347, Chromium wheel routing):
 //  - In 2D Quest Browser the thumbstick is a SCROLL device (like a mouse wheel), not a Gamepad.
 //    XR controllers are typically exposed via getGamepads() only inside a WebXR session.
@@ -13,8 +13,14 @@
 //    the document and can slide position:fixed #start off-screen. Do NOT style all canvases
 //    as fullscreen (that blew #gaCv, the start-screen player preview, over the PLAY button).
 //    Isolated #gaQscroll sentinel only; pin only the room canvas (body > canvas) behind #start.
+//  - v241 (Dave's Quest 3 ?qdbg=1 photo): wheel events ARRIVE (count + last dx/dy) but src stays
+//    none, move stays 0, age stays "-". Cause: the controller ray fires pointermove/touch
+//    (pointerType "touch") continuously, so lastDrag never goes stale and onWheel returns
+//    before ingest(). On Quest, wheel always drives movement unless a real 2-finger pinch is
+//    happening right now. Start-screen gate checks #start visibility directly.
 //  - An "Enter VR controls" WebXR session is NOT added: immersive-vr would leave the 2D arcade,
-//    and inline sessions do not expose XR thumbsticks. Flag support in ?qdbg=1 instead.
+//    and Dave's overlay confirms getGamepads()=0 in 2D even though xr vr=true. Flag support
+//    in ?qdbg=1 instead.
 (function (root) {
   'use strict';
   var DEAD = 0.18;
@@ -22,7 +28,7 @@
   var HOLD = 150;
   var FADE = 80;
   var cssOn = false, listenOn = false, loopOn = false, keyListenOn = false, keysOn = {};
-  var lastDrag = 0, lastWheelEvt = 0, lastIngestAt = 0, lastIngestSrc = 'none';
+  var lastDrag = 0, lastWheelEvt = 0, lastIngestAt = 0, lastIngestSrc = 'none', touchCount = 0, lastTouchAt = 0;
   var virtX = 0, virtY = 0;
   var lastWheelDx = 0, lastWheelDy = 0, lastWheelCtrl = false;
   var heldKeys = Object.create(null);
@@ -42,20 +48,36 @@
   }
 
   function startUp() {
+    // v241: trust whether #start is actually on screen, not only __start.shown
+    // (that flag can lag or stick after dismiss / skipStart / the .out fade).
     try {
       var el = document.getElementById('start');
-      if (el && window.__start && window.__start.shown && !window.__start.dismissed) return true;
+      if (!el || !el.isConnected) return false;
+      if (window.__start && window.__start.dismissed) return false;
+      if (el.classList && el.classList.contains('out')) return false;
+      var r = el.getBoundingClientRect && el.getBoundingClientRect();
+      if (!r || r.width < 2 || r.height < 2) return false;
+      var cs = root.getComputedStyle ? root.getComputedStyle(el) : null;
+      if (cs) {
+        if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+        if (cs.pointerEvents === 'none') return false;
+        if (parseFloat(cs.opacity) === 0) return false;
+      }
+      return true;
     } catch (e) {}
     return false;
   }
 
   function fromStartUI(e) {
+    if (!startUp()) return false;
     var t = e && e.target;
     try {
       if (t && t.closest && t.closest('#start, #gaP, #opt, #turnHint, #homeQ')) return true;
     } catch (err) {}
     return false;
   }
+
+  function pinchNow() { return touchCount >= 2 && lastTouchAt && (performance.now() - lastTouchAt) < 200; }
 
   function wantDebug() {
     if (root.__gaQuestDbg) return true;
@@ -270,7 +292,7 @@
     var c = s.counts || counts;
     var ua = (s.ua || '').slice(0, 180);
     var xr = s.xr || {};
-    dbgEl.textContent = 'GA Quest dbg v240'
+    dbgEl.textContent = 'GA Quest dbg v241'
       + '\nUA ' + (ua || '-')
       + '\nsrc ' + (s.source || 'none')
       + ' unlocked=' + (s.unlocked ? '1' : '0')
@@ -284,6 +306,9 @@
       + ' dpr=' + (s.dpr == null ? '-' : (+s.dpr).toFixed(3))
       + '\ngamepads ' + (s.n || 0) + ' ' + ((s.pads && s.pads.length) ? s.pads.join(' | ') : '-')
       + '\nkeys ' + ((s.keys && s.keys.length) ? s.keys.join(',') : '-')
+      + '\nstart=' + (startUp() ? '1' : '0')
+      + ' pinch=' + (pinchNow() ? '1' : '0')
+      + ' drag=' + (lastDrag ? Math.round(performance.now() - lastDrag) + 'ms' : '0')
       + '\ncounts wheel=' + (c.wheel || 0)
       + ' mousewheel=' + (c.mousewheel || 0)
       + ' scroll=' + (c.scroll || 0)
@@ -315,8 +340,12 @@
     lastWheelEvt = performance.now();
     // v239: ctrl/meta+wheel is how Chromium pinch/page-zoom often arrives. That is the stick
     // in desktop-mode Quest, not a user pinch — map it to movement and keep the camera still.
-    if (lastDrag && performance.now() - lastDrag < 100) return;
-    if (startUp() || fromStartUI(e)) return;
+    // v241: the Quest controller ray emits pointer/touch continuously, which used to look
+    // like an endless drag and skipped ingest (src none, age "-", move 0). On Quest, wheel
+    // always becomes movement unless a real two-finger pinch is happening right now.
+    if (startUp()) return;
+    if (pinchNow()) return;
+    if (!isQuest() && lastDrag && performance.now() - lastDrag < 100) return;
     var a = deltaToAxis(lastWheelDx, lastWheelDy, e.deltaMode || 0);
     ingest('wheel', a.x, a.y);
   }
@@ -340,7 +369,8 @@
     if (recentring) return;
     if (startUp()) { recen(); return; }
     if (performance.now() - lastWheelEvt < 50) { recen(); return; }
-    if (lastDrag && performance.now() - lastDrag < 100) { recen(); return; }
+    if (pinchNow()) { recen(); return; }
+    if (!isQuest() && lastDrag && performance.now() - lastDrag < 100) { recen(); return; }
     var isSent = sentinel && (e.target === sentinel);
     if (!isSent) { recen(); return; }
     var dx = (sentinel.scrollLeft || 0) - midSX, dy = (sentinel.scrollTop || 0) - midSY;
@@ -360,7 +390,8 @@
     lastScale = scale; lastVvX = x; lastVvY = y;
     if (startUp()) return;
     if (performance.now() - lastWheelEvt < 50) return;
-    if (lastDrag && performance.now() - lastDrag < 100) return;
+    if (pinchNow()) return;
+    if (!isQuest() && lastDrag && performance.now() - lastDrag < 100) return;
     // Zoom in (scale up) -> forward (negative joy.y), matching "stick up zooms in".
     if (Math.abs(dScale) > 0.001) ingest('vvscale', 0, -clamp(dScale * 8, -1, 1));
     else if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) ingest('vvscroll', clamp(dx / AXIS_SCALE, -1, 1), clamp(dy / AXIS_SCALE, -1, 1));
@@ -385,7 +416,10 @@
 
   function onTouch(e) {
     bump('touch');
+    lastTouchAt = performance.now();
     var n = (e.touches && e.touches.length) || 0;
+    touchCount = n;
+    if (n < 2) lastDrag = 0;
     if (n >= 2) {
       var d = touchDist(e);
       if (e.type === 'touchstart' || !pinchDist0) { pinchDist0 = d; return; }
@@ -452,8 +486,13 @@
     addEventListener('touchend', onTouch, { capture: true, passive: false });
     addEventListener('pointermove', function (e) {
       if (!e) return;
-      if (e.buttons || e.pointerType === 'touch') lastDrag = performance.now();
+      // Only a pressed-button move is a real drag. The Quest ray reports pointerType
+      // "touch" (or a hovering "mouse") continuously and must not latch lastDrag.
+      if (e.buttons) lastDrag = performance.now();
     }, true);
+    ['pointerup', 'pointercancel', 'mouseup'].forEach(function (t) {
+      addEventListener(t, function () { lastDrag = 0; }, true);
+    });
     ['pointerdown', 'mousedown', 'click', 'touchstart', 'keydown'].forEach(function (t) {
       addEventListener(t, function () { if (t !== 'keydown') bump('pointer'); unlockPads(); }, true);
     });
