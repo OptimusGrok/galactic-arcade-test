@@ -1,4 +1,4 @@
-// t856u / v237 + t857u / v238 + t858u / v239 + t859u / v240 + t864u / v241: Quest 2D thumbstick support.
+// t856u / v237 … t864u / v241 + t865u / v242: Quest 2D thumbstick support.
 // Research (Meta Browser specs, Meta input mappings, WebXR issues #995/#1347, Chromium wheel routing):
 //  - In 2D Quest Browser the thumbstick is a SCROLL device (like a mouse wheel), not a Gamepad.
 //    XR controllers are typically exposed via getGamepads() only inside a WebXR session.
@@ -18,6 +18,14 @@
 //    (pointerType "touch") continuously, so lastDrag never goes stale and onWheel returns
 //    before ingest(). On Quest, wheel always drives movement unless a real 2-finger pinch is
 //    happening right now. Start-screen gate checks #start visibility directly.
+//  - v242: official Meta mapping is "thumbstick = scroll" for either controller; there is no
+//    documented left/right split in 2D Browser. Dave's left stick is plain wheel in 37.5
+//    steps (no ctrl). Analog speed = events-per-second × |delta|, smoothed, clamped.
+//    Fallback: plain wheel/scroll = walk (keeps the working left stick). ctrl/meta+wheel,
+//    gesture, and visualViewport scale (the Chromium zoom channel) = camera look. A small
+//    STICK LOOK toggle routes plain wheel to look if the right stick is also unmodded.
+//    ?qdbg=1 logs deltaMode, modifiers, rate, pointer id/type, and clientX/Y so a right-
+//    stick photo can confirm or refute the zoom-channel guess.
 //  - An "Enter VR controls" WebXR session is NOT added: immersive-vr would leave the 2D arcade,
 //    and Dave's overlay confirms getGamepads()=0 in 2D even though xr vr=true. Flag support
 //    in ?qdbg=1 instead.
@@ -27,10 +35,15 @@
   var AXIS_SCALE = 80;
   var HOLD = 150;
   var FADE = 80;
+  var ANALOG_WIN = 100;
+  var REF_PXPS = 2200;
   var cssOn = false, listenOn = false, loopOn = false, keyListenOn = false, keysOn = {};
   var lastDrag = 0, lastWheelEvt = 0, lastIngestAt = 0, lastIngestSrc = 'none', touchCount = 0, lastTouchAt = 0;
-  var virtX = 0, virtY = 0;
-  var lastWheelDx = 0, lastWheelDy = 0, lastWheelCtrl = false;
+  var virtX = 0, virtY = 0, lookVX = 0, lookVY = 0, lastLookAt = 0;
+  var lastWheelDx = 0, lastWheelDy = 0, lastWheelCtrl = false, lastWheelShift = false, lastWheelMode = 0;
+  var lastWheelCX = 0, lastWheelCY = 0, lastRate = 0, lastPxps = 0, lastChan = 'move';
+  var moveHist = [], lookHist = [], lookToggle = false, lookBtn = null;
+  var lastPtr = { id: null, type: '', x: 0, y: 0, buttons: 0, t: 0 };
   var heldKeys = Object.create(null);
   var dbgEl = null, dbgOn = false, unlocked = false, recentring = false;
   var sentinel = null, midSX = 0, midSY = 0;
@@ -130,15 +143,57 @@
     return !!(b.pressed || (typeof b.value === 'number' && b.value >= 0.5));
   }
 
-  function virtStick() {
-    if (!lastIngestAt) return { x: 0, y: 0, mag: 0 };
-    var age = performance.now() - lastIngestAt;
-    var k = 1;
+  function fadeStick(x0, y0, at) {
+    if (!at) return { x: 0, y: 0, mag: 0 };
+    var age = performance.now() - at, k = 1;
     if (age > HOLD) k = Math.max(0, 1 - (age - HOLD) / FADE);
     if (k <= 0) return { x: 0, y: 0, mag: 0 };
-    var x = virtX * k, y = virtY * k;
+    var x = x0 * k, y = y0 * k;
     return { x: x, y: y, mag: Math.hypot(x, y) };
   }
+  function virtStick() { return fadeStick(virtX, virtY, lastIngestAt); }
+  function virtLook() { return fadeStick(lookVX, lookVY, lastLookAt); }
+
+  function pushHist(hist, dx, dy, now) {
+    hist.push({ t: now, dx: dx, dy: dy });
+    var cut = now - 220;
+    while (hist.length && hist[0].t < cut) hist.shift();
+  }
+
+  function analogFrom(hist, now) {
+    var cut = now - ANALOG_WIN, sx = 0, sy = 0, flux = 0, n = 0, tFirst = now, i, h, len, win, rate, pxps, mag;
+    for (i = 0; i < hist.length; i++) {
+      h = hist[i];
+      if (h.t < cut) continue;
+      if (h.t < tFirst) tFirst = h.t;
+      sx += h.dx; sy += h.dy; flux += Math.hypot(h.dx, h.dy); n++;
+    }
+    if (!n) return { x: 0, y: 0, mag: 0, rate: 0, pxps: 0 };
+    win = Math.max(50, now - tFirst);
+    rate = n / (win / 1000);
+    pxps = flux / (win / 1000);
+    mag = clamp(pxps / REF_PXPS, 0, 1);
+    len = Math.hypot(sx, sy);
+    if (len < 1e-6) return { x: 0, y: 0, mag: 0, rate: rate, pxps: pxps };
+    return { x: (sx / len) * mag, y: (sy / len) * mag, mag: mag, rate: rate, pxps: pxps };
+  }
+
+  function isLookWheel(e) {
+    if (lookToggle) return true;
+    if (e && (e.ctrlKey || e.metaKey || e.altKey)) return true;
+    return false;
+  }
+
+  function notePointer(e) {
+    if (!e) return;
+    if (e.pointerId != null) lastPtr.id = e.pointerId;
+    if (e.pointerType) lastPtr.type = e.pointerType;
+    if (e.clientX != null) lastPtr.x = e.clientX;
+    if (e.clientY != null) lastPtr.y = e.clientY;
+    lastPtr.buttons = e.buttons || 0;
+    lastPtr.t = performance.now();
+  }
+
 
   function keyList() {
     var out = [], k;
@@ -152,13 +207,28 @@
     ny = clamp(+ny || 0, -1, 1);
     var mag = Math.hypot(nx, ny);
     if (mag > 1) { nx /= mag; ny /= mag; }
-    virtX = clamp(virtX * 0.35 + nx * 0.65, -1, 1);
-    virtY = clamp(virtY * 0.35 + ny * 0.65, -1, 1);
+    virtX = clamp(virtX * 0.2 + nx * 0.8, -1, 1);
+    virtY = clamp(virtY * 0.2 + ny * 0.8, -1, 1);
     lastIngestAt = performance.now();
     lastIngestSrc = source || 'virt';
+    lastChan = 'move';
     if (isPlayFrame()) applyPlay(read());
     return virtStick();
   }
+
+  function ingestLook(source, nx, ny) {
+    nx = clamp(+nx || 0, -1, 1);
+    ny = clamp(+ny || 0, -1, 1);
+    var mag = Math.hypot(nx, ny);
+    if (mag > 1) { nx /= mag; ny /= mag; }
+    lookVX = clamp(lookVX * 0.2 + nx * 0.8, -1, 1);
+    lookVY = clamp(lookVY * 0.2 + ny * 0.8, -1, 1);
+    lastLookAt = performance.now();
+    lastChan = 'look';
+    lastIngestSrc = source || 'look';
+    return virtLook();
+  }
+
 
   function readPads() {
     var pads = padList();
@@ -209,13 +279,17 @@
 
   function read() {
     var pads = readPads();
-    var v = virtStick();
+    var v = virtStick(), lv = virtLook();
     var keys = keyList();
     var move = pads.move, look = pads.look, source = 'none';
     if (move.mag) source = 'gamepad';
     else if (v.mag) { move = v; source = lastIngestSrc || 'virt'; }
+    else if (lv.mag) source = lastIngestSrc || 'look';
     else if (keys.length) source = 'key';
+    if (!look.mag && lv.mag) look = lv;
     var vv = root.visualViewport;
+    var lookAge = lastLookAt ? +(performance.now() - lastLookAt).toFixed(0) : null;
+    var moveAge = lastIngestAt ? +(performance.now() - lastIngestAt).toFixed(0) : null;
     return {
       move: move, look: look,
       fire: pads.fire, fly: pads.fly, zoom: pads.zoom,
@@ -225,10 +299,15 @@
       scale: vv ? vv.scale : 1,
       dpr: root.devicePixelRatio || 1,
       xr: xrInfo,
+      lookStick: !!lookToggle,
+      chan: lastChan,
       wheel: {
-        dx: lastWheelDx, dy: lastWheelDy,
-        age: lastIngestAt ? +(performance.now() - lastIngestAt).toFixed(0) : null,
-        x: v.x, y: v.y, ctrl: lastWheelCtrl
+        dx: lastWheelDx, dy: lastWheelDy, mode: lastWheelMode,
+        age: lastChan === 'look' ? lookAge : moveAge,
+        x: v.x, y: v.y, ctrl: lastWheelCtrl, shift: lastWheelShift,
+        rate: lastRate, pxps: lastPxps,
+        cx: lastWheelCX, cy: lastWheelCY,
+        ptrId: lastPtr.id, ptrType: lastPtr.type, ptrX: lastPtr.x, ptrY: lastPtr.y
       }
     };
   }
@@ -259,7 +338,10 @@
         + 'html.gaQuest body>canvas,html.gaQuest canvas.gaQuestRoom{position:fixed!important;inset:0;width:100%!important;height:100%!important;z-index:0}'
         + 'html.gaQuest #start{z-index:100!important}'
         + '#gaQscroll{position:fixed;inset:0;overflow:scroll;z-index:0;pointer-events:none;opacity:0;overscroll-behavior:auto}'
-        + '#gaQdbg{position:fixed;top:max(4px,env(safe-area-inset-top));left:max(4px,env(safe-area-inset-left));z-index:2147483000;pointer-events:none;background:#000c;color:#9ff;font:11px/1.35 ui-monospace,Menlo,Consolas,monospace;padding:6px 8px;border:1px solid #0ff6;border-radius:6px;white-space:pre;max-width:min(96vw,420px)}';
+        + '#gaQdbg{position:fixed;top:max(4px,env(safe-area-inset-top));left:max(4px,env(safe-area-inset-left));z-index:2147483000;pointer-events:none;background:#000c;color:#9ff;font:11px/1.35 ui-monospace,Menlo,Consolas,monospace;padding:6px 8px;border:1px solid #0ff6;border-radius:6px;white-space:pre;max-width:min(96vw,420px)}'
+        + '#gaQlook{position:fixed;right:max(8px,env(safe-area-inset-right));bottom:max(10px,env(safe-area-inset-bottom));z-index:25;pointer-events:auto;font:800 11px/1.15 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.06em;color:#dffbff;background:#0a0612cc;border:1px solid #00e5ff88;border-radius:8px;padding:8px 10px;text-shadow:0 0 6px #00e5ff;cursor:pointer}'
+        + '#gaQlook.on{border-color:#ff3cf0;color:#ffd0fa;text-shadow:0 0 6px #ff3cf0}'
+        + '#gaQlook[hidden]{display:none!important}';
       (document.head || document.documentElement).appendChild(s);
     } catch (e) {}
     ensureViewport();
@@ -292,16 +374,25 @@
     var c = s.counts || counts;
     var ua = (s.ua || '').slice(0, 180);
     var xr = s.xr || {};
-    dbgEl.textContent = 'GA Quest dbg v241'
+    dbgEl.textContent = 'GA Quest dbg v242'
       + '\nUA ' + (ua || '-')
       + '\nsrc ' + (s.source || 'none')
+      + ' chan=' + (s.chan || lastChan || '-')
       + ' unlocked=' + (s.unlocked ? '1' : '0')
       + '\nwheel dx=' + (w.dx == null ? '-' : (+w.dx).toFixed(1))
       + ' dy=' + (w.dy == null ? '-' : (+w.dy).toFixed(1))
+      + ' mode=' + (w.mode == null ? '-' : w.mode)
       + ' age=' + (w.age == null ? '-' : w.age + 'ms')
       + (w.ctrl ? ' CTRL' : '')
+      + (w.shift ? ' SHIFT' : '')
+      + '\nrate=' + (w.rate == null ? '-' : (+w.rate).toFixed(1) + '/s')
+      + ' pxps=' + (w.pxps == null ? '-' : Math.round(+w.pxps))
+      + '\nptr id=' + (w.ptrId == null ? '-' : w.ptrId)
+      + ' type=' + (w.ptrType || '-')
+      + ' xy=' + (w.cx == null ? '-' : Math.round(+w.cx) + ',' + Math.round(+w.cy))
       + '\nmove x=' + (mv.x || 0).toFixed(2) + ' y=' + (mv.y || 0).toFixed(2)
       + ' look x=' + (lk.x || 0).toFixed(2) + ' y=' + (lk.y || 0).toFixed(2)
+      + ' stick=' + (lookToggle ? 'LOOK' : 'WALK')
       + '\nvv.scale=' + (s.scale == null ? '-' : (+s.scale).toFixed(3))
       + ' dpr=' + (s.dpr == null ? '-' : (+s.dpr).toFixed(3))
       + '\ngamepads ' + (s.n || 0) + ' ' + ((s.pads && s.pads.length) ? s.pads.join(' | ') : '-')
@@ -329,25 +420,39 @@
   }
 
   function onWheel(e) {
-    var stamp = e.timeStamp || performance.now();
-    if (stamp && stamp === lastWheelStamp) return;
-    lastWheelStamp = stamp;
+    // Same Event object can hit both the window and canvas listeners; mark it.
+    // Do not key on timeStamp alone — a held stick (and our tests) can deliver
+    // several distinct events in the same millisecond, and rate is the analog cue.
+    if (e && e.__gaQSeen) return;
+    if (e) e.__gaQSeen = 1;
     bump(e.type === 'mousewheel' || e.type === 'DOMMouseScroll' ? 'mousewheel' : 'wheel');
     if (e.cancelable) e.preventDefault();
     lastWheelCtrl = !!(e.ctrlKey || e.metaKey);
+    lastWheelShift = !!e.shiftKey;
+    lastWheelMode = e.deltaMode || 0;
     lastWheelDx = (e.deltaX != null ? e.deltaX : (e.wheelDeltaX != null ? -e.wheelDeltaX : 0)) || 0;
     lastWheelDy = (e.deltaY != null ? e.deltaY : (e.wheelDelta != null ? -e.wheelDelta : 0)) || 0;
+    lastWheelCX = e.clientX != null ? e.clientX : lastPtr.x;
+    lastWheelCY = e.clientY != null ? e.clientY : lastPtr.y;
     lastWheelEvt = performance.now();
-    // v239: ctrl/meta+wheel is how Chromium pinch/page-zoom often arrives. That is the stick
-    // in desktop-mode Quest, not a user pinch — map it to movement and keep the camera still.
-    // v241: the Quest controller ray emits pointer/touch continuously, which used to look
-    // like an endless drag and skipped ingest (src none, age "-", move 0). On Quest, wheel
-    // always becomes movement unless a real two-finger pinch is happening right now.
+    notePointer(e);
+    // v241: on Quest, wheel always becomes input unless a real two-finger pinch is active.
+    // v242: analog speed from event rate × |delta|. Plain wheel = walk (left stick).
+    // ctrl/meta/alt+wheel (Chromium zoom channel) or the STICK LOOK toggle = camera look.
     if (startUp()) return;
     if (pinchNow()) return;
     if (!isQuest() && lastDrag && performance.now() - lastDrag < 100) return;
-    var a = deltaToAxis(lastWheelDx, lastWheelDy, e.deltaMode || 0);
-    ingest('wheel', a.x, a.y);
+    var toLook = isLookWheel(e);
+    var hist = toLook ? lookHist : moveHist;
+    // Keep signed pixel deltas in the hist so rate × magnitude is meaningful.
+    var pdx = lastWheelDx, pdy = lastWheelDy;
+    if (lastWheelMode === 1) { pdx *= 16; pdy *= 16; }
+    else if (lastWheelMode === 2) { pdx *= 80; pdy *= 80; }
+    pushHist(hist, pdx, pdy, lastWheelEvt);
+    var a = analogFrom(hist, lastWheelEvt);
+    lastRate = a.rate; lastPxps = a.pxps;
+    if (toLook) ingestLook('wheel', a.x, a.y);
+    else ingest('wheel', a.x, a.y);
   }
 
   function recen() {
@@ -376,7 +481,9 @@
     var dx = (sentinel.scrollLeft || 0) - midSX, dy = (sentinel.scrollTop || 0) - midSY;
     recen();
     if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
-    var a = deltaToAxis(dx, dy, 0);
+    pushHist(moveHist, dx, dy, performance.now());
+    var a = analogFrom(moveHist, performance.now());
+    lastRate = a.rate; lastPxps = a.pxps;
     ingest('scroll', a.x, a.y);
   }
 
@@ -393,7 +500,7 @@
     if (pinchNow()) return;
     if (!isQuest() && lastDrag && performance.now() - lastDrag < 100) return;
     // Zoom in (scale up) -> forward (negative joy.y), matching "stick up zooms in".
-    if (Math.abs(dScale) > 0.001) ingest('vvscale', 0, -clamp(dScale * 8, -1, 1));
+    if (Math.abs(dScale) > 0.001) ingestLook('vvscale', 0, -clamp(dScale * 8, -1, 1));
     else if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) ingest('vvscroll', clamp(dx / AXIS_SCALE, -1, 1), clamp(dy / AXIS_SCALE, -1, 1));
   }
 
@@ -405,7 +512,7 @@
     var sc = e.scale || 1;
     var d = sc - (e.type === 'gestureend' ? sc : gestureScale0);
     if (e.type === 'gesturechange') gestureScale0 = sc;
-    if (Math.abs(d) > 0.01) ingest('gesture', 0, -clamp(d * 4, -1, 1));
+    if (Math.abs(d) > 0.01) ingestLook('gesture', 0, -clamp(d * 4, -1, 1));
   }
 
   function touchDist(ev) {
@@ -429,7 +536,7 @@
         bump('pinch');
         if (e.cancelable) e.preventDefault();
         if (startUp() || fromStartUI(e)) return;
-        ingest('pinch', 0, -clamp(dd / 80, -1, 1));
+        ingestLook('pinch', 0, -clamp(dd / 80, -1, 1));
       }
     } else {
       pinchDist0 = 0;
@@ -486,10 +593,12 @@
     addEventListener('touchend', onTouch, { capture: true, passive: false });
     addEventListener('pointermove', function (e) {
       if (!e) return;
+      notePointer(e);
       // Only a pressed-button move is a real drag. The Quest ray reports pointerType
       // "touch" (or a hovering "mouse") continuously and must not latch lastDrag.
       if (e.buttons) lastDrag = performance.now();
     }, true);
+    addEventListener('pointerdown', function (e) { notePointer(e); }, true);
     ['pointerup', 'pointercancel', 'mouseup'].forEach(function (t) {
       addEventListener(t, function () { lastDrag = 0; }, true);
     });
@@ -592,6 +701,8 @@
       if (!sentinel && document.body) installScrollCatcher();
       var cv = document.querySelector('canvas');
       if (cv && !cv.__gaQWheel) { cv.__gaQWheel = 1; try { cv.classList.add('gaQuestRoom'); } catch (e) {} attachWheel(cv); }
+      if (!lookBtn) ensureLookBtn();
+      if (lookBtn) lookBtn.hidden = !!startUp();
       s = read();
       if (isPlayFrame()) applyPlay(s);
     } else {
@@ -608,13 +719,39 @@
     requestAnimationFrame(tick);
   }
 
+  function setLookStick(on) {
+    lookToggle = !!on;
+    if (lookBtn) {
+      lookBtn.classList.toggle('on', lookToggle);
+      lookBtn.textContent = lookToggle ? 'STICK LOOK' : 'STICK WALK';
+      lookBtn.setAttribute('aria-pressed', lookToggle ? 'true' : 'false');
+    }
+    return lookToggle;
+  }
+
+  function ensureLookBtn() {
+    if (lookBtn || !document.body || !isQuest()) return;
+    lookBtn = document.createElement('button');
+    lookBtn.id = 'gaQlook';
+    lookBtn.type = 'button';
+    lookBtn.textContent = 'STICK WALK';
+    lookBtn.title = 'Default: plain stick scrolls walk. Tap to send plain stick to the camera (use if the right stick is also a plain wheel).';
+    lookBtn.setAttribute('aria-pressed', 'false');
+    lookBtn.addEventListener('click', function (e) {
+      if (e && e.preventDefault) e.preventDefault();
+      if (e && e.stopPropagation) e.stopPropagation();
+      setLookStick(!lookToggle);
+    });
+    document.body.appendChild(lookBtn);
+  }
+
   function start() {
     applyCss();
     applyListeners();
     listenKeys();
     probeXR();
-    if (document.body) installScrollCatcher();
-    else document.addEventListener('DOMContentLoaded', installScrollCatcher);
+    if (document.body) { installScrollCatcher(); ensureLookBtn(); }
+    else document.addEventListener('DOMContentLoaded', function () { installScrollCatcher(); ensureLookBtn(); });
     if (wantDebug()) showDebug(true);
     if (!loopOn) requestAnimationFrame(tick);
     return api;
@@ -626,6 +763,8 @@
     read: read,
     start: start,
     ingest: ingest,
+    ingestLook: ingestLook,
+    setLookStick: setLookStick,
     applyWheelBlock: applyListeners,
     applyCss: applyCss,
     isPlayFrame: isPlayFrame,

@@ -117,6 +117,9 @@ function initPads() {
   });
   chk(btns.fire && btns.fly && btns.zoom && !btns.zoomAfter && !btns.flyAfter, 'triggers / A FIRE, squeeze / B FLY, stick-click ZOOM, and they release', btns);
 
+  // The zoom-block probe above fires deltaY=800 wheels; let analog hist / fade clear.
+  await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
+
   // --- t857u: with no gamepad axes, wheel deltas become the joystick ---
   const zeroPads = () => page.evaluate(() => {
     (window.__gaMockPads || []).forEach(p => { p.axes = [0, 0, 0, 0]; p.buttons.forEach(b => { b.pressed = false; b.value = 0; }); });
@@ -162,7 +165,7 @@ function initPads() {
 
   const wheelCtrl = await page.evaluate(() => {
     const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
-    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.vel.set(0, 0, 0); st.joy.on = false;
+    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.pitch = 0; st.vel.set(0, 0, 0); st.joy.on = false;
     const d0 = st.dist;
     for (let i = 0; i < 4; i++) {
       window.dispatchEvent(new WheelEvent('wheel', { deltaX: 0, deltaY: -80, deltaMode: 0, ctrlKey: true, bubbles: true, cancelable: true }));
@@ -170,9 +173,15 @@ function initPads() {
     const r = Q.read();
     A.applyQuestPad(1 / 60);
     for (let i = 0; i < 30; i++) A.step(1 / 60);
-    return { source: r.source, on: st.joy.on, z: +A.monkey.position.z.toFixed(3), dist: st.dist, d0, ctrl: !!(r.wheel && r.wheel.ctrl) };
+    return {
+      source: r.source, on: st.joy.on, z: +A.monkey.position.z.toFixed(3),
+      dist: st.dist, d0, ctrl: !!(r.wheel && r.wheel.ctrl),
+      lookY: r.look && +((r.look.y) || 0).toFixed(3),
+      pitch: +st.pitch.toFixed(4), yaw: +st.yaw.toFixed(4),
+      chan: r.chan, mode: r.wheel && r.wheel.mode
+    };
   });
-  chk(wheelCtrl.ctrl && wheelCtrl.source === 'wheel' && wheelCtrl.on && wheelCtrl.z < 4.2 && wheelCtrl.dist === wheelCtrl.d0, 'ctrl+wheel (browser pinch / page zoom) walks and does not camera-zoom', wheelCtrl);
+  chk(wheelCtrl.ctrl && wheelCtrl.source === 'wheel' && !wheelCtrl.on && Math.abs(wheelCtrl.z - 5) < 0.05 && wheelCtrl.dist === wheelCtrl.d0 && wheelCtrl.lookY < -0.3 && wheelCtrl.pitch !== 0, 'ctrl+wheel (browser pinch / page zoom) looks and does not walk or camera-zoom', wheelCtrl);
 
   await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
 
@@ -299,6 +308,55 @@ function initPads() {
 
   await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
 
+  const analogRate = await page.evaluate(async () => {
+    const Q = window.__gaQuestPad;
+    window.dispatchEvent(new WheelEvent('wheel', { deltaX: 0, deltaY: -37.5, deltaMode: 0, bubbles: true, cancelable: true }));
+    const sparse = Q.read();
+    await new Promise(r => setTimeout(r, 280));
+    for (let i = 0; i < 8; i++) {
+      window.dispatchEvent(new WheelEvent('wheel', { deltaX: 0, deltaY: -37.5, deltaMode: 0, bubbles: true, cancelable: true }));
+    }
+    const burst = Q.read();
+    return {
+      sparseMag: +(sparse.move && sparse.move.mag || 0).toFixed(3),
+      burstMag: +(burst.move && burst.move.mag || 0).toFixed(3),
+      sparseRate: sparse.wheel && sparse.wheel.rate,
+      burstRate: burst.wheel && burst.wheel.rate,
+      burstY: +(burst.move && burst.move.y || 0).toFixed(3)
+    };
+  });
+  chk(analogRate.burstMag > analogRate.sparseMag + 0.25 && analogRate.burstMag > 0.75 && analogRate.burstY < -0.5,
+    'analog walk: a burst of 37.5-step wheels is faster than a single sparse tick', analogRate);
+
+  await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
+
+  const lookToggle = await page.evaluate(() => {
+    const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
+    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.pitch = 0; st.vel.set(0, 0, 0); st.joy.on = false;
+    const d0 = st.dist;
+    Q.setLookStick(true);
+    for (let i = 0; i < 4; i++) {
+      window.dispatchEvent(new WheelEvent('wheel', { deltaX: 40, deltaY: -80, deltaMode: 0, bubbles: true, cancelable: true, clientX: 220, clientY: 180 }));
+    }
+    const r = Q.read();
+    A.applyQuestPad(1 / 60);
+    for (let i = 0; i < 20; i++) A.step(1 / 60);
+    const out = {
+      stick: r.lookStick, source: r.source, on: st.joy.on,
+      z: +A.monkey.position.z.toFixed(3), dist: st.dist, d0,
+      lookX: r.look && +((r.look.x) || 0).toFixed(3),
+      lookY: r.look && +((r.look.y) || 0).toFixed(3),
+      yaw: +st.yaw.toFixed(4), pitch: +st.pitch.toFixed(4),
+      btn: !!(document.getElementById('gaQlook'))
+    };
+    Q.setLookStick(false);
+    return out;
+  });
+  chk(lookToggle.stick && lookToggle.btn && !lookToggle.on && Math.abs(lookToggle.z - 5) < 0.05 && lookToggle.dist === lookToggle.d0 && (lookToggle.lookX > 0.2 || lookToggle.lookY < -0.2) && (lookToggle.yaw !== 0 || lookToggle.pitch !== 0),
+    'STICK LOOK toggle routes plain wheel to camera look without walking', lookToggle);
+
+  await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
+
   const scrollWalk = await page.evaluate(() => {
     const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
     A.monkey.position.set(0, 0, 5); st.yaw = 0; st.vel.set(0, 0, 0); st.joy.on = false;
@@ -326,7 +384,7 @@ function initPads() {
 
   const vvScale = await page.evaluate(() => {
     const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
-    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.vel.set(0, 0, 0); st.joy.on = false;
+    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.pitch = 0; st.vel.set(0, 0, 0); st.joy.on = false;
     const d0 = st.dist;
     const vv = window.visualViewport;
     let hooked = false;
@@ -335,23 +393,25 @@ function initPads() {
       hooked = true;
     } catch (e) {}
     if (vv && hooked) vv.dispatchEvent(new Event('resize'));
-    else Q.ingest('vvscale', 0, -1);
+    else Q.ingestLook('vvscale', 0, -1);
     const r = Q.read();
     A.applyQuestPad(1 / 60);
     for (let i = 0; i < 45; i++) A.step(1 / 60);
     return {
-      hooked, source: r.source, scale: r.scale, on: st.joy.on, y: +st.joy.y.toFixed(3),
+      hooked, source: r.source, scale: r.scale, on: st.joy.on,
+      lookY: r.look && +((r.look.y) || 0).toFixed(3),
+      pitch: +st.pitch.toFixed(4),
       z: +A.monkey.position.z.toFixed(3), dist: st.dist, d0,
       vvR: r.counts && r.counts.vvresize
     };
   });
-  chk(vvScale.source === 'vvscale' && vvScale.on && vvScale.y < -0.3 && vvScale.z < 4.2 && vvScale.dist === vvScale.d0, 'visualViewport scale-up maps to forward and does not camera-zoom', vvScale);
+  chk(vvScale.source === 'vvscale' && !vvScale.on && Math.abs(vvScale.z - 5) < 0.05 && vvScale.dist === vvScale.d0 && vvScale.lookY < -0.3 && vvScale.pitch !== 0, 'visualViewport scale-up looks and does not walk or camera-zoom', vvScale);
 
   await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
 
   const gest = await page.evaluate(() => {
     const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
-    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.vel.set(0, 0, 0); st.joy.on = false;
+    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.pitch = 0; st.vel.set(0, 0, 0); st.joy.on = false;
     const d0 = st.dist;
     const fire = (type, scale) => {
       const ev = new Event(type, { bubbles: true, cancelable: true });
@@ -365,17 +425,19 @@ function initPads() {
     A.applyQuestPad(1 / 60);
     for (let i = 0; i < 45; i++) A.step(1 / 60);
     return {
-      blockedStart, blockedChange, source: r.source, on: st.joy.on, y: +st.joy.y.toFixed(3),
+      blockedStart, blockedChange, source: r.source, on: st.joy.on,
+      lookY: r.look && +((r.look.y) || 0).toFixed(3),
+      pitch: +st.pitch.toFixed(4),
       z: +A.monkey.position.z.toFixed(3), dist: st.dist, d0, gest: r.counts && r.counts.gesture
     };
   });
-  chk(gest.source === 'gesture' && gest.on && gest.y < -0.3 && gest.z < 4.2 && gest.dist === gest.d0 && gest.gest >= 2, 'gesturechange scale-up maps to forward and does not camera-zoom', gest);
+  chk(gest.source === 'gesture' && !gest.on && Math.abs(gest.z - 5) < 0.05 && gest.dist === gest.d0 && gest.lookY < -0.3 && gest.pitch !== 0 && gest.gest >= 2, 'gesturechange scale-up looks and does not walk or camera-zoom', gest);
 
   await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
 
   const pinch = await page.evaluate(() => {
     const A = window.__arcade, st = A.st, Q = window.__gaQuestPad;
-    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.vel.set(0, 0, 0); st.joy.on = false;
+    A.monkey.position.set(0, 0, 5); st.yaw = 0; st.pitch = 0; st.vel.set(0, 0, 0); st.joy.on = false;
     const d0 = st.dist;
     const fire = (type, pts) => {
       const ev = new Event(type, { bubbles: true, cancelable: true });
@@ -390,12 +452,14 @@ function initPads() {
     for (let i = 0; i < 45; i++) A.step(1 / 60);
     fire('touchend', []);
     return {
-      blocked, source: r.source, on: st.joy.on, y: +st.joy.y.toFixed(3),
+      blocked, source: r.source, on: st.joy.on,
+      lookY: r.look && +((r.look.y) || 0).toFixed(3),
+      pitch: +st.pitch.toFixed(4),
       z: +A.monkey.position.z.toFixed(3), dist: st.dist, d0,
       pinch: r.counts && r.counts.pinch, touch: r.counts && r.counts.touch
     };
   });
-  chk(pinch.source === 'pinch' && pinch.on && pinch.y < -0.3 && pinch.z < 4.2 && pinch.dist === pinch.d0 && pinch.pinch >= 1, 'two-finger pinch-out maps to forward and does not camera-zoom', pinch);
+  chk(pinch.source === 'pinch' && !pinch.on && Math.abs(pinch.z - 5) < 0.05 && pinch.dist === pinch.d0 && pinch.lookY < -0.3 && pinch.pitch !== 0 && pinch.pinch >= 1, 'two-finger pinch-out looks and does not walk or camera-zoom', pinch);
 
   await page.evaluate(() => new Promise(r => setTimeout(r, 280)));
 
@@ -410,23 +474,28 @@ function initPads() {
 
   const dbg = await page.evaluate(() => {
     const Q = window.__gaQuestPad;
-    window.dispatchEvent(new WheelEvent('wheel', { deltaX: 10, deltaY: -40, deltaMode: 0, bubbles: true, cancelable: true }));
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 7, pointerType: 'touch', clientX: 321, clientY: 210, buttons: 0 }));
+    window.dispatchEvent(new WheelEvent('wheel', { deltaX: 10, deltaY: -40, deltaMode: 0, bubbles: true, cancelable: true, clientX: 321, clientY: 210 }));
     Q.showDebug(true);
     const el = document.getElementById('gaQdbg');
     const text = el ? el.textContent : '';
     const r = Q.read();
-    return { has: !!el, text: (text || ''), source: r.source, n: r.n, scale: r.scale, pads: r.pads, ua: r.ua, counts: r.counts };
+    return { has: !!el, text: (text || ''), source: r.source, n: r.n, scale: r.scale, pads: r.pads, ua: r.ua, counts: r.counts, wheel: r.wheel };
   });
   chk(dbg.has
-    && /GA Quest dbg v241/.test(dbg.text)
+    && /GA Quest dbg v242/.test(dbg.text)
     && /UA /.test(dbg.text) && /OculusBrowser|Quest/.test(dbg.text)
     && /src wheel/.test(dbg.text)
+    && /mode=0/.test(dbg.text) && /rate=/.test(dbg.text)
+    && /ptr id=7/.test(dbg.text) && /type=touch/.test(dbg.text)
+    && /xy=321,210/.test(dbg.text)
+    && /stick=WALK/.test(dbg.text)
     && /vv\.scale=/.test(dbg.text) && /dpr=/.test(dbg.text)
     && /gamepads/.test(dbg.text) && /Oculus Touch/.test(dbg.text)
     && /keys /.test(dbg.text)
     && /counts wheel=/.test(dbg.text) && /scroll=/.test(dbg.text)
     && /vvR=/.test(dbg.text) && /gest=/.test(dbg.text) && /pinch=/.test(dbg.text)
-    && /start=/.test(dbg.text) && /pinch=/.test(dbg.text) && /xr inline=/.test(dbg.text), '?qdbg overlay shows UA, vv.scale, pad ids, and event counts', { text: dbg.text.slice(0, 800), n: dbg.n, scale: dbg.scale, pads: dbg.pads, counts: dbg.counts });
+    && /start=/.test(dbg.text) && /pinch=/.test(dbg.text) && /xr inline=/.test(dbg.text), '?qdbg overlay shows v242 per-event rate, mode, pointer, and clientXY', { text: dbg.text.slice(0, 900), n: dbg.n, scale: dbg.scale, pads: dbg.pads, counts: dbg.counts, wheel: dbg.wheel });
 
   // --- play copy: left stick synthesizes WASD; wheel is also blocked ---
   // Resolve against the arcade page path so this works on GitHub Pages
