@@ -6,6 +6,8 @@
 // same fonts. Still ONE merged mesh of quads (one draw call, one program, no per-frame work), compiled by the warm-up; the atlas is uploaded
 // to the GPU as soon as it loads (initTexture), on the start screen, not at the first room frame.
 // t826u / v216: a neon character/icon image sits just above each name sign (one extra canvas atlas + one merged mesh, no per-frame work).
+// t869u / v243: wall pictures can be replaced by painted tex/icons/<key>.webp (same as the VR edition),
+// lazy-loaded over the canvas icons; the claw stays the two-sided animated mesh.
 // t850u / v229: the free-standing claw icon and name sign are two-sided (back plane rotated 180° about Y, same UVs as the front)
 // so lettering reads left-to-right from both sides; the claw prongs open/close on a cheap baked-frame loop.
 // Orc Attack’s icon is a detailed neon orc (tusks, horned helmet, axe) in the same dim-glow style as the Viking / Strike icons.
@@ -647,6 +649,41 @@ function makeIconAtlas(S = 256) {
   return { cv, rects, W, H };
 }
 
+
+// t869u / v243: lazy-load Arcade's painted VR pictures onto the wall-icon atlas.
+// Same 4x4 cell layout, fitted quads, and slight brightness as galactic-arcade-vr/vr.js.
+// Canvas icons stay visible until a webp loads; a missing picture keeps the canvas art.
+// Low tier uses 256 px cells (1024 atlas) instead of 512 px (2048), to limit GPU memory.
+const PAINTED_KEYS = ['strike', 'ghost', 'cyber', 'orc', 'pip', 'berserker', 'monkey', 'nova', 'blaster', 'bb', 'rockfall', 'skytower', 'roadster', 'claw'];
+function applyPaintedIcons(THREE, icons, opt) {
+  const st = { done: false, loaded: [], failed: [], cell: 0, k: 0, atlas: 0 };
+  if (typeof window !== 'undefined') window.__gaPaintedIcons = st;
+  if (!icons || !icons.material || !icons.material.map) { st.done = true; return st; }
+  const old = icons.material.map, oc = old.image;
+  const low = !!(opt && (opt.low || opt.atlasMax || (opt.iconS && opt.iconS <= 128))) || !oc || oc.width <= 512;
+  const S0 = oc ? oc.width / 4 : 256;
+  const C = st.cell = low ? 256 : 512;
+  const cv = document.createElement('canvas'); cv.width = cv.height = C * 4; const g = cv.getContext('2d');
+  if (oc) g.drawImage(oc, 0, 0, cv.width, cv.height);
+  const info = {}; (icons.userData.icons || []).forEach(i => { info[i.key] = i; });
+  const load = k => new Promise(res => { const im = new Image(); im.onload = () => res([k, im]); im.onerror = () => res([k, null]); im.src = 'tex/icons/' + k + '.webp'; });
+  Promise.all(PAINTED_KEYS.filter(k => k !== 'claw').map(load)).then(list => { try {
+    for (const [k, im] of list) { if (!im) { st.failed.push(k); continue; }
+      const i = PAINTED_KEYS.indexOf(k), x = (i % 4) * C, y = Math.floor(i / 4) * C, pad = 12 * C / S0, inner = C - 2 * pad, q = info[k];
+      const r = q && q.w > 0 && q.h > 0 ? q.w / q.h : 1, dw = r >= 1 ? inner / r : inner, dh = r >= 1 ? inner : inner * r;
+      g.clearRect(x, y, C, C); g.drawImage(im, x + pad + (inner - dw) / 2, y + pad + (inner - dh) / 2, dw, dh); st.loaded.push(k); }
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = (opt && opt.aniso) || old.anisotropy || 4;
+    try { if (opt && opt.renderer) opt.renderer.initTexture(tex); } catch (e) {}
+    icons.material.map = tex;
+    icons.material.color.setScalar(st.k = Math.max(icons.material.color.r, 0.8));
+    icons.material.needsUpdate = false;
+    st.atlas = cv.width;
+    try { old.dispose(); } catch (e) {}
+    st.done = true;
+  } catch (e) { st.done = true; st.error = String(e); } });
+  return st;
+}
+
 export function buildNeonSigns(THREE, mergeGeometries, list, opt = {}) {
   const A = NEON_ATLAS, MAXW = opt.maxW || 3.7, HALF = opt.HALF, WALL_D = 0.06;
   const quads = [], info = [], iconQuads = [], iconInfo = [];
@@ -739,6 +776,7 @@ export function buildNeonSigns(THREE, mergeGeometries, list, opt = {}) {
     const icons = new THREE.Mesh(mergeGeometries(iconQuads), imat); icons.name = 'neonIcons'; icons.renderOrder = 3; icons.matrixAutoUpdate = false; icons.updateMatrix();
     icons.userData.icons = iconInfo; mesh.add(icons); mesh.userData.icons = iconInfo;
     if (typeof window !== 'undefined') window.__neonIcons = icons;
+    applyPaintedIcons(THREE, icons, opt);
   } else {
     mesh.userData.icons = iconInfo;
   }

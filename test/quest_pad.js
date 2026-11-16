@@ -537,6 +537,9 @@ function initPads() {
   const keyUp = await playPage.waitForFunction(() => window.__gaKeys && window.__gaKeys.KeyW === 0, null, { timeout: 8000 }).then(() => true).catch(() => false);
   chk(keyUp, 'releasing the play-copy stick releases KeyW');
 
+  // The zoom-block probe above fires deltaY=800 wheels; let analog hist / fade clear.
+  await playPage.evaluate(() => new Promise(r => setTimeout(r, 280)));
+
   const playImm = await playPage.evaluate(() => {
     if (window.__gaMockPads) {
       window.__gaMockPads[0].axes = [0, 0, 0, 0];

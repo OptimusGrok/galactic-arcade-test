@@ -184,7 +184,7 @@ let ok = true; const chk = (c, m, x) => { console.log((c ? 'PASS ' : 'FAIL ') + 
     if (!icons || !icons.material || !icons.material.map) return { ok: false };
     const img = icons.material.map.image;
     const keys = ['strike', 'ghost', 'cyber', 'orc', 'pip', 'berserker', 'monkey', 'nova', 'blaster', 'bb', 'rockfall', 'skytower', 'roadster', 'claw'];
-    const S = 256, COLS = 4;
+    const S = img.width / 4, COLS = 4;
     const c = document.createElement('canvas'); c.width = S; c.height = S;
     const g = c.getContext('2d');
     const count = (key, rgb) => {
