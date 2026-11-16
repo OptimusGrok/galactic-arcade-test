@@ -1,21 +1,33 @@
-// t856u / v237: Meta Quest Browser maps thumbsticks to wheel / pinch-zoom on a 2D page.
-// t857u / v238: in ordinary 2D page mode Quest often does NOT expose controllers through
-// navigator.getGamepads() (those only appear inside a WebXR session). The sticks arrive
-// as wheel events (deltaY up/down, deltaX left/right). Translate those into joystick
-// input, keep the gamepad path, and surface a ?qdbg=1 overlay so we can see what Quest sends.
-// Shared helper: arcade shell (main.js) and every play copy (via watch-shim.js).
+// t856u / v237 + t857u / v238 + t858u / v239: Quest 2D thumbstick support.
+// Research (Meta Browser specs, Meta input mappings, WebXR issues #995/#1347, Chromium wheel routing):
+//  - In 2D Quest Browser the thumbstick is a SCROLL device (like a mouse wheel), not a Gamepad.
+//    XR controllers are typically exposed via getGamepads() only inside a WebXR session.
+//  - Desktop mode is the default; meta viewport tags (user-scalable=no) are IGNORED, so the
+//    "zoom in/out" Dave saw is likely browser pinch-zoom (visualViewport.scale) or page zoom
+//    (devicePixelRatio), not the arcade camera. Chromium can turn an unconsumed wheel into
+//    EventAction kPageZoom when nothing is scrollable. This page used overflow:hidden, so
+//    there was no scroll target.
+//  - wheel may never reach JS (compositor scroll / only first event cancelable). A scrollable
+//    sentinel + visualViewport/gesture/pinch/key fallbacks are needed.
+//  - An "Enter VR controls" WebXR session is NOT added: immersive-vr would leave the 2D arcade,
+//    and inline sessions do not expose XR thumbsticks. Flag support in ?qdbg=1 instead.
 (function (root) {
   'use strict';
   var DEAD = 0.18;
-  var WHEEL_SCALE = 80;
-  var WHEEL_HOLD = 150;
-  var WHEEL_FADE = 80;
-  var cssOn = false, wheelOn = false, loopOn = false, keyListenOn = false, keysOn = {};
-  var lastDrag = 0;
-  var wheelX = 0, wheelY = 0, lastWheel = 0, lastWheelDx = 0, lastWheelDy = 0, lastWheelCtrl = false;
+  var AXIS_SCALE = 80;
+  var HOLD = 150;
+  var FADE = 80;
+  var cssOn = false, listenOn = false, loopOn = false, keyListenOn = false, keysOn = {};
+  var lastDrag = 0, lastWheelEvt = 0, lastIngestAt = 0, lastIngestSrc = 'none';
+  var virtX = 0, virtY = 0;
+  var lastWheelDx = 0, lastWheelDy = 0, lastWheelCtrl = false;
   var heldKeys = Object.create(null);
-  var lastKey = '';
-  var dbgEl = null, dbgOn = false;
+  var dbgEl = null, dbgOn = false, unlocked = false, recentring = false;
+  var sentinel = null, spacer = null, midX = 0, midY = 0, midSX = 0, midSY = 0;
+  var lastScale = 1, lastVvX = 0, lastVvY = 0, pinchDist0 = 0, gestureScale0 = 1;
+  var lastWheelStamp = 0;
+  var counts = { wheel: 0, mousewheel: 0, scroll: 0, vvresize: 0, vvscroll: 0, gesture: 0, touch: 0, pinch: 0, key: 0, gamepad: 0, pointer: 0 };
+  var xrInfo = { inline: null, 'immersive-vr': null, 'immersive-ar': null };
 
   function isQuest() {
     if (root.__gaForceQuest) return true;
@@ -33,6 +45,10 @@
     } catch (e) { return false; }
   }
 
+  function bump(k) { counts[k] = (counts[k] || 0) + 1; }
+
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
   function padList() {
     var raw = [], i, gp;
     try {
@@ -40,6 +56,10 @@
       for (i = 0; i < gp.length; i++) if (gp[i] && gp[i].connected !== false) raw.push(gp[i]);
     } catch (e) {}
     return raw;
+  }
+
+  function padIds() {
+    return padList().map(function (g) { return (g.index != null ? g.index + ':' : '') + (g.id || '?') + (g.mapping ? '(' + g.mapping + ')' : ''); });
   }
 
   function handOf(gp) {
@@ -68,15 +88,13 @@
     return !!(b.pressed || (typeof b.value === 'number' && b.value >= 0.5));
   }
 
-  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-
-  function wheelStick() {
-    if (!lastWheel) return { x: 0, y: 0, mag: 0 };
-    var age = performance.now() - lastWheel;
+  function virtStick() {
+    if (!lastIngestAt) return { x: 0, y: 0, mag: 0 };
+    var age = performance.now() - lastIngestAt;
     var k = 1;
-    if (age > WHEEL_HOLD) k = Math.max(0, 1 - (age - WHEEL_HOLD) / WHEEL_FADE);
+    if (age > HOLD) k = Math.max(0, 1 - (age - HOLD) / FADE);
     if (k <= 0) return { x: 0, y: 0, mag: 0 };
-    var x = wheelX * k, y = wheelY * k;
+    var x = virtX * k, y = virtY * k;
     return { x: x, y: y, mag: Math.hypot(x, y) };
   }
 
@@ -85,6 +103,19 @@
     for (k in heldKeys) if (heldKeys[k]) out.push(k);
     out.sort();
     return out;
+  }
+
+  function ingest(source, nx, ny) {
+    nx = clamp(+nx || 0, -1, 1);
+    ny = clamp(+ny || 0, -1, 1);
+    var mag = Math.hypot(nx, ny);
+    if (mag > 1) { nx /= mag; ny /= mag; }
+    virtX = clamp(virtX * 0.35 + nx * 0.65, -1, 1);
+    virtY = clamp(virtY * 0.35 + ny * 0.65, -1, 1);
+    lastIngestAt = performance.now();
+    lastIngestSrc = source || 'virt';
+    if (isPlayFrame()) applyPlay(read());
+    return virtStick();
   }
 
   function readPads() {
@@ -97,7 +128,6 @@
       s01 = live(pair(axes, 0));
       s23 = live(pair(axes, 2));
       mapping = gp.mapping || '';
-      // xr-standard: the thumbstick is axes 2/3; 0/1 is a touchpad. Standard dual-stick: 0/1 left, 2/3 right.
       if (mapping === 'xr-standard') {
         stick = s23.mag ? s23 : s01;
         alt = { x: 0, y: 0, mag: 0 };
@@ -137,20 +167,26 @@
 
   function read() {
     var pads = readPads();
-    var w = wheelStick();
+    var v = virtStick();
     var keys = keyList();
     var move = pads.move, look = pads.look, source = 'none';
     if (move.mag) source = 'gamepad';
-    else if (w.mag) { move = w; source = 'wheel'; }
+    else if (v.mag) { move = v; source = lastIngestSrc || 'virt'; }
     else if (keys.length) source = 'key';
+    var vv = root.visualViewport;
     return {
       move: move, look: look,
       fire: pads.fire, fly: pads.fly, zoom: pads.zoom,
-      n: pads.n, source: source, keys: keys,
+      n: pads.n, source: source, keys: keys, counts: counts, unlocked: unlocked,
+      pads: padIds(),
+      ua: (typeof navigator !== 'undefined' && navigator.userAgent) || '',
+      scale: vv ? vv.scale : 1,
+      dpr: root.devicePixelRatio || 1,
+      xr: xrInfo,
       wheel: {
         dx: lastWheelDx, dy: lastWheelDy,
-        age: lastWheel ? +(performance.now() - lastWheel).toFixed(0) : null,
-        x: w.x, y: w.y, ctrl: lastWheelCtrl
+        age: lastIngestAt ? +(performance.now() - lastIngestAt).toFixed(0) : null,
+        x: v.x, y: v.y, ctrl: lastWheelCtrl
       }
     };
   }
@@ -175,8 +211,15 @@
     try {
       var s = document.createElement('style');
       s.setAttribute('data-ga-quest', '1');
-      s.textContent = 'html,body{overscroll-behavior:none;touch-action:none}'
-        + '#gaQdbg{position:fixed;top:max(4px,env(safe-area-inset-top));left:max(4px,env(safe-area-inset-left));z-index:2147483000;pointer-events:none;background:#000c;color:#9ff;font:11px/1.35 ui-monospace,Menlo,Consolas,monospace;padding:6px 8px;border:1px solid #0ff6;border-radius:6px;white-space:pre;max-width:min(92vw,360px)}';
+      // Desktop-mode Quest ignores the viewport meta, so user-scalable=no cannot stop browser zoom.
+      // Give the compositor a scroll target (unlocked overflow + spacer) and pin the canvas so the
+      // room does not slide away. touch-action/overscroll are relaxed so stick-as-scroll is not
+      // remapped to page zoom.
+      s.textContent = 'html.gaQuest,html.gaQuest body{overflow:scroll!important;overscroll-behavior:auto!important;touch-action:pan-x pan-y!important}'
+        + 'html.gaQuest canvas{position:fixed!important;inset:0;width:100%!important;height:100%!important;z-index:1}'
+        + '#gaQscroll{position:fixed;inset:0;overflow:scroll;z-index:0;pointer-events:none;opacity:0;overscroll-behavior:auto}'
+        + '#gaQspacer{position:absolute;left:0;top:0;width:300vw;height:300vh;pointer-events:none;z-index:-1}'
+        + '#gaQdbg{position:fixed;top:max(4px,env(safe-area-inset-top));left:max(4px,env(safe-area-inset-left));z-index:2147483000;pointer-events:none;background:#000c;color:#9ff;font:11px/1.35 ui-monospace,Menlo,Consolas,monospace;padding:6px 8px;border:1px solid #0ff6;border-radius:6px;white-space:pre;max-width:min(96vw,420px)}';
       (document.head || document.documentElement).appendChild(s);
     } catch (e) {}
     ensureViewport();
@@ -206,53 +249,203 @@
     var w = s.wheel || {};
     var mv = s.move || {};
     var lk = s.look || {};
-    dbgEl.textContent = 'GA Quest dbg'
+    var c = s.counts || counts;
+    var ua = (s.ua || '').slice(0, 180);
+    var xr = s.xr || {};
+    dbgEl.textContent = 'GA Quest dbg v239'
+      + '\nUA ' + (ua || '-')
       + '\nsrc ' + (s.source || 'none')
+      + ' unlocked=' + (s.unlocked ? '1' : '0')
       + '\nwheel dx=' + (w.dx == null ? '-' : (+w.dx).toFixed(1))
       + ' dy=' + (w.dy == null ? '-' : (+w.dy).toFixed(1))
       + ' age=' + (w.age == null ? '-' : w.age + 'ms')
       + (w.ctrl ? ' CTRL' : '')
       + '\nmove x=' + (mv.x || 0).toFixed(2) + ' y=' + (mv.y || 0).toFixed(2)
       + ' look x=' + (lk.x || 0).toFixed(2) + ' y=' + (lk.y || 0).toFixed(2)
-      + '\ngamepads ' + (s.n || 0)
-      + '\nkeys ' + ((s.keys && s.keys.length) ? s.keys.join(',') : '-');
+      + '\nvv.scale=' + (s.scale == null ? '-' : (+s.scale).toFixed(3))
+      + ' dpr=' + (s.dpr == null ? '-' : (+s.dpr).toFixed(3))
+      + '\ngamepads ' + (s.n || 0) + ' ' + ((s.pads && s.pads.length) ? s.pads.join(' | ') : '-')
+      + '\nkeys ' + ((s.keys && s.keys.length) ? s.keys.join(',') : '-')
+      + '\ncounts wheel=' + (c.wheel || 0)
+      + ' mousewheel=' + (c.mousewheel || 0)
+      + ' scroll=' + (c.scroll || 0)
+      + ' vvR=' + (c.vvresize || 0)
+      + ' vvS=' + (c.vvscroll || 0)
+      + ' gest=' + (c.gesture || 0)
+      + ' pinch=' + (c.pinch || 0)
+      + ' touch=' + (c.touch || 0)
+      + ' key=' + (c.key || 0)
+      + ' gp=' + (c.gamepad || 0)
+      + '\nxr inline=' + xr.inline + ' vr=' + xr['immersive-vr'] + ' ar=' + xr['immersive-ar'];
+  }
+
+  function deltaToAxis(dx, dy, mode) {
+    if (mode === 1) { dx *= 16; dy *= 16; }
+    else if (mode === 2) { dx *= 80; dy *= 80; }
+    return { x: clamp(dx / AXIS_SCALE, -1, 1), y: clamp(dy / AXIS_SCALE, -1, 1) };
   }
 
   function onWheel(e) {
-    if (!isQuest()) return;
+    var stamp = e.timeStamp || performance.now();
+    if (stamp && stamp === lastWheelStamp) return;
+    lastWheelStamp = stamp;
+    bump(e.type === 'mousewheel' || e.type === 'DOMMouseScroll' ? 'mousewheel' : 'wheel');
     if (e.cancelable) e.preventDefault();
     lastWheelCtrl = !!(e.ctrlKey || e.metaKey);
-    lastWheelDx = e.deltaX || 0;
-    lastWheelDy = e.deltaY || 0;
-    // ctrl/meta + wheel is browser pinch-zoom: block it, but do not walk.
-    if (lastWheelCtrl) return;
-    // A real finger/mouse drag (not a stale pointerdown) is already steering.
+    lastWheelDx = (e.deltaX != null ? e.deltaX : (e.wheelDeltaX != null ? -e.wheelDeltaX : 0)) || 0;
+    lastWheelDy = (e.deltaY != null ? e.deltaY : (e.wheelDelta != null ? -e.wheelDelta : 0)) || 0;
+    lastWheelEvt = performance.now();
+    // v239: ctrl/meta+wheel is how Chromium pinch/page-zoom often arrives. That is the stick
+    // in desktop-mode Quest, not a user pinch — map it to movement and keep the camera still.
     if (lastDrag && performance.now() - lastDrag < 100) return;
-    var dx = lastWheelDx, dy = lastWheelDy;
-    if (e.deltaMode === 1) { dx *= 16; dy *= 16; }
-    else if (e.deltaMode === 2) { dx *= 80; dy *= 80; }
-    var nx = clamp(dx / WHEEL_SCALE, -1, 1);
-    var ny = clamp(dy / WHEEL_SCALE, -1, 1);
-    var mag = Math.hypot(nx, ny);
-    if (mag > 1) { nx /= mag; ny /= mag; mag = 1; }
-    // Smooth toward this tick so a held stick (repeating wheel events) walks steadily.
-    wheelX = clamp(wheelX * 0.35 + nx * 0.65, -1, 1);
-    wheelY = clamp(wheelY * 0.35 + ny * 0.65, -1, 1);
-    lastWheel = performance.now();
-    // Don't wait for a later rAF: a heavy play copy can hitch past the 130ms hold.
-    if (isPlayFrame()) applyPlay(read());
+    var a = deltaToAxis(lastWheelDx, lastWheelDy, e.deltaMode || 0);
+    ingest('wheel', a.x, a.y);
   }
 
-  function applyWheelBlock() {
-    if (wheelOn) return;
-    wheelOn = true;
-    addEventListener('wheel', onWheel, { passive: false, capture: true });
-    var drag = function (e) {
+  function recen() {
+    recentring = true;
+    try {
+      var se = document.scrollingElement || document.documentElement;
+      if (se && midX != null) { se.scrollLeft = midX; se.scrollTop = midY; }
+      if (sentinel) { sentinel.scrollLeft = midSX; sentinel.scrollTop = midSY; }
+    } catch (e) {}
+    recentring = false;
+  }
+
+  var lastScrollStamp = 0;
+  function onScroll(e) {
+    var stamp = e.timeStamp || performance.now();
+    if (stamp && stamp === lastScrollStamp) return;
+    lastScrollStamp = stamp;
+    bump('scroll');
+    if (recentring) return;
+    if (performance.now() - lastWheelEvt < 50) { recen(); return; }
+    if (lastDrag && performance.now() - lastDrag < 100) { recen(); return; }
+    var isSent = sentinel && (e.target === sentinel);
+    var el = isSent ? sentinel : (document.scrollingElement || document.documentElement);
+    var cx = isSent ? midSX : midX, cy = isSent ? midSY : midY;
+    var dx = (el.scrollLeft || 0) - cx, dy = (el.scrollTop || 0) - cy;
+    recen();
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    var a = deltaToAxis(dx, dy, 0);
+    ingest('scroll', a.x, a.y);
+  }
+
+  function onVV(kind) {
+    bump(kind === 'scroll' ? 'vvscroll' : 'vvresize');
+    var vv = root.visualViewport; if (!vv) return;
+    var scale = vv.scale || 1;
+    var x = vv.offsetLeft || 0, y = vv.offsetTop || 0;
+    var dScale = scale - lastScale;
+    var dx = x - lastVvX, dy = y - lastVvY;
+    lastScale = scale; lastVvX = x; lastVvY = y;
+    if (performance.now() - lastWheelEvt < 50) return;
+    if (lastDrag && performance.now() - lastDrag < 100) return;
+    // Zoom in (scale up) -> forward (negative joy.y), matching "stick up zooms in".
+    if (Math.abs(dScale) > 0.001) ingest('vvscale', 0, -clamp(dScale * 8, -1, 1));
+    else if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) ingest('vvscroll', clamp(dx / AXIS_SCALE, -1, 1), clamp(dy / AXIS_SCALE, -1, 1));
+  }
+
+  function onGesture(e) {
+    bump('gesture');
+    if (e.cancelable) e.preventDefault();
+    if (e.type === 'gesturestart') { gestureScale0 = e.scale || 1; return; }
+    var sc = e.scale || 1;
+    var d = sc - (e.type === 'gestureend' ? sc : gestureScale0);
+    if (e.type === 'gesturechange') gestureScale0 = sc;
+    if (Math.abs(d) > 0.01) ingest('gesture', 0, -clamp(d * 4, -1, 1));
+  }
+
+  function touchDist(ev) {
+    if (!ev || !ev.touches || ev.touches.length < 2) return 0;
+    var a = ev.touches[0], b = ev.touches[1];
+    return Math.hypot((a.clientX || 0) - (b.clientX || 0), (a.clientY || 0) - (b.clientY || 0));
+  }
+
+  function onTouch(e) {
+    bump('touch');
+    var n = (e.touches && e.touches.length) || 0;
+    if (n >= 2) {
+      var d = touchDist(e);
+      if (e.type === 'touchstart' || !pinchDist0) { pinchDist0 = d; return; }
+      var dd = d - pinchDist0;
+      pinchDist0 = d;
+      if (Math.abs(dd) > 2) {
+        bump('pinch');
+        if (e.cancelable) e.preventDefault();
+        ingest('pinch', 0, -clamp(dd / 80, -1, 1));
+      }
+    } else {
+      pinchDist0 = 0;
+    }
+  }
+
+  function attachWheel(el) {
+    if (!el || !el.addEventListener) return;
+    el.addEventListener('wheel', onWheel, { passive: false, capture: true });
+    el.addEventListener('mousewheel', onWheel, { passive: false, capture: true });
+  }
+
+  function installScrollCatcher() {
+    try { document.documentElement.classList.add('gaQuest'); } catch (e) {}
+    if (!document.body) return;
+    if (!spacer) {
+      spacer = document.createElement('div');
+      spacer.id = 'gaQspacer';
+      spacer.setAttribute('aria-hidden', 'true');
+      document.body.insertBefore(spacer, document.body.firstChild);
+    }
+    if (!sentinel) {
+      sentinel = document.createElement('div');
+      sentinel.id = 'gaQscroll';
+      sentinel.setAttribute('aria-hidden', 'true');
+      var inner = document.createElement('div');
+      inner.style.cssText = 'width:300%;height:300%';
+      sentinel.appendChild(inner);
+      document.body.appendChild(sentinel);
+    }
+    midX = Math.floor((spacer.offsetWidth - (root.innerWidth || 0)) / 2);
+    midY = Math.floor((spacer.offsetHeight - (root.innerHeight || 0)) / 2);
+    if (midX < 10) midX = 400;
+    if (midY < 10) midY = 400;
+    midSX = Math.floor((sentinel.scrollWidth - sentinel.clientWidth) / 2);
+    midSY = Math.floor((sentinel.scrollHeight - sentinel.clientHeight) / 2);
+    recen();
+  }
+
+  function unlockPads() {
+    if (unlocked) return;
+    unlocked = true;
+    try { navigator.getGamepads && navigator.getGamepads(); } catch (e) {}
+  }
+
+  function applyListeners() {
+    if (listenOn) return;
+    listenOn = true;
+    attachWheel(root);
+    attachWheel(document);
+    addEventListener('scroll', onScroll, { capture: true, passive: true });
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    var vv = root.visualViewport;
+    if (vv) {
+      try { lastScale = vv.scale || 1; lastVvX = vv.offsetLeft || 0; lastVvY = vv.offsetTop || 0; } catch (e) {}
+      vv.addEventListener('resize', function () { onVV('resize'); });
+      vv.addEventListener('scroll', function () { onVV('scroll'); });
+    }
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (t) {
+      addEventListener(t, onGesture, { capture: true, passive: false });
+    });
+    addEventListener('touchstart', onTouch, { capture: true, passive: false });
+    addEventListener('touchmove', onTouch, { capture: true, passive: false });
+    addEventListener('touchend', onTouch, { capture: true, passive: false });
+    addEventListener('pointermove', function (e) {
       if (!e) return;
-      if (e.type === 'touchmove' || (e.buttons && e.buttons !== 0) || e.pointerType === 'touch') lastDrag = performance.now();
-    };
-    addEventListener('pointermove', drag, true);
-    addEventListener('touchmove', drag, true);
+      if (e.buttons || e.pointerType === 'touch') lastDrag = performance.now();
+    }, true);
+    ['pointerdown', 'mousedown', 'click', 'touchstart', 'keydown'].forEach(function (t) {
+      addEventListener(t, function () { if (t !== 'keydown') bump('pointer'); unlockPads(); }, true);
+    });
+    addEventListener('gamepadconnected', function () { bump('gamepad'); unlockPads(); });
   }
 
   function listenKeys() {
@@ -261,14 +454,28 @@
     var moveCodes = /^(ArrowUp|ArrowDown|ArrowLeft|ArrowRight|KeyW|KeyA|KeyS|KeyD|Space|ShiftLeft|ShiftRight)$/;
     addEventListener('keydown', function (e) {
       if (!e || !e.code) return;
+      bump('key');
       heldKeys[e.code] = 1;
-      if (moveCodes.test(e.code)) lastKey = e.code;
+      if (moveCodes.test(e.code) && !keysOn[e.code]) {
+        // Native arrow/WASD already move the arcade; still record source for ?qdbg=1.
+        lastIngestSrc = lastIngestSrc === 'none' || !virtStick().mag ? 'key' : lastIngestSrc;
+      }
     }, true);
     addEventListener('keyup', function (e) {
       if (!e || !e.code) return;
       delete heldKeys[e.code];
     }, true);
     addEventListener('blur', function () { heldKeys = Object.create(null); }, false);
+  }
+
+  function probeXR() {
+    try {
+      var xr = navigator.xr;
+      if (!xr || !xr.isSessionSupported) return;
+      ['inline', 'immersive-vr', 'immersive-ar'].forEach(function (m) {
+        xr.isSessionSupported(m).then(function (ok) { xrInfo[m] = !!ok; }).catch(function () { xrInfo[m] = false; });
+      });
+    } catch (e) {}
   }
 
   function isPlayFrame() {
@@ -329,12 +536,18 @@
 
   function tick() {
     loopOn = true;
-    var s = { move: { x: 0, y: 0, mag: 0 }, look: { x: 0, y: 0, mag: 0 }, fire: false, fly: false, zoom: false, n: 0, source: 'none', keys: [], wheel: {} };
+    var s;
     if (isQuest()) {
+      if (!sentinel && document.body) installScrollCatcher();
+      var cv = document.querySelector('canvas');
+      if (cv && !cv.__gaQWheel) { cv.__gaQWheel = 1; attachWheel(cv); }
       s = read();
       if (isPlayFrame()) applyPlay(s);
-    } else if (prevBtn.fire || prevBtn.fly || prevBtn.zoom || keysOn.KeyW || keysOn.KeyA || keysOn.KeyS || keysOn.KeyD || keysOn.Space) {
-      applyPlay({ move: { x: 0, y: 0, mag: 0 }, fire: false, fly: false, zoom: false });
+    } else {
+      s = { move: { x: 0, y: 0, mag: 0 }, look: { x: 0, y: 0, mag: 0 }, fire: false, fly: false, zoom: false, n: 0, source: 'none', keys: [], wheel: {}, counts: counts };
+      if (prevBtn.fire || prevBtn.fly || prevBtn.zoom || keysOn.KeyW || keysOn.KeyA || keysOn.KeyS || keysOn.KeyD || keysOn.Space) {
+        applyPlay({ move: { x: 0, y: 0, mag: 0 }, fire: false, fly: false, zoom: false });
+      }
     }
     api.last = s;
     if (dbgOn) renderDebug(s);
@@ -346,8 +559,11 @@
 
   function start() {
     applyCss();
-    applyWheelBlock();
+    applyListeners();
     listenKeys();
+    probeXR();
+    if (document.body) installScrollCatcher();
+    else document.addEventListener('DOMContentLoaded', installScrollCatcher);
     if (wantDebug()) showDebug(true);
     if (!loopOn) requestAnimationFrame(tick);
     return api;
@@ -358,7 +574,8 @@
     isQuest: isQuest,
     read: read,
     start: start,
-    applyWheelBlock: applyWheelBlock,
+    ingest: ingest,
+    applyWheelBlock: applyListeners,
     applyCss: applyCss,
     isPlayFrame: isPlayFrame,
     showDebug: showDebug,
