@@ -25,9 +25,10 @@ const { open } = require('./lib');
   });
   const { low, mid, midPS, highM, high, live, mirrors } = q;
   chk(low.bloom === 0 && low.post === false && low.refl === 0 && (low.mirrorSamples || 0) === 0 && (low.samples || 0) === 0, 'low: bloom off, no post, no floor-mirror MSAA');
-  chk(mid.bloom <= 0.35 && (mid.mirrorSamples || 0) === 0, 'mid: reduced bloom, no mirror MSAA (bloom ' + mid.bloom + ')');
+  // t921u: mid and high-mobile bloom/MSAA restored to the v252 look after the floor looked washed out.
+  chk(mid.bloom <= 0.5 && (mid.mirrorSamples || 0) === 0, 'mid: v252 bloom, no extra mirror MSAA (bloom ' + mid.bloom + ')');
   chk((midPS.mirrorSamples || 0) === 0 && midPS.bloom <= 0.35, 'mid power-save: no mirror MSAA');
-  chk(highM.bloom <= 0.4 && (highM.mirrorSamples || 0) === 0 && (highM.samples || 0) === 0, 'high mobile: slightly reduced bloom, no MSAA');
+  chk(highM.bloom <= 0.5 && (highM.mirrorSamples || 0) === 0 && (highM.samples || 0) <= 2, 'high mobile: v252 bloom and composer MSAA, no extra mirror MSAA');
   chk(high.bloom <= 0.5 && (high.mirrorSamples || 0) <= 2 && (high.samples || 0) <= 2, 'high desktop: slight cuts, mirror MSAA <= 2');
   const liveMS = live.mirrorSamples || 0;
   const bad = mirrors.filter(m => (m.samples || 0) > liveMS && (m.w > 1 && m.h > 1));
