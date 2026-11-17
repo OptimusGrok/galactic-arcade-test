@@ -129,7 +129,7 @@ export function setupGrokVisit({ scene, tp, play, monkey, camera, st } = {}) {
   // t736u: the only line. say() refuses anything that isn't HI so no stray speech can creep back in.
   function say(text, clipId) {
     if (text !== HI) return;
-    talkT = Math.max(1.2, text.length * 0.055); happyT = talkT + 1.0; api.said.push(text);
+    talkT = Math.max(1.2, text.length * 0.055); happyT = talkT + 1.0; api.said.push(text); if (api.said.length > 80) api.said.splice(0, api.said.length - 80);
     if (muted()) return;
     stopVoice();
     const ac = actx();

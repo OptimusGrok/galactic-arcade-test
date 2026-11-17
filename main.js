@@ -1045,7 +1045,10 @@ function setPlayerChar(kind) {
   if ((monkey.userData.char || 'monkey') === kind) return monkey;
   const tag = monkey.getObjectByName('gaNameTag');
   if (tag) monkey.remove(tag);
-  while (monkey.children.length) monkey.remove(monkey.children[0]);
+  // t882u: makeMonkey/makeAlien build fresh geometries; drop the old ones or they stay on the GPU after a character swap.
+  const dump = [];
+  while (monkey.children.length) dump.push(monkey.children[0]) && monkey.remove(monkey.children[0]);
+  for (const o of dump) o.traverse(n => { try { if (n.geometry && n.geometry.dispose) n.geometry.dispose(); } catch (e) {} });
   const neu = kind === 'alien' ? makeAlien() : makeMonkey();
   while (neu.children.length) monkey.add(neu.children[0]);
   monkey.userData = neu.userData;

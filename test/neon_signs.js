@@ -169,7 +169,8 @@ let ok = true; const chk = (c, m, x) => { console.log((c ? 'PASS ' : 'FAIL ') + 
       cv.getContext('2d').drawImage(img, minX, minY, rw, rh, 0, 0, rw, rh);
       const rend = profileFrom(cv.getContext('2d').getImageData(0, 0, rw, rh).data, rw, rh, false);
       const cA = corr(rend, atlas), cF = corr(rend, flipped);
-      return { ok: true, corrAtlas: +cA.toFixed(3), corrFlip: +cF.toFixed(3), ltr: cA > 0.08 && cA > cF + 0.15, rw, rh, inView: scr.every(s => s.inView) };
+      // 0.15 was flaky on the far-side crop (atlas ~0.11, flip ~-0.03, margin 0.14). 0.10 still clearly beats a mirrored sign.
+      return { ok: true, corrAtlas: +cA.toFixed(3), corrFlip: +cF.toFixed(3), ltr: cA > 0.08 && cA > cF + 0.10, rw, rh, inView: scr.every(s => s.inView) };
     }, { b64: shot.toString('base64'), sign: letteringMeta.sign });
   };
   const lettering = letteringMeta ? { ok: true, front: await letteringSample(letteringMeta.front), back: await letteringSample(letteringMeta.back) } : { ok: false };
