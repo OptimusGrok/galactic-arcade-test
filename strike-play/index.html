@@ -69,7 +69,8 @@ function resize() {
   canvas.style.left = Math.floor((vw - cw) / 2) + 'px'; canvas.style.top = Math.floor((vh - ch) / 2) + 'px';
   const dpr = window.devicePixelRatio || 1;
   S = clamp(Math.round(sc * dpr), 1, MAX_S);
-  if (canvas.width !== W * S) { canvas.width = W * S; canvas.height = H * S; }
+  // t879u: also update height. The default <canvas> is 540x960 (S=2, H=480); when S stays 2 but H grows to 584 on a tall phone, the old width-only check left the bitmap 480 tall and clipped the BOMB button (y=H-52).
+  if (canvas.width !== W * S || canvas.height !== H * S) { canvas.width = W * S; canvas.height = H * S; }
   VIEW.l = Math.floor((vw - cw) / 2); VIEW.t = Math.floor((vh - ch) / 2); VIEW.w = cw; VIEW.h = ch; VIEW.sc = cw / W;
 }
 window.addEventListener('resize', resize);
@@ -3136,18 +3137,20 @@ const _dp4 = drawPlayer; drawPlayer = function () {
     ctx.restore(); ctx.globalAlpha = 1;
   }
   _dp4(); };
-const _rh4 = renderHUD; renderHUD = function () {
-  if (slowOn()) { const k = Math.min(1, G.slowT / 30, (SLOW.DUR - G.slowT) / 15); ctx.save(); ctx.globalAlpha = 0.55 * k;
-    if (!SLOW.vig) { const c = mkC(W >> 1, (H + 200) >> 1), x = c.getContext('2d'), g = x.createRadialGradient(c.width / 2, c.height / 2, c.height * 0.16, c.width / 2, c.height / 2, c.height * 0.5); g.addColorStop(0, 'rgba(40,90,220,0.18)'); g.addColorStop(1, 'rgba(30,60,190,1)'); x.fillStyle = g; x.fillRect(0, 0, c.width, c.height); SLOW.vig = c; }
-    ctx.imageSmoothingEnabled = true; ctx.drawImage(SLOW.vig, 0, -100, W, H + 200); ctx.imageSmoothingEnabled = false; ctx.restore(); }
-  _rh4();
+function drawSlowBtn() {
   if (G.scene !== 'play' && G.scene !== 'pause') return;
   const b = SLOW_BTN, ready = G.slowCD <= 0, act = slowOn();
   ctx.globalAlpha = act ? 0.8 : ready ? 0.55 : 0.28; C(ctx, b.x, b.y, b.r, act ? '#10306a' : ready ? '#0c2448' : '#202428');
   if (!ready && !act) { ctx.globalAlpha = 0.45; ctx.fillStyle = '#5a6a80'; ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.arc(b.x, b.y, b.r, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - G.slowCD / SLOW.CD)); ctx.closePath(); ctx.fill(); }
   ctx.globalAlpha = ready || act ? 1 : 0.5; ctx.strokeStyle = act ? '#c0f0ff' : ready ? '#40b0ff' : '#708090'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, act ? TAU * G.slowT / SLOW.DUR : TAU); ctx.stroke(); ctx.globalAlpha = 1;
   { const lc = ready || act ? '#a0e0ff' : '#8090a0'; text('HYPER', b.x, b.y - 12, lc, 1, 'c'); text('SPEED', b.x, b.y - 4, lc, 1, 'c'); }
-  text(act ? String(Math.ceil(G.slowT / 60)) : ready ? (Input.touchMode ? 'GO' : 'C') : String(Math.ceil(G.slowCD / 60)), b.x, b.y + 5, act ? '#ffffff' : ready ? '#ffffff' : '#a0a8b0', 1, 'c'); };
+  text(act ? String(Math.ceil(G.slowT / 60)) : ready ? (Input.touchMode ? 'GO' : 'C') : String(Math.ceil(G.slowCD / 60)), b.x, b.y + 5, act ? '#ffffff' : ready ? '#ffffff' : '#a0a8b0', 1, 'c'); }
+const _rh4 = renderHUD; renderHUD = function () {
+  if (slowOn()) { const k = Math.min(1, G.slowT / 30, (SLOW.DUR - G.slowT) / 15); ctx.save(); ctx.globalAlpha = 0.55 * k;
+    if (!SLOW.vig) { const c = mkC(W >> 1, (H + 200) >> 1), x = c.getContext('2d'), g = x.createRadialGradient(c.width / 2, c.height / 2, c.height * 0.16, c.width / 2, c.height / 2, c.height * 0.5); g.addColorStop(0, 'rgba(40,90,220,0.18)'); g.addColorStop(1, 'rgba(30,60,190,1)'); x.fillStyle = g; x.fillRect(0, 0, c.width, c.height); SLOW.vig = c; }
+    ctx.imageSmoothingEnabled = true; ctx.drawImage(SLOW.vig, 0, -100, W, H + 200); ctx.imageSmoothingEnabled = false; ctx.restore(); }
+  _rh4();
+  drawSlowBtn(); };
 
 // ===== STRIKE v3.3: live world leaderboard (Supabase REST, insert-only via RPC) with offline fallback to local scores =====
 // Fill these two in once the Supabase project exists (anon key is public by design; RLS + the submit_score() function guard writes).
@@ -4134,10 +4137,19 @@ window.TicketArt = (function () {
     text('L' + Math.max(0, G2.lives | 0), W - 52, 21, '#ffe080', 1, 'r');
     { const w1 = WPN[G.weapon] || WPN.V, w2 = WPN[G2.weapon] || WPN.V;   // t805u: each player's weapon + level
       text(w1.name + ' LV' + (G.wlv | 0), 4, 30, w1.col, 1); text(w2.name + ' LV' + (G2.wlv | 0), W - 4, 30, w2.col, 1, 'r'); }
-    for (let i = 0; i < (G.bombs || 0); i++) { try { blit(ITEM_SPR.bomb, 16 + i * 14, H - 10); } catch (e) {} }
-    for (let i = 0; i < (G2.bombs || 0); i++) { try { blit(ITEM_SPR.bomb, W - 16 - i * 14, H - 10); } catch (e) {} }
-    text('P1', 4, H - 22, '#80c8ff', 1);
-    text('P2', W - 4, H - 22, '#ffb060', 1, 'r');
+    // t879u: co-op used to skip the wrapped solo HUD, so the BOMB + HYPER SPEED touch
+    // buttons never appeared, and the bomb icons sat at H-10 under a phone's home indicator.
+    text('B' + (G.bombs | 0), 70, 21, '#40ff80', 1);
+    text('B' + (G2.bombs | 0), W - 70, 21, '#40ff80', 1, 'r');
+    for (let i = 0; i < (G.bombs || 0); i++) { try { blit(ITEM_SPR.bomb, 16 + i * 14, H - 36); } catch (e) {} }
+    text('P1', 4, H - 48, '#80c8ff', 1);
+    text('P2', W - 4, H - 48, '#ffb060', 1, 'r');
+    if (Input.touchMode) {
+      ctx.globalAlpha = G.bombs ? 0.55 : 0.25; ctx.fillStyle = '#103a20'; ctx.beginPath(); ctx.arc(BOMB_BTN.x, BOMB_BTN.y, BOMB_BTN.r, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#40ff80'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(BOMB_BTN.x, BOMB_BTN.y, BOMB_BTN.r, 0, TAU); ctx.stroke();
+      ctx.globalAlpha = 1; text('BOMB', BOMB_BTN.x, BOMB_BTN.y - 7, '#80ffa0', 1, 'c'); text(String(G.bombs), BOMB_BTN.x, BOMB_BTN.y + 3, '#ffffff', 1, 'c');
+    }
+    try { drawSlowBtn(); } catch (e) {}
     // t807u: a player who is out of lives sits out until the other one is out too
     if ((G.lives | 0) < 0 && !pl.alive) text('OUT', 64, 12, '#ff6070', 1);
     if ((G2.lives | 0) < 0 && !pl2.alive) text('OUT', W - 64, 12, '#ff6070', 1, 'r');
