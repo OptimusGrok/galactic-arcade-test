@@ -3461,10 +3461,10 @@ window.TicketArt = (function () {
 (function () {
   const D = window.__demo = { on: false, runs: 0, restarts: 0, t: 0 };
   const _sv = saveEntry; saveEntry = function () { if (window.__DEMO) return; return _sv(); };
-  D.start = function () { D.on = true; window.__DEMO = true; D.runs++; D.hi = G.hi; newGame(0); G.credits = 0; D.t = 0; Input.keys.fire = true; };
+  D.start = function () { if (window.__board && window.__board.on) return; D.on = true; window.__DEMO = true; D.runs++; D.hi = G.hi; newGame(0); G.credits = 0; D.t = 0; Input.keys.fire = true; };
   D.stop = function () { D.on = false; window.__DEMO = false; Input.botMove = null; for (const k in Input.keys) Input.keys[k] = false; if (D.hi != null) G.hi = D.hi; };
   setInterval(function () {
-    if (!D.on) return;
+    if (!D.on || (window.__board && window.__board.on)) return;
     if (G.scene === 'pause') return;
     if (G.scene !== 'play') { D.restarts++; G.hi = D.hi; newGame(0); G.credits = 0; Input.keys.fire = true; return; }   // demo died: just run it again
     D.t += 0.1; let ex = 0;   // drift toward the nearest enemy's column, weave, stay low
@@ -3477,9 +3477,9 @@ window.TicketArt = (function () {
 // the standalone game; GET only) instead of the attract demo, refreshed every 20 s, until the player taps to play.
 (function () {
   const D = window.__demo, B = window.__board = { on: false, shows: 0, fetches: 0 };
-  B.start = function () { D.stop(); B.on = true; B.shows++; try { clearWorld(); } catch (e) {} G.scene = 'scores'; G.sceneT = 0; UI.netMsg = ''; B.fetches++; netFetchTop(); };
+  B.start = function () { D.stop(); B.on = true; window.__DEMO = false; B.shows++; try { clearWorld(); } catch (e) {} G.scene = 'scores'; G.sceneT = 0; UI.netMsg = ''; B.fetches++; netFetchTop(); };
   B.stop = function () { B.on = false; };
-  const _st = D.start; D.start = function () { B.on = false; return _st.apply(this, arguments); };
+  const _st = D.start; D.start = function () { if (B.on) return; return _st.apply(this, arguments); };
   const _sp = D.stop; D.stop = function () { const was = B.on; _sp.apply(this, arguments); B.on = was; };
   const _tx = text; text = function (s) { if (B.on && G.scene === 'scores' && s === 'TAP / FIRE TO RETURN') arguments[0] = 'CREDIT LOADED - TAP TO PLAY'; return _tx.apply(this, arguments); };
   setInterval(function () { if (!B.on) return; if (G.scene !== 'scores') { G.scene = 'scores'; } G.sceneT = 0; Input.taps.length = 0; }, 100);   // hold the board: no auto return to title

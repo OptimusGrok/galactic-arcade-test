@@ -5,6 +5,7 @@ import { Reflector } from 'three/addons/objects/Reflector.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { initTexLoader, loadPicture } from './texload.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { buildStrikeCabinet, startStrikeDemo, tickStrikeDemo } from './strikecab.js';
 import { buildGhostCabinet, startGhostDemo, tickGhostDemo } from './ghostcab.js';
@@ -59,7 +60,7 @@ const PS = window.__powerSave = { on: readPowerSave(), key: PS_KEY, fps: TIER.na
 let Q = qualityFor(PS.on); TIER.quality = Q;
 
 // ---------- renderer / scene ----------
-const renderer = new THREE.WebGLRenderer({ antialias: !MOBILE && TIER.name === 'high' && !PS.on, powerPreference: (PS.on || TIER.name === 'low') ? 'low-power' : 'high-performance' }); renderer.localClippingEnabled = true; if (!/[?&]glcheck/.test(location.search)) renderer.debug.checkShaderErrors = false;   // t295u: no sync getProgramInfoLog per shader (~3.9 s of the start-screen freeze at 4x CPU); ?glcheck turns it back on   // teleporter dissolve
+const renderer = new THREE.WebGLRenderer({ antialias: !MOBILE && TIER.name === 'high' && !PS.on, powerPreference: (PS.on || TIER.name === 'low') ? 'low-power' : 'high-performance' }); renderer.localClippingEnabled = true; try { window.__texload = { ok: initTexLoader(renderer, THREE) }; } catch (e) { window.__texload = { ok: false, err: String(e) }; } const warm = { done: false, n: 0, ms: 0, linked: 0, slices: 0, drawn: false, post: false }; window.__warm = warm; if (!/[?&]glcheck/.test(location.search)) renderer.debug.checkShaderErrors = false;   // t295u: no sync getProgramInfoLog per shader (~3.9 s of the start-screen freeze at 4x CPU); ?glcheck turns it back on   // teleporter dissolve
 let dpr = Math.min(devicePixelRatio || 1, Q.dpr);
 renderer.setPixelRatio(dpr);
 renderer.setSize(innerWidth, innerHeight, false);   // CSS (100vw x 100dvh) owns the on-screen size; resize() matches the buffer to it
@@ -121,6 +122,7 @@ const room = new THREE.Group(); room.name = 'room'; scene.add(room);
 const floorGeo = mergeGeometries([new THREE.PlaneGeometry(HALF * 2, HALF * 2), new THREE.PlaneGeometry(DOOR_W, HALL_L + 0.02).translate(0, HALF + HALL_L / 2, 0)]); // room + hallway (plane is rotated -90deg about x: +y -> -z)
 const mirror = new Reflector(floorGeo, {
   textureWidth: Math.max(32, Math.round(innerWidth * dpr * (Q.refl || 0))), textureHeight: Math.max(32, Math.round(innerHeight * dpr * (Q.refl || 0))), color: 0x8a8a96,
+  multisample: Q.mirrorSamples || 0,
 });
 mirror.rotation.x = -Math.PI / 2; mirror.name = 'floorMirror'; room.add(mirror);
 const floorTop = new THREE.Mesh(floorGeo, new THREE.MeshStandardMaterial({
@@ -189,7 +191,7 @@ function setWalls(mode) {
   if (r2Ready) { const hw0 = hall.getObjectByName('hallWallW'), hm = hw0.userData.mat0 || hw0.material; if (!hm.userData.map0) hm.userData.map0 = hm.map;
     if (md && !hm.userData.stone) { hm.userData.stone = stoneTex.clone(); hm.userData.stone.repeat.set(+(HALL_L / 6).toFixed(3), +(DOOR_H / 6).toFixed(3)); hm.userData.stone.needsUpdate = true; }
     hm.map = md ? hm.userData.stone : hm.userData.map0; hm.emissiveMap = md ? hm.userData.stone : null; hm.color.setHex(md ? 0x8a8078 : 0x2a1840); hm.emissive.setHex(md ? 0xffffff : 0); hm.emissiveIntensity = md ? 0.55 : 1; hm.roughness = md ? 0.95 : 0.85; hm.needsUpdate = true; }
-  if (v && !vikTex) { vikTex = new THREE.TextureLoader().load('tex/viking_walls.jpg', t => { capLoadedTexture(t, THREE); if (spaceWin) spaceWin.dirty(); }); vikTex.colorSpace = THREE.SRGBColorSpace; vikTex.wrapS = THREE.RepeatWrapping; vikTex.wrapT = THREE.ClampToEdgeWrapping;
+  if (v && !vikTex) { vikTex = loadPicture(THREE, 'tex/viking_walls.jpg', { onLoad: t => { if (spaceWin) spaceWin.dirty(); }, wrapS: THREE.RepeatWrapping, wrapT: THREE.ClampToEdgeWrapping });
     vikTex.repeat.set(+(2 * HALF / (H * 928 / 576)).toFixed(3), 1); flagTex(vikTex, THREE); }   // one repeat = wall height
   wallMat.map = v ? vikTex : md ? stoneTex : wallTex; wallMat.color.setHex(v ? 0x8a7a70 : md ? 0x8a8078 : 0x2a1840); wallMat.roughness = v || md ? 0.95 : 0.85; wallMat.emissiveMap = v ? vikTex : md ? stoneTex : null; wallMat.emissive.setHex(v || md ? 0xffffff : 0x000000); wallMat.emissiveIntensity = v ? 1.6 : md ? 0.55 : 1; wallBands.forEach(m => { m.visible = !v && !po && !md }); wallMat.needsUpdate = true;   // a little dark so the neon pops
   if (!v && vikTex && TIER.name === 'low') { try { vikTex.dispose(); } catch (e) {} vikTex = null; }
@@ -505,7 +507,7 @@ const room2 = new THREE.Group(); room2.name = 'room2'; room2.position.set(0, 0, 
   const skip = new Set([mirror, floorTop, floorBase1, ...cabinets, ...featured, ...spots]);
   for (const ch of room.children) if (!skip.has(ch)) room2.add(ch.clone());
   const plane = new THREE.PlaneGeometry(HALF * 2, HALF * 2);
-  const m2 = new Reflector(plane, { textureWidth: Math.max(32, Math.round(innerWidth * dpr * (Q.refl || 0))), textureHeight: Math.max(32, Math.round(innerHeight * dpr * (Q.refl || 0))), color: 0x8a8a96 });
+  const m2 = new Reflector(plane, { textureWidth: Math.max(32, Math.round(innerWidth * dpr * (Q.refl || 0))), textureHeight: Math.max(32, Math.round(innerHeight * dpr * (Q.refl || 0))), color: 0x8a8a96, multisample: Q.mirrorSamples || 0 });
   m2.rotation.x = -Math.PI / 2; m2.name = 'floorMirror2'; room2.add(m2); room2.userData.mirror = m2;
   const base = new THREE.Mesh(plane, new THREE.MeshStandardMaterial({ color: 0x05030a, roughness: 0.3, metalness: 0.6 })); base.rotation.x = -Math.PI / 2; base.position.y = -0.002; base.name = 'floorBase2'; room2.add(base); room2.userData.base = base;
   const ft = new THREE.Mesh(plane, floorTop.material); ft.rotation.x = -Math.PI / 2; ft.position.y = 0.004; ft.name = 'floorHex2'; room2.add(ft);
@@ -574,7 +576,7 @@ let carpetTex = null;
 function currentCarpetTex() { return carpetTex || carpetStub; }
 function ensureCarpetTex() {
   if (carpetTex) return carpetTex;
-  carpetTex = new THREE.TextureLoader().load('tex/carpet.webp', t => { capLoadedTexture(t, THREE); if (spaceWin && floorMode === 'carpet') spaceWin.dirty(); });
+  carpetTex = loadPicture(THREE, 'tex/carpet.webp', { onLoad: t => { if (spaceWin && floorMode === 'carpet') spaceWin.dirty(); }, wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping });
   carpetTex.colorSpace = THREE.SRGBColorSpace; carpetTex.wrapS = carpetTex.wrapT = THREE.RepeatWrapping;   // seamless tile (edge-cut figures removed): plain repeat, never mirrored (mirroring put copies head to head)
   carpetTex.repeat.set(3, 3); flagTex(carpetTex, THREE);
   if (floorMats.carpet) { floorMats.carpet.map = floorMats.carpet.emissiveMap = carpetTex; floorMats.carpet.needsUpdate = true; }
@@ -1973,24 +1975,49 @@ let paused = false, rafOn = true;
 // landed in the first frames after PLAY. Now: time-boxed slices compile objects back to back until a NEW program appears,
 // then link it (getUniforms; with KHR_parallel_shader_compile only once it reports ready) in a later slice. When the list is
 // linked the room may draw behind the opaque start screen (that first hidden draw compiles the post passes too).
-const warm = { done: !!window.__skipStart || !document.getElementById('start'), n: 0, ms: 0, linked: 0, slices: 0 };
-if (!warm.done) { const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 200 }) : setTimeout(f, 16));
-  const seen = new WeakSet(), list = [], scan = () => { for (const o of scene.children) for (const c of (o.isGroup && o.children.length > 8 ? o.children : [o])) if (!seen.has(c)) { seen.add(c); list.push(c); } };
+{ const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 200 }) : setTimeout(f, 16));
+  // t916u: staged composer.render() of one top-level group per slice, under the start screen.
+  // compile() against a dummy/plane does not produce the same program keys as the real post path,
+  // so the first full composer.render() was still a multi-second hitch. Rendering the real pipeline
+  // a group at a time forces those programs to link on hidden frames.
+  const seen = new WeakSet(), list = [];
+  const scan = () => { for (const o of scene.children) for (const c of (o.isGroup && o.children.length > 8 ? o.children : [o])) if (!seen.has(c)) { seen.add(c); list.push(c); } };
   const par = !!(renderer.extensions && renderer.extensions.get('KHR_parallel_shader_compile')), linked = new WeakSet();
-  const link = end => { let wait = false; for (const p of renderer.info.programs) { if (linked.has(p)) continue; if (par && !p.isReady()) { wait = true; continue; }
-      linked.add(p); try { p.getUniforms(); } catch (e) {} warm.linked++; if (performance.now() > end) return false; } return !wait; };
-  scan(); let rescans = 0;
-  const slice = () => { if (window.__gaEntering || (window.__start && window.__start.dismissed)) { warm.done = true; return; }   // t768u: never compete with the entry frames
-    const t0 = performance.now(), end = t0 + 12; warm.slices++;
-    const l0 = warm.linked, tl0 = performance.now(); let linkedAll = link(end); const tl = performance.now() - tl0;
-    if (linkedAll) while (performance.now() < end) { if (!list.length) break;
-      const o = list.shift(), before = renderer.info.programs.length; try { compileForPlay(o, camera, scene, true); } catch (e) {} warm.n++;
-      if (renderer.info.programs.length !== before) { linkedAll = false; break; } }
-    warm.ms += performance.now() - t0; if (window.__warmDbg) window.__warmDbg.push([Math.round(t0), +(performance.now() - t0).toFixed(1), +tl.toFixed(1), warm.linked - l0, list.length, renderer.info.programs.length]);
-    if (!list.length && linkedAll) { warm.done = true;   // room may draw now; late scenery (shop / windows) keeps being picked up for a while
-      if (rescans++ < 40) { scan(); return setTimeout(() => idle(slice), list.length ? 0 : 250); } return; }
-    idle(slice); };
-  setTimeout(() => idle(slice), 300); }
+  const linkOne = () => { for (const p of renderer.info.programs) { if (linked.has(p)) continue; if (par && !p.isReady()) return false;
+      linked.add(p); try { p.getUniforms(); } catch (e) {} warm.linked++; return false; } return true; };
+  const staged = () => {
+    if (!list.length) return true;
+    const o = list.shift();
+    const hidden = [];
+    const hide = obj => { if (obj && obj.visible) { hidden.push(obj); obj.visible = false; } };
+    for (const c of scene.children) {
+      if (c.isLight || c.isCamera) continue;
+      let anc = o, keep = false; while (anc) { if (anc === c) { keep = true; break; } anc = anc.parent; }
+      if (!keep) hide(c);
+    }
+    if (o.parent) for (const s of o.parent.children) if (s !== o && !s.isLight && !s.isCamera) hide(s);
+    let p = o; while (p) { p.visible = true; p = p.parent; }
+    // keep every light on so this slice compiles the same light-count variants as a full-room frame
+    scene.traverse(obj => { if (obj.isLight) { const i = hidden.indexOf(obj); if (i >= 0) hidden.splice(i, 1); obj.visible = true; } });
+    try { if (composer && usePost) composer.render(); else renderer.render(scene, camera); } catch (e) {}
+    for (const h of hidden) h.visible = true;
+    warm.n++; return false;
+  };
+  scan(); let rescans = 0, finalDraw = false;
+  const slice = () => {
+    const t0 = performance.now(); warm.slices++;
+    const l0 = warm.linked; let linkedAll = linkOne();
+    if (linkedAll && list.length) { staged(); linkedAll = false; }
+    else if (linkedAll && !list.length && !finalDraw) { finalDraw = true; warm.post = true; }
+    warm.ms += performance.now() - t0; if (window.__warmDbg) window.__warmDbg.push([Math.round(t0), +(performance.now() - t0).toFixed(1), 0, warm.linked - l0, list.length, renderer.info.programs.length]);
+    if (!list.length && linkedAll && finalDraw) {
+      warm.done = true; warm.post = true; warm.drawn = true;
+      if (rescans++ < 40) { scan(); return setTimeout(() => idle(slice), list.length ? 0 : 250); } return;
+    }
+    idle(slice);
+  };
+  setTimeout(() => idle(slice), 300);
+}
 window.__warm = warm;
 // t768u/t769u entry lag: play renders the room through the composer into its half-float target (linear, no tone mapping in the
 // material shaders), but the warm-up compiled against the canvas (sRGB + tone mapping) -> different program keys, so ~45
@@ -2043,10 +2070,14 @@ function frame(now) {
   }
   if (spaceWin) spaceWin.update(now);
   if (window.__neonSigns && window.__neonSigns.userData.tick) window.__neonSigns.userData.tick(now / 1000);   // t850u: claw icon prongs
-  if (draw && ((warm.done && !warm.drawn) || !document.getElementById('start') || (window.__start && window.__start.dismissed))) { if (warm.done) warm.drawn = true; if (composer && usePost) composer.render(); else renderer.render(scene, camera); PS.lastDraw = now; PS.draws++; stats.draws = PS.draws; }   // t295u: the opaque start screen hides the room; let its shaders compile in slices first
+  const startGone = !document.getElementById('start') || (window.__start && window.__start.dismissed);
+  if (startGone && !warm.done && !warm.sinceGone) warm.sinceGone = now;
+  const giveUp = !!(startGone && warm.sinceGone && (now - warm.sinceGone > 8000));
+  // tests set __skipStart and need the room drawn immediately; real users wait for sliced warmup under the start screen
+  if (draw && (warm.done || giveUp || window.__skipStart)) { if (warm.done) warm.drawn = true; if (composer && usePost) composer.render(); else renderer.render(scene, camera); PS.lastDraw = now; PS.draws++; stats.draws = PS.draws; }   // t295u: the opaque start screen hides the room; let its shaders compile in slices first
   else if (!draw) { PS.skipped++; stats.skipped = PS.skipped; }
   const cpu = performance.now() - t0;
-  stats.frames++; stats.cpu = cpu; stats.cpuAvg += (cpu - stats.cpuAvg) * 0.05; stats.gapAvg += (gap - stats.gapAvg) * 0.05;
+  stats.frames++; stats.cpu = cpu; stats.cpuAvg += (cpu - stats.cpuAvg) * 0.05; stats.gapAvg += (gap - stats.gapAvg) * 0.05; if (!(stats.cpuMax > cpu)) stats.cpuMax = cpu; if (!(stats.gapMax > gap)) stats.gapMax = gap;
   if (!window.__noAdapt) {
     if (stats.gapAvg > 24) { if (++slow > 90 && dpr > 0.75) { dpr = Math.max(0.75, dpr - 0.25); resize(); slow = 0; } } else slow = 0;
     if (!PS.on && TIER.name === 'high' && stats.gapAvg < 14) { if (++fast > 400 && dpr < Math.min(devicePixelRatio || 1, Q.dpr)) { dpr += 0.25; resize(); fast = 0; } } else fast = 0;

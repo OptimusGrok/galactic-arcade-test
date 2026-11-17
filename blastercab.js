@@ -51,8 +51,9 @@ export function buildBlasterCabinet() {
   const gloss = new THREE.MeshPhysicalMaterial({ color: 0x060608, roughness: 0.18, metalness: 0.2, clearcoat: 1, clearcoatRoughness: 0.08 });
   const shape = new THREE.Shape(SPROFILE.map(([x, y]) => new THREE.Vector2(x, y)));
   add(new THREE.ExtrudeGeometry(shape, { depth: SW, bevelEnabled: false }).translate(0, 0, -SW / 2), gloss, 'body');
-  const sideMat = flip => { const t = capCabSideTexture(canvasTex(512, 1024, sideArt, flip), THREE); return new THREE.MeshPhysicalMaterial({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.28, roughness: 0.25, clearcoat: 0.8 }); };
-  add(sideGeo(1), sideMat(false), 'sidePanelL'); add(sideGeo(-1), sideMat(true), 'sidePanelR');
+  const sideT = capCabSideTexture(canvasTex(512, 1024, sideArt), THREE);
+  const sideMat = new THREE.MeshPhysicalMaterial({ map: sideT, emissive: 0xffffff, emissiveMap: sideT, emissiveIntensity: 0.28, roughness: 0.25, clearcoat: 0.8 });
+  add(sideGeo(1), sideMat, 'sidePanelL'); add(sideGeo(-1), sideMat, 'sidePanelR');
   const tm = []; for (const z of [-SW / 2 - 0.008, SW / 2 + 0.008]) for (let i = 1; i < SPROFILE.length - 1; i++) { const a = SPROFILE[i], b = SPROFILE[i + 1]; tm.push(bar(new THREE.Vector3(a[0], a[1], z), new THREE.Vector3(b[0], b[1], z), 0.03)); }
   add(mergeGeos(tm), gloss, 'trim');   // glossy black edge (no neon on the body)
   const mq = canvasTex(512, 160, marqueeArt);

@@ -61,8 +61,9 @@ export function buildBBCabinet() {
   add(new THREE.ExtrudeGeometry(shape, { depth: SW, bevelEnabled: false }).translate(0, 0, -SW / 2), body, 'body');
   // side art: map the dirt picture over the profile's bounding box (sideGeo uses x/y as UVs over that box)
   const xs = SPROFILE.map(p => p[0]), ys = SPROFILE.map(p => p[1]), bw = Math.max(...xs) - Math.min(...xs), bh = Math.max(...ys) - Math.min(...ys);
-  const sideMat = flip => { const t = canvasTex(Math.round(512 * bw / bh), 512, paintSide, flip); return new THREE.MeshPhysicalMaterial({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.22, roughness: 0.35, clearcoat: 0.6 }); };
-  add(sideGeo(1), sideMat(false), 'sidePanelL'); add(sideGeo(-1), sideMat(true), 'sidePanelR');
+  const sideT = canvasTex(Math.round(512 * bw / bh), 512, paintSide);
+  const sideMat = new THREE.MeshPhysicalMaterial({ map: sideT, emissive: 0xffffff, emissiveMap: sideT, emissiveIntensity: 0.22, roughness: 0.35, clearcoat: 0.6 });
+  add(sideGeo(1), sideMat, 'sidePanelL'); add(sideGeo(-1), sideMat, 'sidePanelR');
   const tm = []; for (const z of [-SW / 2 - 0.008, SW / 2 + 0.008]) for (let i = 1; i < SPROFILE.length - 1; i++) { const a = SPROFILE[i], b = SPROFILE[i + 1]; tm.push(bar(new THREE.Vector3(a[0], a[1], z), new THREE.Vector3(b[0], b[1], z), 0.03)); }
   add(mergeGeos(tm), body, 'trim');   // dark edge trim (no neon on the body)
   const mq = canvasTex(1024, 300, paintMarquee);

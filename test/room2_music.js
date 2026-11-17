@@ -8,10 +8,18 @@ const { open } = require('./lib');
   const at = z => p.evaluate(z => { const A = window.__arcade; A.st.vel.set(0, 0, 0); A.monkey.position.set(0, 0, z); }, z);
   const M = () => p.evaluate(() => { const m = window.__music; const c = window.__cabMusic; return { t0: m.t0, pos: m.pos(), target: m.target, gain: m.gain, err: m.err, cab: c ? c.cur : null, duck: c ? c.duck : 0 }; });
   await p.evaluate(() => { if (window.__pa) window.__pa.playing = false; }); await at(4); await p.waitForTimeout(2500); const a = await M(); chk(a.target > 0.1 && !a.err, 'playing in room 1 (PA duck allowed) ' + JSON.stringify(a));
-  let prev = a, minG = 1, steps = [];
-  for (const z of [-13, -16, -20, -26, -30, -34, -26, -16, 4]) { await at(z); await p.waitForTimeout(900); const m = await M(); steps.push([z, +m.pos.toFixed(2), +m.gain.toFixed(2), m.cab]);
-    if (m.t0 !== a.t0 || m.pos <= prev.pos) ok = ok && chk(false, 'position advanced at z=' + z + ' ' + JSON.stringify(m)); if (!m.cab && !(m.duck > 0.05)) minG = Math.min(minG, m.target); prev = m; }
-  chk(prev.t0 === a.t0, 'same source node the whole walk (t0 unchanged), position advancing ' + JSON.stringify(steps));
+  let prev = a, minG = 1, steps = [], tookOver = false, lastClear = a;
+  for (const z of [-13, -16, -20, -26, -30, -34, -26, -16, 4]) { await at(z); await p.waitForTimeout(900); const m = await M(); steps.push([z, +m.pos.toFixed(2), +m.gain.toFixed(2), m.cab, m.t0]);
+    const cabOn = !!(m.cab || m.duck > 0.05);
+    if (cabOn) tookOver = true;
+    if (!cabOn) {
+      if (m.t0 !== lastClear.t0 && !tookOver) ok = ok && chk(false, 't0 changed without a cabinet takeover at z=' + z + ' ' + JSON.stringify(m));
+      if (m.t0 === lastClear.t0 && m.pos <= lastClear.pos) ok = ok && chk(false, 'position should advance at z=' + z + ' ' + JSON.stringify(m));
+      minG = Math.min(minG, m.target); lastClear = m;
+    }
+    prev = m; }
+  if (!tookOver) chk(prev.t0 === a.t0, 'same source node the whole walk (t0 unchanged), position advancing ' + JSON.stringify(steps));
+  else chk(lastClear.target > 0.1, 'room track resumes after a cabinet takeover (t911u one-song re-decode allowed) ' + JSON.stringify(steps));
   chk(minG > 0.1, 'music never fades or stops in the hallway / room 2 except while a machine loop takes over (t245) (min target ' + minG + ', PA duck allowed)');
   chk(o.errors.length === 0, 'no page errors ' + o.errors.join('|')); await o.close(); process.exit(ok ? 0 : 1);
 })().catch(e => { console.log('FAIL exception ' + e.message); process.exit(1); });

@@ -35,6 +35,7 @@ const byId = Object.fromEntries(ITEMS.map(i => [i.id, i]));
 // Shared Grok robot builder (shopkeeper + arcade visitor). Same look Dave signed off on (t569).
 // Returns { root, arms, head, faceTex, drawFace }. Caller positions/scales the root.
 import chat from './grokchat.js';   // t810u: CHAT with Grok (shared panel + offline knowledge base)
+import { loadPicture } from './texload.js';
 export function buildGrokClerk() {
   const canvasTex = (w, h, draw) => {
     let ww = w, hh = h; const max = (tierQuality().texMax || 0);
@@ -323,7 +324,7 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
     for (const sd of [-1, 1]) rim.push(new THREE.BoxGeometry(0.14, 0.1, VL).translate(sd * (VR - 0.07), CH + 0.02, VZ));
     add(rim, new THREE.MeshBasicMaterial({ color: 0xdfe4ec }), 'shopRoofRim'); }
   // ---------- MURALS: painted straight onto the walls, edge to edge, floor to ceiling ----------
-  const loadT = f => { const t = new THREE.TextureLoader().load(new URL('./tex/' + f, import.meta.url).href, tex => capLoadedTexture(tex, THREE, { max: 1024, mips: false })); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); skipMips(t, THREE); return t; };
+  const loadT = f => loadPicture(THREE, 'tex/' + f, { max: 1024, mips: false });
   const SW = 9.2, MB = 0.0, MT = CH - 0.06, MHh = MT - MB, xE = SW / 2 + 0.15, TB = 5.08, zm = ZW + 0.012;
   const mat = f => new THREE.MeshBasicMaterial({ map: loadT(f), toneMapped: false });
   add([setUV(new THREE.PlaneGeometry(HS - xE, MHh), 0.38, 1, 0, 1).translate(-(HS + xE) / 2, MB + MHh / 2, zm)], mat('shop_mural_left.jpg'), 'muralLeft');      // back wall left of the shelves

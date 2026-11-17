@@ -4,21 +4,23 @@
 //   * cabinet DEMO view (play.mode 'game', sub 'demo'): that cabinet's loop plays (the game copies' demos are silent)
 //   * playing a game, zooming, start screen, tab hidden, MUSIC off (window.__music.on === false): silent
 // Crossfade: WebAudio linear ramps of FADE s. Only one cabinet source exists at a time (the old one fades out and is stopped
-// before the next fades in). Tracks are fetched + decoded on first need (lazy) and kept in a small cache (MAX_CACHE).
+// before the next fades in). Tracks are fetched + decoded on first need (lazy) and kept as at most one decoded buffer (MAX_CACHE = 1); others are freed when they stop (t911u).
 // Room music hook: music.js multiplies its target by (1 - window.__cabMusic.duck)  (see INTEGRATION.md).
 (function () {
-  var VOL = 0.38, FADE = 0.6, RADIUS = 2.8, HYST = 0.5, MAX_CACHE = 3, BASE = '';
-  // t771u: strike = the game's own stage-1 track (HC 's1', 155 bpm), rendered offline from strike-play's engine: one pass of its
-  // 48-bar loop (after the intro), seamless. The other loops are kit compositions (cabinet-kit/audio/gen.py), not the games' music.
-  // exact loop lengths (samples) let us skip mp3 encoder padding like music.js does; berserker reuses its own title music
+  var VOL = 0.38, FADE = 0.6, RADIUS = 2.8, HYST = 0.5, MAX_CACHE = 1, BASE = '';
+  // t771u/t916u: tracks are the games' own music, recorded from the arcade copies in-repo (tools/render_cab_music.js).
+  // strike = stage-1 loop from strike-play's engine; berserker = its title_music.m4a. Blaster, claw, roadster and
+  // rockfall have no BGM in the copies (SFX / engine only), so those three keep the kit loops; rockfall stays silent.
+  // exact loop lengths (samples at `rate`) skip mp3 encoder padding like music.js does.
   var TRACKS = {
-    strike: { src: 'audio/cab_strike.mp3', samples: 1638813, rate: 22050 }, monkey: { src: 'audio/cab_monkey.mp3', samples: 358780, rate: 22050 },
-    nova: { src: 'audio/cab_nova.mp3', samples: 441000, rate: 22050 }, cyber: { src: 'audio/cab_cyber.mp3', samples: 341419, rate: 22050 },
-    orc: { src: 'audio/cab_orc.mp3', samples: 320727, rate: 22050 }, ghost: { src: 'audio/cab_ghost.mp3', samples: 302400, rate: 22050 },
-    roadster: { src: 'audio/cab_roadster.mp3', samples: 294000, rate: 22050 }, ds: { src: 'audio/cab_ds.mp3', samples: 504000, rate: 22050 },
-    blaster: { src: 'audio/cab_blaster.mp3', samples: 264600, rate: 22050 }, pip: { src: 'audio/cab_pip.mp3', samples: 330750, rate: 22050 },
-    claw: { src: 'audio/cab_claw.mp3', samples: 384873, rate: 22050 }, bb: { src: 'audio/cab_bb.mp3', samples: 352800, rate: 22050 },
-    berserker: { src: 'audio/cab_berserker.mp3', vol: 0.3 }
+    strike: { src: 'audio/cab_strike.mp3', samples: 1638813, rate: 22050 }, monkey: { src: 'audio/cab_monkey.mp3', samples: 368794, rate: 22050 },
+    nova: { src: 'audio/cab_nova.mp3', samples: 406463, rate: 22050 }, cyber: { src: 'audio/cab_cyber.mp3', samples: 455347, rate: 22050 },
+    orc: { src: 'audio/cab_orc.mp3', samples: 455347, rate: 22050 }, ghost: { src: 'audio/cab_ghost.mp3', samples: 455347, rate: 22050 },
+    roadster: { src: 'audio/cab_roadster.mp3', samples: 294000, rate: 22050 }, ds: { src: 'audio/cab_ds.mp3', samples: 664455, rate: 22050 },
+    blaster: { src: 'audio/cab_blaster.mp3', samples: 264600, rate: 22050 }, pip: { src: 'audio/cab_pip.mp3', samples: 455347, rate: 22050 },
+    claw: { src: 'audio/cab_claw.mp3', samples: 384873, rate: 22050 }, bb: { src: 'audio/cab_bb.mp3', samples: 455347, rate: 22050 },
+    skytower: { src: 'audio/cab_skytower.mp3', samples: 455347, rate: 22050 },
+    berserker: { src: 'berserker-play/title_music.m4a', vol: 0.3 }
   };
   var C = window.__cabMusic = { tracks: TRACKS, want: null, cur: null, duck: 0, fades: 0, loads: 0, starts: 0, maxSources: 0, radius: RADIUS, err: null };
   var ac = null, out = null, node = null, ng = null, curKey = null, cache = {}, order = [], pending = {}, pos = null, lastNear = null, live = 0;
@@ -31,7 +33,9 @@
       .catch(function (e) { delete pending[k]; C.err = String(e); throw e; });
   }
   function fadeOut() { if (!node) return; var n = node, g = ng, t = ac.currentTime; g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value, t); g.gain.linearRampToValueAtTime(0, t + FADE);
-    C.fades++; setTimeout(function () { try { n.stop(); } catch (e) {} n.disconnect(); g.disconnect(); live--; }, FADE * 1000 + 30); node = null; ng = null; curKey = null; C.cur = null; }
+    C.fades++; var oldKey = curKey; setTimeout(function () { try { n.stop(); } catch (e) {} n.disconnect(); g.disconnect(); live--;
+      if (oldKey && oldKey !== curKey && oldKey !== C.want) { delete cache[oldKey]; var i = order.indexOf(oldKey); if (i >= 0) order.splice(i, 1); }
+    }, FADE * 1000 + 30); node = null; ng = null; curKey = null; C.cur = null; }
   function fadeIn(k, buf) {
     var t = TRACKS[k], a = ctx(), n = a.createBufferSource(), g = a.createGain(); n.buffer = buf; n.loop = true;
     if (t.samples) { var len = t.samples * buf.sampleRate / t.rate, extra = buf.length - len, lead = extra >= 1105 ? Math.min(extra, 1105) : 0;   // 529+576 (mp3 priming)
@@ -65,11 +69,21 @@
     if (P.mode !== 'walk' || !positions(A)) return null;
     var m = A.monkey.position, k = C.nearest(m.x, m.z); lastNear = k; return k;
   }
+  var idleSince = 0;
+  function evictIdle() {
+    Object.keys(cache).forEach(function (key) {
+      if (key !== curKey && key !== C.want) { delete cache[key]; var i = order.indexOf(key); if (i >= 0) order.splice(i, 1); }
+    });
+    if (!curKey && !C.want) { cache = {}; order = []; }
+  }
   function tick() {
     var k = null; try { k = wanted(); } catch (e) { C.err = String(e); }
     C.want = k; apply(k);
+    C.bufCount = Object.keys(cache).length; C.cached = Object.keys(cache);
     // duck the room track while a cabinet loop is (or is about to be) playing in walk mode; in game mode music.js is already at 0
     var target = k ? 1 : 0; C.duck += (target - C.duck) * 0.5; if (C.duck < 0.01) C.duck = 0; if (C.duck > 0.99) C.duck = 1;
+    if (!k && !curKey) { idleSince = idleSince || performance.now(); if (performance.now() - idleSince > 1000) evictIdle(); }
+    else idleSince = 0;
   }
   C.tick = tick; setInterval(tick, 120); document.addEventListener('visibilitychange', tick);
 })();

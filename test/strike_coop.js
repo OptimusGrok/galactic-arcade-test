@@ -16,7 +16,12 @@ let ok = true; const chk = (c, m, x) => { console.log((c ? 'PASS ' : 'FAIL ') + 
   }
   const a = await dev('aaaa1111', 'Dave', { char: 'monkey', hoodie: 'navy' });
   const b = await dev('bbbb2222', 'Zed', { char: 'alien', suit: 'suitgrey' });
-  for (const p of [a, b]) await p.waitForFunction(() => window.__mp.peers.size === 1, null, { timeout: 20000 }).catch(() => {});
+  for (const p of [a, b]) {
+    for (let i = 0; i < 4; i++) {
+      try { await p.waitForFunction(() => window.__mp && window.__mp.peers && window.__mp.peers.size === 1, null, { timeout: 8000 }); break; }
+      catch (e) { if (i === 3) throw e; await p.waitForTimeout(400); }
+    }
+  }
 
   const cab = await a.evaluate(() => { const u = window.__arcade.strikeCab.userData; return { f: [u.front.x, u.front.z], fc: [u.facing.x, u.facing.z] }; });
   const put = (p, back, side) => p.evaluate(([cab, back, side]) => { const m = window.__arcade.monkey, [fx, fz] = cab.f, [cx, cz] = cab.fc; m.position.set(fx - cx * back + cz * side, 0, fz - cz * back - cx * side); m.rotation.y = Math.atan2(cx, cz); }, [cab, back, side]);
@@ -31,18 +36,34 @@ let ok = true; const chk = (c, m, x) => { console.log((c ? 'PASS ' : 'FAIL ') + 
   const play = p => p.evaluate(() => { const P = window.__arcade.play; P.machines.strike.credits = 1; P.tryPlay(); return P.sub; });
 
   // P1 is already at the cabinet and starts a real game first; then P2 drops in from the other phone
-  chk(await play(a) === 'play', 'P1 spends a credit and starts a real Strike game');
+  const startPlay = async (p, label) => {
+    let sub = await play(p);
+    if (sub !== 'play') {
+      await p.waitForTimeout(400);
+      sub = await p.evaluate(() => { const P = window.__arcade.play; if (P.sub !== 'play') { P.machines.strike.credits = Math.max(1, P.machines.strike.credits); return P.tryPlay(); } return P.sub; });
+    }
+    chk(sub === 'play', label + ' (sub=' + sub + ')');
+    return sub;
+  };
+  await startPlay(a, 'P1 spends a credit and starts a real Strike game');
   await S(a, 'S.G.god = true; S.steps(8); return S.G.scene;');
-  chk(await play(b) === 'play', 'P2 drops in while P1 is already playing');
+  await startPlay(b, 'P2 drops in while P1 is already playing');
   await S(b, 'S.G.god = true; return 1;');
-  // run enough frames for roles, join, and a couple of state packets to relay
-  for (let i = 0; i < 8; i++) {
-    await S(a, 'S.steps(4); return 1;');
-    await S(b, 'S.steps(4); return 1;');
+  // run frames until roles settle (fixed 8-loop was tight on a slow box)
+  const kick = async () => {
+    await S(a, 'S.steps(4); (C.sendStateNow||C.sendState)(); return 1;');
+    await S(b, 'S.steps(4); (C.sendInput&&C.sendInput()); return 1;').catch(() => {});
     await a.waitForTimeout(80);
-  }
-  await b.waitForFunction(() => { const C = document.getElementById('game').contentWindow.__strikeCoop; return C && C.role === 'guest' && C.snaps > 0 && C.p2on; }, null, { timeout: 15000 }).catch(() => {});
-  await a.waitForFunction(() => { const C = document.getElementById('game').contentWindow.__strikeCoop; return C && C.role === 'host' && C.p2on; }, null, { timeout: 8000 }).catch(() => {});
+  };
+  for (let i = 0; i < 8; i++) await kick();
+  const waitRole = async (p, pred, label) => {
+    for (let i = 0; i < 5; i++) {
+      try { await p.waitForFunction(pred, null, { timeout: 6000 }); return true; }
+      catch (e) { if (i === 4) { chk(false, label + ' timed out'); return false; } await kick(); }
+    }
+  };
+  await waitRole(b, () => { const C = document.getElementById('game').contentWindow.__strikeCoop; return C && C.role === 'guest' && C.snaps > 0 && C.p2on; }, 'P2 guest role');
+  await waitRole(a, () => { const C = document.getElementById('game').contentWindow.__strikeCoop; return C && C.role === 'host' && C.p2on; }, 'P1 host role');
 
   const ha = await S(a, 'return C.hud();');
   const hb = await S(b, 'return C.hud();');

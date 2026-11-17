@@ -6,6 +6,7 @@
 // Local frame: origin = platform centre on the floor, +z = the front (the side you walk up to), the screen stands at -z.
 import * as THREE from 'three';
 import { bindStreamGpu, cabWH, flagTex, capLoadedTexture } from './tier.js';
+import { loadPicture } from './texload.js';
 export const DS = { R: 2.05, TOP: 0.32, SCR_Z: -2.5 };
 const black = (r = 0.45, m = 0.6) => new THREE.MeshStandardMaterial({ color: 0x111116, roughness: r, metalness: m });
 const glow = (hex, k) => new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(k * 0.62), fog: false });   // t782u: dimmer LEDs, matching the rest of the arcade neon
@@ -75,7 +76,7 @@ export function buildDeadSignalStation() {
     add(new THREE.CircleGeometry(0.008, 8), lens, null, 0, 0.13, 0.028, c); }
   // ---- large curved screen with the Dead Signal attract image ----
   const SR = 4.2, SH = 2.45, SY0 = 0.8, TH = 1.12, cz = DS.SCR_Z + SR;
-  const scrTex = new THREE.TextureLoader().load('tex/ds_screen.jpg', t => capLoadedTexture(t, THREE)); scrTex.colorSpace = THREE.SRGBColorSpace; flagTex(scrTex, THREE); scrTex.wrapS = THREE.RepeatWrapping; scrTex.repeat.x = -1; scrTex.offset.x = 1;
+  const scrTex = loadPicture(THREE, 'tex/ds_screen.jpg', { wrapS: THREE.RepeatWrapping, repeat: { x: -1, y: 1 }, offset: { x: 1, y: 0 } });
   const scr = add(new THREE.CylinderGeometry(SR, SR, SH, 48, 1, true, Math.PI - TH / 2, TH), new THREE.MeshStandardMaterial({ map: scrTex, emissive: 0xffffff, emissiveMap: scrTex, emissiveIntensity: 0.85, roughness: 0.3, side: THREE.BackSide }), 'screen', 0, SY0 + SH / 2, cz);
   add(new THREE.CylinderGeometry(SR + 0.06, SR + 0.06, SH + 0.24, 48, 1, true, Math.PI - TH / 2 - 0.02, TH + 0.04), new THREE.MeshStandardMaterial({ color: 0x0a0a10, roughness: 0.7, metalness: 0.4, side: THREE.DoubleSide }), 'screenBack', 0, SY0 + SH / 2, cz);
   for (const sy of [SY0 - 0.06, SY0 + SH + 0.06]) { const pts = []; for (let i = 0; i <= 30; i++) { const a = Math.PI - TH / 2 - 0.02 + (TH + 0.04) * i / 30; pts.push(new THREE.Vector3(Math.sin(a) * (SR - 0.03), sy, cz + Math.cos(a) * (SR - 0.03))); }

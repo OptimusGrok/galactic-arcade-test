@@ -184,9 +184,9 @@ export function buildSkyTowerCabinet() {
   const gloss = new THREE.MeshPhysicalMaterial({ color: 0x0a3a7a, roughness: 0.22, metalness: 0.28, clearcoat: 0.85, clearcoatRoughness: 0.14 });
   const shape = new THREE.Shape(SPROFILE.map(([x, y]) => new THREE.Vector2(x, y)));
   add(new THREE.ExtrudeGeometry(shape, { depth: SW, bevelEnabled: false }).translate(0, 0, -SW / 2), gloss, 'body');
-  const sideL = canvasTex(256, 512, paintSide), sideR = canvasTex(256, 512, (c, w, h) => { paintSide(c, w, h); });
-  const sideMat = t => new THREE.MeshPhysicalMaterial({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.22, roughness: 0.35, clearcoat: 0.55 });
-  add(sideGeo(1), sideMat(sideL), 'sidePanelL'); add(sideGeo(-1), sideMat(sideR), 'sidePanelR');
+  const sideT = canvasTex(256, 512, paintSide);
+  const sideMat = new THREE.MeshPhysicalMaterial({ map: sideT, emissive: 0xffffff, emissiveMap: sideT, emissiveIntensity: 0.22, roughness: 0.35, clearcoat: 0.55 });
+  add(sideGeo(1), sideMat, 'sidePanelL'); add(sideGeo(-1), sideMat, 'sidePanelR');
   const tm = [];
   for (const z of [-SW / 2 - 0.008, SW / 2 + 0.008]) {
     for (let i = 1; i < SPROFILE.length - 1; i++) {
