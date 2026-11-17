@@ -5,10 +5,10 @@
 // two buttons matching the mockup; coin door with two red slots. Screen: a silent attract loop until the arcade
 // zooms into the real game.
 import * as THREE from 'three';
-import { cabWH, flagTex, capLoadedTexture } from './tier.js';
+import { cabWH, flagTex, capLoadedTexture, capCabSideTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos } from './strikecab.js';
 const L = new THREE.TextureLoader();
-const load = (url, flip) => { const t = L.load(url, tex => capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
+const load = (url, flip) => { const t = L.load(url, tex => /_side\./.test(url) ? capCabSideTexture(tex, THREE) : capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
 const canvasTex = (w, h, paint) => { const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } paint(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return t; };
 const COL = { Y: '#e8c030', y: '#f8d848', S: '#f0b088', B: '#3a4cc8', b: '#5a70f0', K: '#101010', R: '#6a3a18', D: '#5a3012', W: '#f4f4f4' };
 const MINER = ['...YYYY...', '..YYYYYY..', '..YYYYYY..', '..SSSSSS..', '..SKSSKS..', '..SSSSSS..', '..BBBBBB..', '.B.BBBB.B.', '...BBBB...', '...KK.KK..', '..RR...RR.', '..........'];

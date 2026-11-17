@@ -37,8 +37,8 @@ const WANT = ['strike', 'ghost', 'cyber', 'orc', 'pip', 'berserker', 'monkey', '
     };
   });
   chk(WANT.every(k => r.keys.includes(k)), 'all 13 wall icon slots are present', r.keys);
-  chk(r.st.done && r.st.loaded && r.st.loaded.length === 13 && !(r.st.failed && r.st.failed.length) && r.atlas === 2048 && r.st.cell === 512,
-    'painted webps lazy-loaded into a 2048 px atlas (canvas was the fallback)', r.st);
+  chk(r.st.done && r.st.loaded && r.st.loaded.length === 13 && !(r.st.failed && r.st.failed.length) && r.atlas === 1024 && r.st.cell === 256,
+    'painted webps lazy-loaded into a 1024 px atlas (canvas was the fallback)', r.st);
   chk(r.k >= 0.8, 'painted art uses the same slight brightness as VR (x' + r.k + ')', { k: r.k });
   chk(r.webpHits === 13, 'all 13 tex/icons/*.webp were requested (not precached as a requirement)', { webpHits: r.webpHits });
   chk(r.opaque.length === 13 && r.opaque.every(v => v > 0.12), 'every painted cell has solid art (min ' + (r.opaque.length ? Math.min(...r.opaque).toFixed(2) : '-') + ')', r.opaque);

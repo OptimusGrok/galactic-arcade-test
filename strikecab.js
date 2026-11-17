@@ -1,6 +1,6 @@
 // STRIKE cabinet: detailed model + live attract-mode screen driven from a sandboxed, network-free copy of Strike.
 import * as THREE from 'three';
-import { cabWH, flagTex, capLoadedTexture } from './tier.js';
+import { cabWH, flagTex, capLoadedTexture, capCabSideTexture } from './tier.js';
 
 const MOBILE = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
 function tex(w, h, draw) {
@@ -59,7 +59,7 @@ function spaceBg(g, w, h) {
 
 // ---------- textures ----------
 export function sideTexture(flip) {
-  return tex(512, 1024, (g, w, h) => {
+  const t = tex(512, 1024, (g, w, h) => {
     g.save(); if (flip) { g.translate(w, 0); g.scale(-1, 1); }
     spaceBg(g, w, h); stars(g, w, h, 300); streaks(g, w, h, 70, -1.2);
     burst(g, w * 0.25, h * 0.56, 120); burst(g, w * 0.8, h * 0.45, 90); burst(g, w * 0.7, h * 0.86, 130); burst(g, w * 0.15, h * 0.2, 60, 0.8);
@@ -69,7 +69,7 @@ export function sideTexture(flip) {
     logo(g, w * 0.48, h * 0.78, 128, -0.32);
     // border shading
     const v = g.createRadialGradient(w / 2, h / 2, h * 0.3, w / 2, h / 2, h * 0.75); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.55)'); g.fillStyle = v; g.fillRect(0, 0, w, h);
-  });
+  }); return capCabSideTexture(t, THREE);
 }
 export function marqueeTexture() {
   return tex(1024, 256, (g, w, h) => {

@@ -1869,12 +1869,97 @@ function idlePose(dt, u, sw) {
 // ---------- loop + adaptive quality ----------
 const demo = startStrikeDemo(strikeCab), ghostDemo = startGhostDemo(ghostCab), _v = new THREE.Vector3();
 try { applyLowBudget(); } catch (e) {}
-// t295u start-screen freeze: the two attract-demo iframes (strike-demo ~1.8 s pix + ~1.2 s cityDecor at 4x CPU, ghost-demo) booted on the main
-// thread during the start screen's first frames. Load them only once the start screen is gone (or skipped), one per idle slot.
-{ const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 2000 }) : setTimeout(f, 300));
-  const t = setInterval(() => { const S = window.__start; if (!(window.__skipStart || (S && S.dismissed) || !document.getElementById('start'))) return; clearInterval(t);
-    // t768u: not in the first seconds of play either (the strike demo's boot was ~0.4 s+ at 4x CPU right as the player arrived)
-    setTimeout(() => idle(() => { if (Q.cabDemos) { demo.attach(); setTimeout(() => idle(() => { if (Q.cabDemos) ghostDemo.attach(); }), 1500); } applyLowBudget(); }), window.__skipStart ? 0 : 4000); }, 200); }
+// t893u: Strike/Ghost demo iframes, shop murals/atlases, and room 2 (Dead Signal + floor mirror) stream in when the
+// player approaches and evict from the GPU after leaving, with a hold so walking back and forth does not thrash.
+// Demos wait until the start screen is gone; the painted attract stays on the CRT while the iframe is detached.
+const STREAM = window.__gaStream = { shop: 'off', room2: 'off', strikeDemo: 'off', ghostDemo: 'off', wantShop: false, wantRoom2: false };
+function streamHold(kind) {
+  const ms = window.__gaStreamHold;
+  if (ms != null) return Math.max(200, +ms);
+  return kind === 'demo' ? 3000 : 8000;
+}
+function streamWant() {
+  const m = monkey.position, pad = tp && tp.PAD1;
+  const inShop = (tp && tp.where === 2) || m.x > WX - 14;
+  const padD = pad ? Math.hypot(m.x - pad.x, m.z - pad.z) : 99;
+  const locking = !!(tp && tp.locked);
+  return {
+    wantShop: inShop || padD < 8 || locking,
+    evictShop: !inShop && padD > 10 && !locking,
+    wantRoom2: m.z < -HALF + 5,
+    evictRoom2: m.z > -HALF + 2
+  };
+}
+function setRoom2Gpu(on) {
+  on = !!on;
+  try { if (dsCab && dsCab.userData && dsCab.userData.gpu) dsCab.userData.gpu.set(on); } catch (e) {}
+  const mir = room2 && room2.userData && room2.userData.mirror;
+  if (mir && typeof mir.getRenderTarget === 'function') {
+    const rt = mir.getRenderTarget();
+    if (rt) {
+      if (!rt.__gaSz) rt.__gaSz = [rt.width, rt.height];
+      try { rt.setSize(on ? rt.__gaSz[0] : 1, on ? rt.__gaSz[1] : 1); } catch (e) {}
+    }
+  }
+  STREAM.room2 = on ? 'on' : 'off';
+}
+let _shopGpuGen = 0;
+function setShopGpu(on) {
+  on = !!on;
+  const gen = ++_shopGpuGen;
+  if (on) {
+    const p = loadShop();
+    const apply = () => { if (gen !== _shopGpuGen) return; try { if (shop && shop.gpu) shop.gpu.set(true); } catch (e) {} STREAM.shop = (shop && shop.gpu && shop.gpu.on) ? 'on' : 'off'; };
+    if (shop && shop.gpu) apply();
+    else if (p && p.then) p.then(apply).catch(() => {});
+  } else {
+    try { if (shop && shop.gpu) shop.gpu.set(false); } catch (e) {}
+    STREAM.shop = (shop && shop.gpu && shop.gpu.on) ? 'on' : 'off';
+  }
+}
+function setDemoStream(d, on, now, tag) {
+  if (!d) return;
+  if (!Q.cabDemos || TIER.name === 'low') {
+    try { if (d.detach) d.detach(); } catch (e) {}
+    d._attaching = false; d._away = 0; STREAM[tag] = 'off'; return;
+  }
+  if (on) {
+    d._away = 0;
+    if (!d.ready && !d._attaching) { d._attaching = true; try { d.attach(); } catch (e) { d._attaching = false; } }
+    if (d.ready) d._attaching = false;
+    STREAM[tag] = (d.ready || d._attaching) ? 'on' : 'off';
+  } else {
+    if (!d._away) d._away = now;
+    if (now - d._away >= streamHold('demo') && (d.ready || d._attaching || (d.iframe && d.iframe.isConnected))) {
+      try { if (d.detach) d.detach(); } catch (e) {}
+      d._attaching = false; STREAM[tag] = 'off';
+    } else STREAM[tag] = (d.ready || d._attaching) ? 'on' : 'off';
+  }
+}
+const _streamT = { shop: 0, room2: 0 };
+function tickRoomStream(now) {
+  const w = streamWant();
+  STREAM.wantShop = w.wantShop; STREAM.wantRoom2 = w.wantRoom2;
+  if (w.wantShop) { _streamT.shop = 0; setShopGpu(true); }
+  else if (w.evictShop) { if (!_streamT.shop) _streamT.shop = now; else if (now - _streamT.shop >= streamHold('tex')) setShopGpu(false); }
+  else _streamT.shop = 0;
+  if (w.wantRoom2) { _streamT.room2 = 0; setRoom2Gpu(true); }
+  else if (w.evictRoom2) { if (!_streamT.room2) _streamT.room2 = now; else if (now - _streamT.room2 >= streamHold('tex')) setRoom2Gpu(false); }
+  else _streamT.room2 = 0;
+  const playOk = !!(window.__skipStart || (window.__start && window.__start.dismissed) || !document.getElementById('start'));
+  // Use the player's XZ position, not the camera: a lagging or showcase camera in room 1
+  // would otherwise keep Strike/Ghost demos attached after the player has walked to room 2.
+  const xzD = (cab) => {
+    const c = cab && cab.userData && cab.userData.centre;
+    return c ? Math.hypot(monkey.position.x - c.x, monkey.position.z - c.z) : 99;
+  };
+  const dS = xzD(strikeCab), dG = xzD(ghostCab);
+  const force = !!window.__forceDemo;
+  const inR1 = monkey.position.z > -HALF;
+  setDemoStream(demo, playOk && (force || dS < 14 || (dS < 16 && inR1)), now, 'strikeDemo');
+  setDemoStream(ghostDemo, playOk && (force || dG < 14 || (dG < 16 && inR1)), now, 'ghostDemo');
+}
+try { setRoom2Gpu(false); } catch (e) {}
 const _frus = new THREE.Frustum(), _pm = new THREE.Matrix4(), _sph = new THREE.Sphere();
 const stats = { frames: 0, cpu: 0, cpuAvg: 0, gapAvg: 16, quality: dpr, draws: 0, skipped: 0 };
 let last = performance.now(), slow = 0, fast = 0;
@@ -1943,6 +2028,7 @@ function frame(now) {
     _frus.setFromProjectionMatrix(_pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
     cullRooms(_frus);
     if (!nbHold) {   // Neon Bricks fullscreen: room is hidden, skip cabinet attract work
+    try { tickRoomStream(now); } catch (e) {}
     const vis = c => { const sc = c.userData.centre, maxD = PS.on ? PS.cabFar : 18; return (_frus.intersectsSphere(_sph.set(_v.copy(sc).setY(1.2), 1.4)) && camera.position.distanceTo(sc) < maxD) || !!window.__forceDemo; };
     const dts = Math.min(gap / 1000, 0.1);
     if (draw) { tickStrikeDemo(demo, dts, vis(strikeCab)); tickGhostDemo(ghostDemo, dts, vis(ghostCab)); }
@@ -2007,7 +2093,7 @@ window.__grid = setupGrid({ THREE, scene, camera, cv, HALF, DOOR_W, HALL_L, Z2 }
 // teleporter is used; window.__arcade.shopReady resolves once it is set up (same setupShop call as before, Chief's shop.js unchanged).
 let shopP = null;
 function loadShop() { return shopP || (shopP = import('./shop.js').then(m => { shop = m.setupShop({ scene, tp, play, monkey, camera, st }); AREAS[3] = shop.extraBounds; CAM_AREAS[3] = shop.camBounds; CLIP_AREA[1] = shop.extraBounds; setFloor(floorMode);
-  try { if (window.__shop && window.__shop.reloadPrizes) window.__shop.reloadPrizes(); } catch (e) {} return shop; })); }   // white-room carpet now that the shop has sized the floor
+  try { if (window.__shop && window.__shop.reloadPrizes) window.__shop.reloadPrizes(); } catch (e) {} try { if (shop && shop.gpu && streamWant && !streamWant().wantShop) shop.gpu.set(false); } catch (e) {} return shop; })); }   // white-room carpet now that the shop has sized the floor
 kiosk = setupKiosk({ room, camera, monkey, st, play, blockers });
 // ---------- CLAW MACHINE (#12, t215/t216): free-standing in room 1 on the 2x2 grid block Dave highlighted: cells i -7..-6, j -1..0 of the
 // GRID (one cell = the ticket machine's base, measured from its plinth). Base 1.40 x 1.00 m, its edges on the grid lines; front faces +z.
@@ -2139,7 +2225,7 @@ const opts = setupOpts({ play, kiosk, shield, st, monkey, setFloor, getFloor: ()
 requestAnimationFrame(frame);
 
 // hooks for tests / future art work
-window.__arcade = { powerSave: PS, tier: TIER, mem: () => memSnapshot({ THREE, renderer, scene, composer, extras: { tier: TIER.name, why: TIER.why, gpu: TIER.gpu, post: !!usePost, cabDemos: !!Q.cabDemos, gapAvg: stats.gapAvg, cpuAvg: stats.cpuAvg } }), setTier: name => { if (name !== 'low' && name !== 'mid' && name !== 'high') return TIER; TIER.name = name; TIER.forced = true; persistTier(name); applyQuality(); return TIER; }, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, floorMats, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, skyTowerCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, joyFrom, joyClear, joyFromPad, applyQuestPad, isQuestPad, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, get neonBricks() { return nb; }, nbFade: dt => nbFade(dt), get playerFade() { return PF.k; }, get pfClones() { return PF.clones; }, nbWarm: () => nbWarm(), get randomRoom() { return window.__randomRoom; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow) };
+window.__arcade = { powerSave: PS, tier: TIER, mem: () => memSnapshot({ THREE, renderer, scene, composer, extras: { tier: TIER.name, why: TIER.why, gpu: TIER.gpu, post: !!usePost, cabDemos: !!Q.cabDemos, gapAvg: stats.gapAvg, cpuAvg: stats.cpuAvg } }), setTier: name => { if (name !== 'low' && name !== 'mid' && name !== 'high') return TIER; TIER.name = name; TIER.forced = true; persistTier(name); applyQuality(); return TIER; }, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, floorMats, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, skyTowerCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, joyFrom, joyClear, joyFromPad, applyQuestPad, isQuestPad, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, get neonBricks() { return nb; }, nbFade: dt => nbFade(dt), get playerFade() { return PF.k; }, get pfClones() { return PF.clones; }, nbWarm: () => nbWarm(), get randomRoom() { return window.__randomRoom; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow), stream: STREAM };
 const mp = setupMP({ scene, camera, monkey, makeMonkey, makeAlien, st, play, getTp: () => tp, HALF, Z2, HALL_L, WX: 80 }); window.__arcade.mp = mp;   // multiplayer step 1: public room, 10 players
 // after the first room frames: pull in the shop, then the window scenery, off the critical path
 { const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 1500 }) : setTimeout(f, 200));
