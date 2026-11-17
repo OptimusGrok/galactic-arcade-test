@@ -25,7 +25,8 @@ const { open } = require('./lib');
 
   await atFront('monkey');
   await p.waitForFunction(() => window.__cabMusic.cur === 'monkey' || window.__cabMusic.want === 'monkey', null, { timeout: 15000 });
-  await p.waitForTimeout(1600); // HOLD 1000 + evict
+  // cabinet decode + duck ramp + HOLD 1000; wait for the free rather than a fixed 1.6s
+  await p.waitForFunction(() => !window.__music.hasBuf || window.__music.err, null, { timeout: 6000 });
   a = await snap();
   chk(!a.hasBuf, 'room decoded buffer freed after cabinet takes over (hold 1s) ' + JSON.stringify(a));
   chk(a.freed > freed0, 'room free counter incremented');

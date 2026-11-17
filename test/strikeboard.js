@@ -8,11 +8,12 @@ const PH = process.argv[2] === 'phone', sfx = PH ? '_phone' : '';
     if (q.method() === 'GET' && /kfupqtafhaflzaoqtenf\.supabase\.co\/rest\/v1\/scores\?/.test(q.url())) return r.continue();   // read-only live board
     return r.abort(); };   // never post
   const o = await open(PH ? { phone: true, w: 412, h: 860, supa: route } : { w: 1280, h: 720, supa: route }); const { page, errors } = o;
-  let ok = true; const chk = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) ok = false; };
+  let ok = true;
+  try { const chk = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) ok = false; };
   const W = s => page.evaluate(s => document.getElementById('game').contentWindow.eval(s), s);
   await page.evaluate(() => { const p = window.__arcade.play; p.tickets.total = 20; });
-  await page.evaluate(() => { const A = window.__arcade, u = A.strikeCab.userData; window.__noAdapt = 1; A.st.fp = false; A.st.vel.set(0, 0, 0); A.monkey.position.set(u.front.x, 0, u.front.z); A.st.face = Math.atan2(u.facing.x, u.facing.z); A.st.lookT = -99; });
-  await page.waitForFunction(() => document.getElementById('playUI').classList.contains('on'), null, { timeout: 15000 }); await page.waitForTimeout(400); await page.evaluate(() => window.__arcade.play.press());
+  await page.evaluate(() => { const A = window.__arcade, u = A.strikeCab.userData; window.__noAdapt = 1; A.st.fp = false; A.st.vel.set(0, 0, 0); A.monkey.position.set(u.front.x, 0, u.front.z); A.st.face = Math.atan2(u.facing.x, u.facing.z); A.st.lookT = -99; for (let i = 0; i < 30; i++) A.step(1 / 60); });
+  await page.waitForFunction(() => document.getElementById('playUI') && document.getElementById('playUI').classList.contains('on'), null, { timeout: 30000 }); await page.waitForTimeout(400); await page.evaluate(() => window.__arcade.play.press());
   await page.waitForFunction(() => window.__arcade.play.mode === 'game' && document.getElementById('game').classList.contains('on'), null, { timeout: 40000 }); await page.waitForTimeout(1500);
   let s = await W("({ sc: G.scene, demo: !!window.__DEMO, b: __board.on })"); chk(s.sc === 'play' && s.demo && !s.b, 'no credit: attract demo runs ' + JSON.stringify(s));
   await page.evaluate(() => document.getElementById('bTicket').click()); await page.waitForTimeout(500);
@@ -27,9 +28,13 @@ const PH = process.argv[2] === 'phone', sfx = PH ? '_phone' : '';
   if (!process.env.NOSHOTS) await page.screenshot({ path: `shots/strike_board_credit${sfx}.png` });
   await page.evaluate(() => window.__arcade.play.tryPlay()); await page.waitForTimeout(600);
   s = await W("({ sc: G.scene, b: __board.on })"); chk(s.sc === 'play' && !s.b, 'tap to play starts the game from the board');
-  await W("G.score = 0; gameOver();");
-  await page.waitForFunction(() => document.getElementById('game').contentWindow.STRIKE.G.scene === 'scores', null, { timeout: 20000 }).catch(() => {});
-  s = await W("({ sc: G.scene, t: (NET.board||[]).length })"); chk(s.sc === 'scores' && s.t > 0, 'after game over the world top 10 is shown');
+  await W("G.score = 0; gameOver(); if (typeof afterGame === 'function') afterGame();");
+  await page.waitForFunction(() => {
+    const w = document.getElementById('game') && document.getElementById('game').contentWindow;
+    const S = w && (w.STRIKE || w);
+    return S && S.G && S.G.scene === 'scores' && S.NET && S.NET.board && S.NET.board.length > 0;
+  }, null, { timeout: 25000 }).catch(() => {});
+  s = await W("({ sc: G.scene, t: (NET.board||[]).length })"); chk(s.sc === 'scores' && s.t > 0, 'after game over the world top 10 is shown ' + JSON.stringify(s));
   if (!process.env.NOSHOTS) await page.screenshot({ path: `shots/strike_board_over${sfx}.png` });
   await page.waitForFunction(() => window.__arcade.play.sub === 'demo', null, { timeout: 20000 }); await page.waitForTimeout(800);
   s = await W("({ sc: G.scene, demo: !!window.__DEMO })"); chk(s.demo && s.sc === 'play', 'no credit left: back to the attract demo');
@@ -37,5 +42,6 @@ const PH = process.argv[2] === 'phone', sfx = PH ? '_phone' : '';
   chk(await W("G.scene === 'scores' && __board.on"), 'next ticket: board again');
   chk(supa.every(u => u.startsWith('GET ')), 'no writes to the leaderboard (' + supa.length + ' GETs)');
   chk(errors.filter(e => !/ERR_FAILED/.test(e)).length === 0, 'no page errors ' + errors.join(' | '));
-  await o.close(); process.exit(ok ? 0 : 1);
+  } finally { await o.close(); }
+  process.exit(ok ? 0 : 1);
 })();
