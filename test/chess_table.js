@@ -103,7 +103,7 @@ const fs = require('fs');
     return { w: r.width, h: r.height, iw: innerWidth, ih: innerHeight, src: f.src, cv: window.__arcade.renderer.domElement.style.visibility, mode: d.getElementById('mode').value, robot: d.getElementById('robot').value, battles: d.getElementById('battles').value,
       pieces: d.querySelectorAll('.sq svg.pc, .sq .pc').length, x: [x.left, x.top, x.width], xTop: document.elementFromPoint(x.left + x.width / 2, x.top + x.height / 2).id }; });
   console.log(JSON.stringify(ov));
-  chk(okG && ov.w === ov.iw && ov.h === ov.ih && /chess-play\/index\.html$/.test(ov.src) && ov.cv === 'hidden', 'chess opens full-screen over the zoomed board');
+  chk(okG && ov.w === ov.iw && ov.h === ov.ih && /chess-play\/index\.html(?:\?|$)/.test(ov.src) && ov.cv === 'hidden', 'chess opens full-screen over the zoomed board');
   chk(ov.mode === 'hvc' && ov.robot === 'on' && ov.battles === 'on' && ov.pieces >= 32, 'same game: vs computer, robot hand + battles on, 32 pieces');
   chk(ov.x[0] <= 8 && ov.x[1] <= 8 && ov.x[2] >= 36 && ov.xTop === 'chessX', 'close ✕ tight in the top-left and on top');
   await page.waitForTimeout(200); const og = await or();
@@ -120,9 +120,11 @@ const fs = require('fs');
   // Dave t874u: the game options sit UNDER the board, nothing overlaps, all fits on screen, ✕ clear
   const layout = async tag => { const L = await ev(() => { const d = window.__chess.frame.contentDocument, w = window.__chess.frame.contentWindow, R = s => { const b = d.querySelector(s).getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom }; };
       return { vw: w.innerWidth, vh: w.innerHeight, frame: R('#frame'), bot: R('#barBottom'), panel: R('aside.panel'), cap: R('#barTop'), newBtn: R('#newBtn'), set: R('#settings summary'), sh: d.documentElement.scrollHeight, capPad: parseFloat(w.getComputedStyle(d.getElementById('barTop')).paddingLeft) }; });
+    const x = await ev(() => { const b = document.getElementById('chessX').getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom }; });
     const inV = r => r.l >= 0 && r.t >= 0 && r.r <= L.vw + 0.5 && r.b <= L.vh + 0.5, clearX = r => r.l > 44 || r.t > 44;
-    chk(L.panel.t >= L.bot.b - 0.5 && L.panel.t >= L.frame.b && inV(L.frame) && inV(L.panel) && inV(L.newBtn) && inV(L.set) && clearX(L.frame) && (clearX(L.cap) || L.capPad >= 44) && clearX(L.panel) && L.sh <= L.vh + 1,
-      tag + ': options under the board, board + options fully on screen, ✕ clear ' + JSON.stringify(L)); };
+    const xClearBoard = L.frame.t >= x.b - 1 || L.frame.l >= x.r - 1;
+    chk(L.panel.t >= L.bot.b - 0.5 && L.panel.t >= L.frame.b && inV(L.frame) && inV(L.panel) && inV(L.newBtn) && inV(L.set) && clearX(L.frame) && (clearX(L.cap) || L.capPad >= 44) && clearX(L.panel) && L.sh <= L.vh + 1 && xClearBoard && L.capPad >= 60 && L.cap.b - L.cap.t >= 52,
+      tag + ': options under the board, board + options fully on screen, ✕ clear of the board ' + JSON.stringify({ L, x })); };
   await layout('landscape phone');
   await shot((process.env.SHOTDIR || '/workspace/shots') + '/chess_options_bottom.png');
   const keys = await ev(() => { const w = window.__chess.frame.contentWindow; return Object.keys(w.localStorage).filter(k => /chess/.test(k)); });
@@ -163,6 +165,7 @@ const fs = require('fs');
   chk(pt.st === 'game' && pt.x[0] <= 8 && pt.top === 'chessX' && !pt.turn, 'portrait phone: game open, ✕ on top, no turn-sideways ' + JSON.stringify(pt));
   await page.waitForFunction(() => { try { return window.__chess.frame.contentDocument.querySelectorAll('.sq').length === 64; } catch (e) { return false; } }, null, { timeout: 60000 }).catch(() => {});
   await layout('portrait phone');
+  await page.setViewportSize({ width: 473, height: 1024 }); await page.waitForTimeout(400); await layout('portrait phone 473x1024');
   const bsz = () => ev(() => { const d = window.__chess.frame.contentDocument, f = d.getElementById('frame').getBoundingClientRect(), sq = d.querySelector('.sq').getBoundingClientRect(), p = d.querySelector('aside.panel').getBoundingClientRect();
     return { vw: innerWidth, vh: innerHeight, board: Math.round(f.width), sq: Math.round(sq.width), panelH: Math.round(p.height) }; });
   const B1 = await bsz(), o5 = await or();
