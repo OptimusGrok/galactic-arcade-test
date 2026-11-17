@@ -28,13 +28,17 @@ const PH = process.argv[2] === 'phone', sfx = PH ? '_phone' : '';
   if (!process.env.NOSHOTS) await page.screenshot({ path: `shots/strike_board_credit${sfx}.png` });
   await page.evaluate(() => window.__arcade.play.tryPlay()); await page.waitForTimeout(600);
   s = await W("({ sc: G.scene, b: __board.on })"); chk(s.sc === 'play' && !s.b, 'tap to play starts the game from the board');
-  await W("G.score = 0; gameOver(); if (typeof afterGame === 'function') afterGame();");
-  await page.waitForFunction(() => {
-    const w = document.getElementById('game') && document.getElementById('game').contentWindow;
-    const S = w && (w.STRIKE || w);
-    return S && S.G && S.G.scene === 'scores' && S.NET && S.NET.board && S.NET.board.length > 0;
-  }, null, { timeout: 25000 }).catch(() => {});
-  s = await W("({ sc: G.scene, t: (NET.board||[]).length })"); chk(s.sc === 'scores' && s.t > 0, 'after game over the world top 10 is shown ' + JSON.stringify(s));
+  s = await W("(function(){ G.score = 0; gameOver(); if (typeof afterGame === 'function') afterGame(); return { sc: G.scene, t: (NET.board||[]).length, after: typeof afterGame }; })()");
+  console.log('after gameOver', JSON.stringify(s));
+  if (s.sc !== 'scores') {
+    await page.waitForFunction(() => {
+      const w = document.getElementById('game') && document.getElementById('game').contentWindow;
+      const ev = w && w.eval && w.eval("({ sc: G.scene, t: (NET.board||[]).length })");
+      return ev && ev.sc === 'scores' && ev.t > 0;
+    }, null, { timeout: 8000 }).catch(() => {});
+    s = await W("({ sc: G.scene, t: (NET.board||[]).length })");
+  }
+  chk(s.sc === 'scores' && s.t > 0, 'after game over the world top 10 is shown ' + JSON.stringify(s));
   if (!process.env.NOSHOTS) await page.screenshot({ path: `shots/strike_board_over${sfx}.png` });
   await page.waitForFunction(() => window.__arcade.play.sub === 'demo', null, { timeout: 20000 }); await page.waitForTimeout(800);
   s = await W("({ sc: G.scene, demo: !!window.__DEMO })"); chk(s.demo && s.sc === 'play', 'no credit left: back to the attract demo');
