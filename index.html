@@ -1,22 +1,22 @@
 <!DOCTYPE html>
 <html lang="en"><head>
 <link rel="preload" as="image" href="img/start.webp" type="image/webp" fetchpriority="high">
-<script>window.__GA_VER="test-v5";</script>
+<script>window.__GA_VER="v253";</script>
 <script>/* t921u: test-v3 warmup left cabinet number badges visible. A tap on NUMBERS: OFF then wrote '1'.
-   One-time clear on test-v4 so nobody stays stuck ON unless they choose it again. Default remains off. */
-(function(){try{if(!localStorage.getItem('neonarcade.dev.v4numReset')){localStorage.setItem('neonarcade.dev.v4numReset','1');localStorage.removeItem('neonarcade.dev.numbers');}}catch(e){}})();
+   One-time clear (keyed for v253) so nobody stays stuck ON unless they choose it again. Default remains off. */
+(function(){try{if(!localStorage.getItem('neonarcade.dev.v253numReset')){localStorage.setItem('neonarcade.dev.v253numReset','1');localStorage.removeItem('neonarcade.dev.numbers');}}catch(e){}})();
 </script>
-<script>/* t855u / v233: if an older galactic-arcade-test-* cache is still on this phone, clear it and reload ONCE
+<script>/* t855u / v233: if an older galactic-arcade-v* cache is still on this phone, clear it and reload ONCE
    before the start screen is interactive — never mid-session (v228 did this 6s after the room started drawing). */
 (function(){if(!('caches'in window)||location.protocol==='file:')return;
-  var want='galactic-arcade-test-v5',key='gaReloaded.'+want,skip=false;
+  var want='galactic-arcade-v253',key='gaReloaded.'+want,skip=false;
   try{skip=!!sessionStorage.getItem(key);}catch(e){skip=true;}
   window.__gaUpdate={want:want,checked:!!skip,reloading:false};
   if(skip)return;
   document.documentElement.classList.add('ga-updating');
   setTimeout(function(){if(window.__gaUpdate&&!window.__gaUpdate.checked&&!window.__gaUpdate.reloading){document.documentElement.classList.remove('ga-updating');window.__gaUpdate.checked=true;}},2000);
   caches.keys().then(function(ks){
-    var stale=ks.filter(function(k){return k.indexOf('galactic-arcade-test-')===0&&k!==want;});
+    var stale=ks.filter(function(k){return k.indexOf('galactic-arcade-v')===0&&k!==want;});
     if(!stale.length){document.documentElement.classList.remove('ga-updating');window.__gaUpdate.checked=true;return;}
     window.__gaUpdate.reloading=true;
     return Promise.all(stale.map(function(k){return caches.delete(k);})).then(function(){
@@ -443,10 +443,10 @@ if (document.getElementById('flBtn')) flBtnInit(); else document.addEventListene
 <script src="inventory.js"></script>
 <script src="roomfire.js"></script>
 <script>/* FAST LOAD (t229): register the service worker (its install pre-caches ~7 MB) only after the room is drawing and things settle, so it never competes with the first load */
-if('serviceWorker' in navigator&&location.protocol!=='file:'){(function(){window.__GA_VER=window.__GA_VER||'test-v5';
-var done=0,want='galactic-arcade-test-v5';
+if('serviceWorker' in navigator&&location.protocol!=='file:'){(function(){window.__GA_VER=window.__GA_VER||'v253';
+var done=0,want='galactic-arcade-v253';
 var reg=function(){if(done)return;done=1;navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(){
-  return caches.keys();}).then(function(ks){var stale=ks.filter(function(k){return k.indexOf('galactic-arcade-test-')===0&&k!==want;});
+  return caches.keys();}).then(function(ks){var stale=ks.filter(function(k){return k.indexOf('galactic-arcade-v')===0&&k!==want;});
   if(!stale.length)return;return Promise.all(stale.map(function(k){return caches.delete(k);}));
     // t855u: the delayed SW path only deletes leftover caches. A one-shot reload for a stale
     // cache happens in the head script, before the start screen is interactive — never here,
