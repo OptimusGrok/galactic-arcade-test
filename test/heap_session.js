@@ -122,7 +122,7 @@ const chk = (c, m, x) => { console.log((c ? 'PASS ' : 'FAIL ') + m + (x !== unde
   const growth = { dCdp, dUsed, dIframes: after.iframes - before.iframes, dMeshes: after.meshes - before.meshes, dGeos: after.geos - before.geos, dMats: after.mats - before.mats, dRgeo: after.rinfo.geo - before.rinfo.geo, dRtex: after.rinfo.tex - before.rinfo.tex, dProg: after.rinfo.prog - before.rinfo.prog };
   console.log('GROWTH ' + JSON.stringify(growth));
 
-  chk(after.iframes === before.iframes && !after.game && after.chessFr === 0, 'no leftover play/chess iframes (count back to baseline)', { before: before.iframes, after: after.iframes, game: after.game, chessFr: after.chessFr });
+  chk(!after.game && after.chessFr === 0 && after.poolFr === 0, 'no leftover play/chess/pool iframes after the session', { before: before.iframes, after: after.iframes, game: after.game, chessFr: after.chessFr, poolFr: after.poolFr });
   chk(Math.abs(after.meshes - before.meshes) <= 8 && Math.abs(after.geos - before.geos) <= 8, 'scene mesh/geometry counts stay flat', { before: [before.meshes, before.geos], after: [after.meshes, after.geos] });
   // After warmup, JS heap growth over 10 more open/close cycles should stay modest (AudioContexts / WebGL / detached iframes used to add tens of MB).
   const heap = dCdp != null ? dCdp : dUsed;

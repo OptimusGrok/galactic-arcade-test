@@ -2,10 +2,10 @@
 // (no neon on the body), NOVA TETHER marquee, starfighter-over-alien-world side art, silver ball joystick, orange FORCE and pink
 // FIRE buttons, steel coin door with two red slots. Screen: a cheap side-scrolling shooter attract loop with INSERT CREDIT.
 import * as THREE from 'three';
-import { cabWH, flagTex, capLoadedTexture } from './tier.js';
+import { cabWH, flagTex, capLoadedTexture, capCabSideTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos } from './strikecab.js';
 const L = new THREE.TextureLoader();
-const load = (url, flip) => { const t = L.load(url, tex => capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
+const load = (url, flip) => { const t = L.load(url, tex => /_side\./.test(url) ? capCabSideTexture(tex, THREE) : capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
 function navyTex() {   // brushed, slightly worn navy paint
   const c = document.createElement('canvas'); c.width = 128; c.height = 256; const g = c.getContext('2d');
   g.fillStyle = '#1b2748'; g.fillRect(0, 0, 128, 256);

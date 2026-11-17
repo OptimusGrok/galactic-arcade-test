@@ -1,6 +1,6 @@
 // GHOST 256 cabinet: model (no neon, plain plum trim) + live attract-mode screen from a sandboxed copy of Ghost 256.
 import * as THREE from 'three';
-import { cabWH, flagTex, capLoadedTexture } from './tier.js';
+import { cabWH, flagTex, capLoadedTexture, capCabSideTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos, CRT, cabScreenSize, blitCover, makeScreenView } from './strikecab.js';
 
 const MOBILE = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
@@ -23,13 +23,13 @@ function pixelText(g, text, x, y, size, col, ox) { // crisp blocky text via a ti
   if (ox) { draw('#ff2040', -ox); draw('#20e0ff', ox); } draw(col, 0);
 }
 export function ghostSideTexture(flip) {
-  return tex(512, 1024, (g, w, h) => {
+  const t = tex(512, 1024, (g, w, h) => {
     g.fillStyle = '#0b0910'; g.fillRect(0, 0, w, h);
     g.save(); if (flip) { g.translate(w, 0); g.scale(-1, 1); }
     glitch(g, w, h, h * 0.52, 160);
     ghost(g, w * 0.22, h * 0.14, 11, '#ffc81e'); ghost(g, w * 0.3, h * 0.33, 11, '#22d8e8'); ghost(g, w * 0.4, h * 0.53, 11, '#ff6a1a');
     g.restore();
-  }, true);
+  }, true); capCabSideTexture(t, THREE); return t;
 }
 export function ghostMarqueeTexture() {
   return tex(512, 160, (g, w, h) => {

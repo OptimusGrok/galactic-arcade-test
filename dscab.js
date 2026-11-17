@@ -5,7 +5,7 @@
 // (the station's standard edge glow); the body itself is matte black metal.
 // Local frame: origin = platform centre on the floor, +z = the front (the side you walk up to), the screen stands at -z.
 import * as THREE from 'three';
-import { cabWH, flagTex, capLoadedTexture } from './tier.js';
+import { bindStreamGpu, cabWH, flagTex, capLoadedTexture } from './tier.js';
 export const DS = { R: 2.05, TOP: 0.32, SCR_Z: -2.5 };
 const black = (r = 0.45, m = 0.6) => new THREE.MeshStandardMaterial({ color: 0x111116, roughness: r, metalness: m });
 const glow = (hex, k) => new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(k * 0.62), fog: false });   // t782u: dimmer LEDs, matching the rest of the arcade neon
@@ -152,5 +152,6 @@ export function buildDeadSignalStation() {
       }
     } };
   updateCable();
+  g.userData.gpu = bindStreamGpu(g, { minEdge: 0, alsoNames: ['screen'] });
   return g;
 }

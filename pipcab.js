@@ -4,10 +4,10 @@
 // THE QUEST FOR THE SUN CROWN, teal-capped Pip jumping over coins, chomper pipes and a sunset. Purple control panel with a red ball
 // joystick, JUMP and RUN buttons; brushed steel coin door with two red slots and an INSERT COIN plate. Screen: a silent attract loop.
 import * as THREE from 'three';
-import { cabWH, flagTex, capLoadedTexture } from './tier.js';
+import { cabWH, flagTex, capLoadedTexture, capCabSideTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos } from './strikecab.js';
 const L = new THREE.TextureLoader();
-const load = (url, flip) => { const t = L.load(url, tex => capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
+const load = (url, flip) => { const t = L.load(url, tex => /_side\./.test(url) ? capCabSideTexture(tex, THREE) : capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
 const canvasTex = (w, h, paint) => { const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } paint(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return t; };
 const PIP = ['...TTTT...', '..TTTTTTT.', '..SSSSS...', '.SSKSSKS..', '..SSSSS...', '.BBTTTTBB.', '.S.BBBB.S.', '...B..B...', '..NN..NN..'];
 const COL = { T: '#1fb5a8', S: '#f2b47a', K: '#1a1020', B: '#2a5bd8', N: '#6a3a1a' };

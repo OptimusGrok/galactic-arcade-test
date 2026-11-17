@@ -2,10 +2,10 @@
 // side art of the monkey (from behind) crossing a road. Art cropped from monkey-cross/monkey_crossing_cabinet.jpg.
 // Screen: a cheap animated attract loop (lanes, cars, logs, a hopping monkey, INSERT CREDIT) drawn on a canvas.
 import * as THREE from 'three';
-import { cabWH, flagTex, capLoadedTexture } from './tier.js';
+import { cabWH, flagTex, capLoadedTexture, capCabSideTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos } from './strikecab.js';
 const L = new THREE.TextureLoader();
-const load = (url, flip) => { const t = L.load(url, tex => capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
+const load = (url, flip) => { const t = L.load(url, tex => /_side\./.test(url) ? capCabSideTexture(tex, THREE) : capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
 function attract() {
   const c = document.createElement('canvas'); { const sz = cabWH(270, 480); c.width = sz[0]; c.height = sz[1]; } const g = c.getContext('2d'); if (c.width !== 270 || c.height !== 480) g.scale(c.width / 270, c.height / 480);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;

@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="en"><head>
 <link rel="preload" as="image" href="img/start.webp" type="image/webp" fetchpriority="high">
-<script>window.__GA_VER="v251";</script>
+<script>window.__GA_VER="v252";</script>
 <script>/* t855u / v233: if an older galactic-arcade-v* cache is still on this phone, clear it and reload ONCE
    before the start screen is interactive — never mid-session (v228 did this 6s after the room started drawing). */
 (function(){if(!('caches'in window)||location.protocol==='file:')return;
-  var want='galactic-arcade-v251',key='gaReloaded.'+want,skip=false;
+  var want='galactic-arcade-v252',key='gaReloaded.'+want,skip=false;
   try{skip=!!sessionStorage.getItem(key);}catch(e){skip=true;}
   window.__gaUpdate={want:want,checked:!!skip,reloading:false};
   if(skip)return;
@@ -214,10 +214,19 @@ html.ga-updating #start,html.ga-updating #start *{pointer-events:none!important}
 .flT.sel{border-color:#ffe08a;color:#ffe08a;box-shadow:0 0 16px #ffb000aa;text-shadow:0 0 6px #ffb000}
 .flT .now{display:block;font-size:10px;opacity:.85;margin-top:3px;min-height:1em}
 #optBack{display:block;margin:16px auto 0;font-size:clamp(14px,3vmin,20px)}
-#secHot{position:absolute;top:env(safe-area-inset-top,0);right:env(safe-area-inset-right,0);width:64px;height:64px;z-index:3;background:transparent}
+#secHot{position:fixed;top:env(safe-area-inset-top,0);right:env(safe-area-inset-right,0);width:64px;height:64px;z-index:2147483603;background:transparent;pointer-events:auto}
+/* t901u: hidden tickets / pattern menu re-lays out in both orientations and sits above the turn-sideways screen while open. Arcade / cabinets unchanged. */
+#start.secretOn{z-index:2147483602}
+#sec,#tk{padding:max(8px,env(safe-area-inset-top,0px)) max(8px,env(safe-area-inset-right,0px)) max(8px,env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px));box-sizing:border-box}
+#secP{width:min(92vw,460px,calc(100dvh - 96px),calc(100dvw - 24px));max-height:calc(100dvh - 96px);aspect-ratio:1}
+@media (max-height:500px){#secX{top:6px;right:6px;z-index:2}#secP{width:min(70vw,calc(100dvh - 16px),460px);max-height:calc(100dvh - 16px)}}
+#tk #optP{width:min(92vw,560px);max-height:calc(100dvh - 16px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));overflow-y:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box}
+@media (orientation:portrait){#tk #optP{width:min(96vw,560px)}}
+@media (orientation:landscape) and (max-height:500px){#tk #optP{width:min(96vw,720px);padding:8px 12px 10px}#tk #optHd{margin-bottom:6px}#tk .tkR{margin:4px 0;font-size:13px}#tk .tkBs{margin-bottom:4px;gap:6px}#tk .tkB{min-height:36px;font-size:13px}#tk #tkDone{margin:8px auto 0!important}}
+
 #sec,#tk{position:absolute;inset:0;z-index:4;display:none;align-items:center;justify-content:center;background:#05010cd0}
 #sec.on,#tk.on{display:flex}
-#secP{position:relative;width:min(92vw,460px,calc(100dvh - 160px));aspect-ratio:1;border-radius:18px;border:3px solid #00e5ff;background:#0a0418f0;box-shadow:0 0 26px #00e5ff77;touch-action:none}
+#secP{position:relative;width:min(92vw,460px,calc(100dvh - 96px),calc(100dvw - 24px));max-height:calc(100dvh - 96px);aspect-ratio:1;border-radius:18px;border:3px solid #00e5ff;background:#0a0418f0;box-shadow:0 0 26px #00e5ff77;touch-action:none}
 #secP.bad{border-color:#ff2a4a;box-shadow:0 0 26px #ff2a4a;animation:shk .4s}
 #secP canvas{position:absolute;inset:0;width:100%;height:100%}
 #secX{position:absolute;top:-54px;right:0;width:42px;height:42px;border-radius:50%;border:2px solid #ff3cf0aa;background:#120208;color:#ffd0fa;font:700 20px sans-serif}
@@ -250,7 +259,7 @@ html.ga-updating #start,html.ga-updating #start *{pointer-events:none!important}
 // Options menu (FLOOR tab). Every other tap / click / key is swallowed here and never reaches the arcade.
 (function () {
   var el = document.getElementById('start'), opt = document.getElementById('opt'), S = window.__start = { shown: true, dismissed: false, at: 0, how: '', opts: 0, ignored: 0 };
-  function off() { S.shown = false; if (el.isConnected) el.remove(); }
+  function off() { S.shown = false; if (el.isConnected) el.remove(); syncSecret(); }
   function floorNow() { try { var f = localStorage.getItem('neonarcade.floor'); return ['neon', 'carpet', 'checkers', 'lava', 'cobble', 'ice'].indexOf(f) >= 0 ? f : 'cobble'; } catch (e) { return 'cobble'; } }
   function showFloor() { var f = floorNow(); ['flNeon', 'flCarpet', 'flChk', 'flLava', 'flCob', 'flIce'].forEach(function (id) { var t = document.getElementById(id); t.classList.toggle('sel', t.dataset.floor === f); }); }
   function pickFloor(f) { if (window.__setFloor) window.__setFloor(f); else try { localStorage.setItem('neonarcade.floor', f); } catch (e) {} S.floor = f; showFloor(); }
@@ -294,12 +303,19 @@ html.ga-updating #start,html.ga-updating #start *{pointer-events:none!important}
     var p0 = last || [x, y], n = Math.max(1, Math.ceil(Math.hypot(x - p0[0], y - p0[1]) / (w * 0.03))); last = [x, y];   // walk the finger path between samples so a fast swipe can't skip a dot
     for (var s = 1; s <= n; s++) { var px = p0[0] + (x - p0[0]) * s / n, py = p0[1] + (y - p0[1]) * s / n; hitAt(D, px, py, rr); } }
   function hitAt(D, x, y, rr) { for (var i = 0; i < 9; i++) if (pat.indexOf(i) < 0 && Math.hypot(D[i][0] - x, D[i][1] - y) < rr) { pat.push(i); S.pat = pat.map(function (n) { return n + 1; }).join(''); } }
-  function openSec(on) { sec.classList.toggle('on', on); pat = []; drawing = false; sP.classList.remove('bad'); if (on) { S.secOpen = (S.secOpen || 0) + 1; draw(); } }
+  function syncSecret() {
+    var menu = sec.classList.contains('on') || tk.classList.contains('on');
+    el.classList.toggle('secretOn', !!menu);
+    var hot = document.getElementById('secHot');
+    if (hot) hot.style.display = (!S.dismissed && el.isConnected && !el.classList.contains('out')) ? '' : 'none';
+  }
+  function openSec(on) { sec.classList.toggle('on', on); pat = []; drawing = false; sP.classList.remove('bad'); if (on) { S.secOpen = (S.secOpen || 0) + 1; draw(); } syncSecret(); }
+
   function finish() { drawing = false; var code = pat.map(function (n) { return n + 1; }).join(''); if (!pat.length) return draw();
     if (hsh(code) === GOOD) { openSec(false); openTk(true); } else { S.secBad = (S.secBad || 0) + 1; sP.classList.add('bad'); draw(); setTimeout(function () { pat = []; sP.classList.remove('bad'); draw(); }, 450); } }
   function rd(k) { try { return Math.max(0, parseInt(localStorage.getItem(k), 10) || 0); } catch (e) { return 0; } }
   function showTk() { document.getElementById('tkG').textContent = rd('neonarcade.tickets'); document.getElementById('tkV').textContent = rd('neonarcade.vikingTickets'); document.getElementById('tkC').textContent = '$' + (window.__kiosk ? window.__kiosk.C.bal : 5); }
-  function openTk(on) { tk.classList.toggle('on', on); S.tk = on; if (on) showTk(); }
+  function openTk(on) { tk.classList.toggle('on', on); S.tk = on; if (on) showTk(); syncSecret(); }
   function bump(k, d) { var v = d === 0 ? 0 : Math.max(0, rd(k) + d); try { localStorage.setItem(k, String(v)); } catch (e) {} showTk(); if (window.__neonSync) window.__neonSync(); }
   window.addEventListener('pointermove', function (e) { if (!drawing) return; cur = [e.clientX, e.clientY]; addAt(e.clientX, e.clientY); draw(); }, true);
   function devUI() { [['tkNum', 'numbers', 'NUMBERS'], ['tkClip', 'clip', 'CLIPPING']].forEach(function (a) { var e = document.getElementById(a[0]), on = localStorage.getItem('neonarcade.dev.' + a[1]) === '1'; e.textContent = a[2] + ': ' + (on ? 'ON' : 'OFF'); e.classList.toggle('on', on); });
@@ -353,12 +369,14 @@ html.ga-updating #start,html.ga-updating #start *{pointer-events:none!important}
     S.dismissed = true; S.at = performance.now(); S.how = how;
     try { var AC = window.AudioContext || window.webkitAudioContext, ac = window.__unlockAC = window.__unlockAC || new AC(); ac.resume(); var b = ac.createBuffer(1, 1, 22050), s = ac.createBufferSource(); s.buffer = b; s.connect(ac.destination); s.start(0); S.audio = true; } catch (e) {}
     try { var k = window.__arcade && window.__arcade.keys; if (k) for (var c in k) k[c] = false; } catch (e) {}
-    el.classList.add('out'); setTimeout(function () { off(); }, 650); setTimeout(release, 700);
+    el.classList.add('out'); syncSecret(); setTimeout(function () { off(); }, 650); setTimeout(release, 700);
   }
   function on() { evs.forEach(function (t) { window.addEventListener(t, eat, { capture: true, passive: false }); }); }
+  (function () { var hot = document.getElementById('secHot'); if (hot && hot.parentNode !== document.body) document.body.appendChild(hot); syncSecret(); })();
+
   window.__startUI.show = function () {   // back to the start screen (from the HUD home button)
     if (window.__floorBtn && window.__floorBtn.open) window.__floorBtn.openMenu(false); release(); openOpt(false); openSec(false); openTk(false); el.classList.remove('out'); if (!el.isConnected) document.body.appendChild(el);
-    S.shown = true; S.dismissed = false; S.how = ''; S.returns = (S.returns || 0) + 1; on(); };
+    S.shown = true; S.dismissed = false; S.how = ''; S.returns = (S.returns || 0) + 1; on(); syncSecret(); };
   if (window.__skipStart) { off(); return; }
   on();
 })();
@@ -415,8 +433,8 @@ if (document.getElementById('flBtn')) flBtnInit(); else document.addEventListene
 <script src="inventory.js"></script>
 <script src="roomfire.js"></script>
 <script>/* FAST LOAD (t229): register the service worker (its install pre-caches ~7 MB) only after the room is drawing and things settle, so it never competes with the first load */
-if('serviceWorker' in navigator&&location.protocol!=='file:'){(function(){window.__GA_VER=window.__GA_VER||'v251';
-var done=0,want='galactic-arcade-v251';
+if('serviceWorker' in navigator&&location.protocol!=='file:'){(function(){window.__GA_VER=window.__GA_VER||'v252';
+var done=0,want='galactic-arcade-v252';
 var reg=function(){if(done)return;done=1;navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(){
   return caches.keys();}).then(function(ks){var stale=ks.filter(function(k){return k.indexOf('galactic-arcade-v')===0&&k!==want;});
   if(!stale.length)return;return Promise.all(stale.map(function(k){return caches.delete(k);}));

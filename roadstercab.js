@@ -3,10 +3,10 @@
 // MARS seat pods, flying-roadster side art. No neon on the body (the room's wall tube outlines it like every cabinet).
 // Local frame: x across (-W/2..W/2), y up, z from the wall end (0) out to the seats (DEP). Rotated PI so local +z points into the room.
 import * as THREE from 'three';
-import { cabWH, flagTex, capLoadedTexture } from './tier.js';
+import { cabWH, flagTex, capLoadedTexture, capCabSideTexture } from './tier.js';
 export const MR = { W: 5.0, DEP: 4.0, HT: 3.1 };
 const L = new THREE.TextureLoader();
-const load = (u, flip) => { const t = L.load(u, tex => capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
+const load = (u, flip) => { const t = L.load(u, tex => /_side\./.test(u) ? capCabSideTexture(tex, THREE) : capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
 function marqueeTex() {
   const c = document.createElement('canvas'); { const sz = cabWH(1024, 140); c.width = sz[0]; c.height = sz[1]; } const g = c.getContext('2d'); if (c.width !== 1024 || c.height !== 140) g.scale(c.width / 1024, c.height / 140); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE);
   const bg = new Image(); const draw = () => {

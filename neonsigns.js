@@ -660,9 +660,9 @@ function applyPaintedIcons(THREE, icons, opt) {
   if (typeof window !== 'undefined') window.__gaPaintedIcons = st;
   if (!icons || !icons.material || !icons.material.map) { st.done = true; return st; }
   const old = icons.material.map, oc = old.image;
-  const low = !!(opt && (opt.low || opt.atlasMax || (opt.iconS && opt.iconS <= 128))) || !oc || oc.width <= 512;
   const S0 = oc ? oc.width / 4 : 256;
-  const C = st.cell = low ? 256 : 512;
+  // t890u: cap the painted atlas at 1024 (256 px cells) on every tier; walking-distance looks the same, saves ~16 MB with no mips.
+  const C = st.cell = 256;
   const cv = document.createElement('canvas'); cv.width = cv.height = C * 4; const g = cv.getContext('2d');
   if (oc) g.drawImage(oc, 0, 0, cv.width, cv.height);
   const info = {}; (icons.userData.icons || []).forEach(i => { info[i.key] = i; });
@@ -672,7 +672,7 @@ function applyPaintedIcons(THREE, icons, opt) {
       const i = PAINTED_KEYS.indexOf(k), x = (i % 4) * C, y = Math.floor(i / 4) * C, pad = 12 * C / S0, inner = C - 2 * pad, q = info[k];
       const r = q && q.w > 0 && q.h > 0 ? q.w / q.h : 1, dw = r >= 1 ? inner / r : inner, dh = r >= 1 ? inner : inner * r;
       g.clearRect(x, y, C, C); g.drawImage(im, x + pad + (inner - dw) / 2, y + pad + (inner - dh) / 2, dw, dh); st.loaded.push(k); }
-    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = (opt && opt.aniso) || old.anisotropy || 4;
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = (opt && opt.aniso) || old.anisotropy || 4; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
     try { if (opt && opt.renderer) opt.renderer.initTexture(tex); } catch (e) {}
     icons.material.map = tex;
     icons.material.color.setScalar(st.k = Math.max(icons.material.color.r, 0.8));
@@ -769,7 +769,7 @@ export function buildNeonSigns(THREE, mergeGeometries, list, opt = {}) {
   const mesh = new THREE.Mesh(mergeGeometries(quads), mat); mesh.name = 'neonSigns'; mesh.renderOrder = 3; mesh.matrixAutoUpdate = false; mesh.updateMatrix();
   mesh.userData.signs = info; mesh.userData.k = mat.color.r;
   if (iconQuads.length) {
-    const itex = new THREE.CanvasTexture(atlas.cv); itex.colorSpace = THREE.SRGBColorSpace; itex.anisotropy = opt.aniso || 4;
+    const itex = new THREE.CanvasTexture(atlas.cv); itex.colorSpace = THREE.SRGBColorSpace; itex.anisotropy = opt.aniso || 4; itex.generateMipmaps = false; itex.minFilter = THREE.LinearFilter;
     try { if (opt.renderer) opt.renderer.initTexture(itex); } catch (err) {}
     const imat = new THREE.MeshBasicMaterial({ map: itex, transparent: true, depthWrite: false, fog: false, color: new THREE.Color(1, 1, 1).multiplyScalar(opt.k || 0.55) });
     imat.name = 'neonIcons';

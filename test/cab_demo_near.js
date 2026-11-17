@@ -7,6 +7,15 @@ const { open } = require('./lib');
   let ok = true;
   const chk = (c, m, x) => { console.log((c ? 'PASS ' : 'FAIL ') + m, x != null ? JSON.stringify(x) : ''); if (!c) ok = false; };
 
+  // t893u: demos attach when the player (or camera) is near, so walk up / force before waiting for ready.
+  await page.evaluate(() => {
+    const A = window.__arcade;
+    window.__forceDemo = 1;
+    if (A && A.strikeCab && A.strikeCab.userData && A.strikeCab.userData.front) {
+      const f = A.strikeCab.userData.front, n = A.strikeCab.userData.inward || { x: 0, z: 1 };
+      A.monkey.position.set(f.x + (n.x || 0) * 2.4, 0, f.z + (n.z || 0) * 2.4);
+    }
+  });
   await page.waitForFunction(() => {
     const A = window.__arcade;
     return A && ((A.demo && (A.demo.ready || A.demo.err)) && (A.ghostDemo && (A.ghostDemo.ready || A.ghostDemo.err)));

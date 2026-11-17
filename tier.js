@@ -98,14 +98,27 @@ export function flagTex(t, THREE) {
   return t;
 }
 
-// Downsample a loaded image texture to quality.texMax and apply mip/aniso flags.
-export function capLoadedTexture(t, THREE) {
+// Turn off mipmaps without changing magFilter (pixel-art sides can keep Nearest).
+export function skipMips(t, THREE) {
+  if (!t) return t;
+  t.generateMipmaps = false;
+  if (THREE && THREE.LinearFilter) {
+    const near = THREE.NearestFilter && (t.magFilter === THREE.NearestFilter || t.minFilter === THREE.NearestFilter
+      || t.minFilter === THREE.NearestMipmapNearestFilter || t.minFilter === THREE.NearestMipmapLinearFilter);
+    t.minFilter = near ? THREE.NearestFilter : THREE.LinearFilter;
+  }
+  return t;
+}
+
+// Downsample a loaded image texture to quality.texMax (or opt.max) and apply mip/aniso flags.
+// opt = { max, mips: false } overrides the current tier for a specific texture.
+export function capLoadedTexture(t, THREE, opt) {
   if (!t) return t;
   const q = tierQuality();
   const img = t.image;
   const iw = img && (img.width || img.videoWidth) || 0;
   const ih = img && (img.height || img.videoHeight) || 0;
-  const max = q.texMax || 0;
+  const max = (opt && opt.max) || q.texMax || 0;
   if (max && iw && ih && Math.max(iw, ih) > max) {
     try {
       const [w, h] = scaleWH(iw, ih, 1, max);
@@ -114,7 +127,82 @@ export function capLoadedTexture(t, THREE) {
       t.image = c; t.needsUpdate = true;
     } catch (e) {}
   }
-  return flagTex(t, THREE);
+  flagTex(t, THREE);
+  if (opt && opt.mips === false) skipMips(t, THREE);
+  return t;
+}
+
+// Cabinet side art: cap the long edge at 512 (typically 256x512) and skip mipmaps.
+// 12 cabs x two 512x1024 sides with mips was ~51-85 MB; this lands near 12 MB.
+export function capCabSideTexture(t, THREE) {
+  return capLoadedTexture(t, THREE, { max: 512, mips: false });
+}
+
+// t893u: toggle heavy maps / reflectors on the GPU. Off keeps placeholder colours and shrinks
+// render targets to 1x1; on restores the maps (needsUpdate re-uploads) and the RT size.
+// Texture.dispose() frees the WebGL texture but leaves the image/canvas so a later on() can re-upload.
+export function bindStreamGpu(root, opt = {}) {
+  const minEdge = opt.minEdge == null ? 512 : opt.minEdge;
+  const names = opt.names ? new Set(opt.names) : null;
+  const also = opt.alsoNames ? new Set(opt.alsoNames) : null;
+  const colors = Object.assign({
+    muralLeft: 0x3a2430, muralRight: 0x3a2430, muralSide: 0x2e2030, muralSide2: 0x2e2030,
+    muralTop: 0x2a1828, muralTitle: 0x241828, shelfBoxes: 0xc4a070, priceLabels: 0x1e3378,
+    grokShopSign: 0x0e1638, screen: 0x0a0814
+  }, opt.colors || {});
+  const texSize = t => {
+    if (!t) return 0;
+    if (t.isWebGLRenderTarget) return Math.max(t.width || 0, t.height || 0);
+    const img = t.image || (t.source && t.source.data);
+    return Math.max((img && (img.width || img.videoWidth)) || 0, (img && (img.height || img.videoHeight)) || 0);
+  };
+  const items = [];
+  root.traverse(o => {
+    if (o && typeof o.getRenderTarget === 'function') {
+      const rt = o.getRenderTarget();
+      if (rt && Math.max(rt.width || 0, rt.height || 0) >= 64) items.push({ kind: 'rt', rt, w: rt.width, h: rt.height, name: o.name });
+      return;
+    }
+    if (!o || !o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const mat of mats) {
+      if (!mat) continue;
+      for (const slot of ['map', 'emissiveMap']) {
+        const t = mat[slot]; if (!t || t.isWebGLRenderTarget) continue;
+        const sz = texSize(t);
+        if (names && !names.has(o.name)) continue;
+        // include allow-listed meshes even before TextureLoader has set image width (else murals/DS never evict)
+        if (!names && sz < minEdge && !(also && also.has(o.name))) continue;
+        items.push({ kind: 'map', mat, slot, tex: t, name: o.name, color: colors[o.name] || 0x1a1220, orig: mat.color ? mat.color.getHex() : 0xffffff });
+      }
+    }
+  });
+  const api = {
+    on: true,
+    items,
+    set(on) {
+      on = !!on;
+      if (on === api.on) return api;
+      api.on = on;
+      for (const it of items) {
+        try {
+          if (it.kind === 'rt') { it.rt.setSize(on ? it.w : 1, on ? it.h : 1); continue; }
+          if (on) {
+            it.mat[it.slot] = it.tex;
+            if (it.slot === 'map' && it.mat.color) it.mat.color.setHex(it.orig || 0xffffff);
+            it.tex.needsUpdate = true; it.mat.needsUpdate = true;
+          } else {
+            it.mat[it.slot] = null;
+            if (it.slot === 'map' && it.mat.color) it.mat.color.setHex(it.color);
+            it.mat.needsUpdate = true;
+            try { it.tex.dispose(); } catch (e) {}
+          }
+        } catch (e) {}
+      }
+      return api;
+    }
+  };
+  return api;
 }
 
 export function persistTier(name) {
