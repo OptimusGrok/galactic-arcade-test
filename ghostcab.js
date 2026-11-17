@@ -1,7 +1,7 @@
 // GHOST 256 cabinet: model (no neon, plain plum trim) + live attract-mode screen from a sandboxed copy of Ghost 256.
 import * as THREE from 'three';
 import { cabWH, flagTex, capLoadedTexture } from './tier.js';
-import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos, CRT } from './strikecab.js';
+import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos, CRT, cabScreenSize, blitCover, makeScreenView } from './strikecab.js';
 
 const MOBILE = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
 function tex(w, h, draw, nearest) {
@@ -39,6 +39,13 @@ export function ghostMarqueeTexture() {
   });
 }
 const BTN = [[-0.02, 0xff3fae], [-0.11, 0x22d8e8], [-0.2, 0xff7a1a], [-0.29, 0xf0f0f0]];
+function ghostAttract(g, w, h) {
+  g.fillStyle = '#08060e'; g.fillRect(0, 0, w, h); glitch(g, w, h, 0, 50);
+  const px = Math.max(4, Math.floor(h / 28));
+  ghost(g, w * 0.18, h * 0.28, px, '#ffc81e'); ghost(g, w * 0.42, h * 0.22, px, '#22d8e8'); ghost(g, w * 0.64, h * 0.34, px, '#ff6a1a');
+  pixelText(g, 'GHOST', w / 2, h * 0.62, Math.max(3, h / 90), '#ffd21f', 2);
+  pixelText(g, '256', w / 2, h * 0.78, Math.max(3, h / 90), '#ffffff', 2);
+}
 export function buildGhostCabinet() {
   const g = new THREE.Group(); g.name = 'ghostCabinet';
   const add = (geo, mat, name) => { const m = new THREE.Mesh(geo, mat); m.name = name; g.add(m); return m; };
@@ -53,10 +60,12 @@ export function buildGhostCabinet() {
   add(segPlane(SPROFILE[7], SPROFILE[8], SW - 0.06, 0.004, 0.86), new THREE.MeshStandardMaterial({ map: mq, emissive: 0xffffff, emissiveMap: mq, emissiveIntensity: 0.55, roughness: 0.2 }), 'marquee');
   const sf = segFrame(SPROFILE[5], SPROFILE[6]);
   add(segPlane(SPROFILE[5], SPROFILE[6], SW - 0.04, 0.003), new THREE.MeshStandardMaterial({ color: 0x0b0a10, roughness: 0.35, metalness: 0.3 }), 'bezel');
-  const sh = sf.L * 0.92, sw = Math.min(SW - 0.14, sh * 152 / 276);
+  const { sh, sw } = cabScreenSize(sf);
   const frame = new THREE.Mesh(new THREE.PlaneGeometry(sw + 0.05, sh + 0.05).rotateY(Math.PI / 2).rotateZ(sf.ang).translate(sf.mid[0] + sf.n.x * 0.006, sf.mid[1] + sf.n.y * 0.006, 0), new THREE.MeshStandardMaterial({ color: 0x1c1a22, roughness: 0.4, metalness: 0.6 }));
   frame.name = 'bezelFrame'; g.add(frame);
-  const crt = new THREE.ShaderMaterial({ uniforms: THREE.UniformsUtils.clone(CRT.uniforms), vertexShader: CRT.vertexShader, fragmentShader: CRT.fragmentShader.replace('960.0', '276.0'), toneMapped: false });
+  const view = makeScreenView(ghostAttract);
+  const crt = new THREE.ShaderMaterial({ uniforms: THREE.UniformsUtils.clone(CRT.uniforms), vertexShader: CRT.vertexShader, fragmentShader: CRT.fragmentShader, toneMapped: false });
+  crt.uniforms.map.value = view.texture;
   const screen = add(new THREE.PlaneGeometry(sw, sh).rotateY(Math.PI / 2).rotateZ(sf.ang).translate(sf.mid[0] + sf.n.x * 0.008, sf.mid[1] + sf.n.y * 0.008, 0), crt, 'screen');
   // control panel
   const pf = segFrame(SPROFILE[4], SPROFILE[5]);
@@ -74,26 +83,28 @@ export function buildGhostCabinet() {
   const slot = new THREE.MeshStandardMaterial({ color: 0x401800, emissive: 0xff7a10, emissiveIntensity: 1.5 });
   for (const z of [-0.055, 0.055]) { door.add(new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.05, 0.012).translate(0.006, 0.06, z), slot)); door.add(new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.045, 0.05).translate(0.004, -0.07, z), new THREE.MeshStandardMaterial({ color: 0x050506 }))); }
   const glow = new THREE.PointLight(0xa0a8ff, 1.2, 3.0, 1.6); glow.name = 'screenGlow'; glow.position.set(sf.mid[0] + sf.n.x * 0.45, sf.mid[1] - 0.15, 0); g.add(glow);
-  g.userData = { screen, crt, glow };
+  g.userData = { screen, crt, glow, view: view.canvas, viewTex: view.texture };
   return g;
 }
 export function startGhostDemo(cab) {
-  const f = document.createElement('iframe'); f.src = 'ghost-demo/index.html'; f.tabIndex = -1; f.setAttribute('aria-hidden', 'true'); f.title = 'ghost demo';
+  const SRC = 'ghost-demo/index.html';
+  const f = document.createElement('iframe'); f.src = SRC; f.tabIndex = -1; f.setAttribute('aria-hidden', 'true'); f.title = 'ghost demo';
   f.style.cssText = 'position:fixed;left:-700px;top:0;width:304px;height:600px;border:0;pointer-events:none;visibility:hidden';
-  const d = { ready: false, frames: 0, running: false, err: null, iframe: f };
-  d.attach = () => { if (!f.isConnected) document.body.appendChild(f); };   // t295u: main.js attaches it after the start screen (the iframe's boot froze the phone's first frames)
+  const d = { ready: false, frames: 0, running: false, err: null, iframe: f, texture: cab.userData.viewTex, view: cab.userData.view };
+  d.attach = () => { if (!/ghost-demo/.test(f.getAttribute('src') || f.src || '')) f.src = SRC; if (!f.isConnected) document.body.appendChild(f); };   // t295u / t883u: restore src if detach blanked it
   d.detach = () => {
     try { if (f.contentWindow && f.contentWindow.__gaRelease) f.contentWindow.__gaRelease(); } catch (e) {}
     try { f.src = 'about:blank'; } catch (e) {}
     try { f.remove(); } catch (e) {}
     d.ready = false; d.running = false; };
 
-  const blank = document.createElement('canvas'); blank.width = 4; blank.height = 4; cab.userData.crt.uniforms.map.value = new THREE.CanvasTexture(blank);
+  // t883u: keep the painted attract on the CRT until the iframe has drawn a frame
   f.addEventListener('load', () => {
-    try { const w = f.contentWindow, gh = w.__ghost; if (!gh || !w.__bot) throw new Error('ghost hooks missing');
-      const t = new THREE.CanvasTexture(w.document.getElementById('c')); t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false;
-      cab.userData.crt.uniforms.map.value = t; Object.assign(d, { w, gh, texture: t, seed: 1 }); gh.Snd.muted = true; gh.G.muted = true;
-      gh.startGame(d.seed); d.ready = true;
+    try { const w = f.contentWindow, gh = w && w.__ghost; if (!gh || !w.__bot) return;   // ignore about:blank after detach
+      const cv = w.document.getElementById('c');
+      Object.assign(d, { w, gh, srcCv: cv, seed: 1 }); gh.Snd.muted = true; gh.G.muted = true;
+      gh.startGame(d.seed); gh.render(); blitCover(d.view, cv); if (d.texture) d.texture.needsUpdate = true;
+      d.ready = true; d.frames = 1;
     } catch (e) { d.err = String(e); console.warn('ghost demo', e); }
   });
   return d;
@@ -113,6 +124,6 @@ export function tickGhostDemo(d, dt, visible) {
     }
     const steps = expert ? 3 : 2;
     for (let i = 0; i < steps; i++) { d.w.__bot(); d.gh.step(1); }
-    d.gh.render(); d.texture.needsUpdate = true; d.frames++;
+    d.gh.render(); blitCover(d.view, d.srcCv || (d.w && d.w.document.getElementById('c'))); if (d.texture) d.texture.needsUpdate = true; d.frames++;
   } catch (e) { d.err = String(e); d.ready = false; console.warn('ghost demo', e); }
 }
