@@ -97,7 +97,7 @@ export function setupChessTable(o) {
   const btn = document.createElement('button'); btn.id = 'chessBtn'; btn.textContent = '\u265F PLAY CHESS'; document.body.appendChild(btn);
   const ov = document.createElement('div'); ov.id = 'chessOv'; document.body.appendChild(ov);
   const bx = document.createElement('button'); bx.id = 'chessX'; bx.setAttribute('aria-label', 'Close'); bx.textContent = '\u2715'; document.body.appendChild(bx);
-  const SRC = new URL('./chess-play/index.html', import.meta.url).href;
+  const SRC = (function () { const u = new URL('./chess-play/index.html', import.meta.url); if (window.__GA_VER) u.searchParams.set('ga', window.__GA_VER); return u.href; })();
   const stop = e => e.stopPropagation();
   for (const el of [btn, ov, bx]) { el.addEventListener('pointerdown', stop); el.addEventListener('touchstart', stop, { passive: true }); }
   btn.addEventListener('pointerup', e => { e.stopPropagation(); play(); }); btn.addEventListener('click', e => { e.stopPropagation(); play(); });

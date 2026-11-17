@@ -21,13 +21,25 @@ function sideArt(g, w, h) {   // u = x / 1.04 (front edge at the right), v = y /
 }
 function marqueeArt(g, w, h) {
   g.fillStyle = '#05030c'; g.fillRect(0, 0, w, h); stars(g, w, h, 120);
-  for (let i = 0; i < 6; i++) { g.fillStyle = ['#ff2a6a', '#2ae5ff', '#ff5a1a'][i % 3]; g.fillRect(i < 3 ? 14 : w - 150, 30 + (i % 3) * 22, 136, 3); }
+  // Accent bars stay in the side margins and scale with the canvas (cabScale shrinks this on mid/low phones).
+  const barW = Math.max(16, Math.round(w * 0.10)), barH = Math.max(1, Math.round(h * 0.018)), barY = Math.round(h * 0.18);
+  for (let i = 0; i < 6; i++) { g.fillStyle = ['#ff2a6a', '#2ae5ff', '#ff5a1a'][i % 3]; g.fillRect(i < 3 ? Math.round(w * 0.03) : w - barW - Math.round(w * 0.03), barY + (i % 3) * Math.round(h * 0.14), barW, barH); }
   const F = { B: ['1110', '1001', '1110', '1001', '1110'], L: ['1000', '1000', '1000', '1000', '1111'], A: ['0110', '1001', '1111', '1001', '1001'], S: ['0111', '1000', '0110', '0001', '1110'], T: ['1111', '0110', '0110', '0110', '0110'], E: ['1111', '1000', '1110', '1000', '1111'], R: ['1110', '1001', '1110', '1010', '1001'] };
-  // t924u: shrink the BLASTER title so it sits neatly on the marquee (neon wall sign above is unchanged)
-  const word = 'BLASTER', s = 9, cw = 5 * s, x0 = (w - word.length * cw + s) / 2, y0 = 28;
-  g.save(); g.shadowColor = '#ffb000'; g.shadowBlur = 12;
-  [...word].forEach((ch, k) => F[ch].forEach((r, j) => { for (let i = 0; i < 4; i++) if (r[i] === '1') { g.fillStyle = j < 2 ? '#fff26a' : '#ffc21a'; g.fillRect(x0 + k * cw + i * s + (4 - j) * 1.4, y0 + j * s, s - 1, s - 1); } }));
-  g.restore(); g.font = 'bold 24px "Courier New", monospace'; g.textAlign = 'center'; g.fillStyle = '#bfe9ff'; g.shadowColor = '#2ae5ff'; g.shadowBlur = 8; g.fillText('1984', w / 2, h - 16);
+  // t928u: size the painted BLASTER title to THIS canvas. cabWH may be 512, 384 or 256; a fixed pixel 's'
+  // overflowed on low-tier phones (Dave saw LASTE with 1984 over the letters). Neon wall sign is unchanged.
+  const word = 'BLASTER';
+  const maxW = w * 0.64, maxH = h * 0.42;   // comfortable side margins; leave the lower third for 1984
+  const s = Math.max(2, Math.floor(Math.min(maxW / (word.length * 5 - 1), maxH / 5)));
+  const cw = 5 * s, wordW = word.length * cw - s, skew = s * 0.12;
+  const x0 = (w - wordW) / 2, y0 = Math.round(h * 0.12);
+  g.save(); g.shadowColor = '#ffb000'; g.shadowBlur = Math.max(4, s);
+  [...word].forEach((ch, k) => F[ch].forEach((r, j) => { for (let i = 0; i < 4; i++) if (r[i] === '1') { g.fillStyle = j < 2 ? '#fff26a' : '#ffc21a'; g.fillRect(x0 + k * cw + i * s + (4 - j) * skew, y0 + j * s, Math.max(1, s - 1), Math.max(1, s - 1)); } }));
+  g.restore();
+  const yearPx = Math.max(8, Math.round(h * 0.15));
+  const yearY = Math.min(h - Math.round(h * 0.10), y0 + 5 * s + Math.round(h * 0.22));
+  g.font = 'bold ' + yearPx + 'px "Courier New", monospace'; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  g.fillStyle = '#bfe9ff'; g.shadowColor = '#2ae5ff'; g.shadowBlur = Math.max(4, Math.round(yearPx * 0.3)); g.fillText('1984', w / 2, yearY);
+  g.shadowBlur = 0;
 }
 function attract(W, H) {
   const c = document.createElement('canvas'); { const sz = cabWH(W, H); c.width = sz[0]; c.height = sz[1]; } const g = c.getContext('2d'); if (c.width !== W || c.height !== H) g.scale(c.width / W, c.height / H);
