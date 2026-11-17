@@ -4,8 +4,8 @@
 import * as THREE from 'three';
 import { cabWH, flagTex, capLoadedTexture, capCabSideTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos } from './strikecab.js';
-const L = new THREE.TextureLoader();
-const load = (url, flip) => { const t = L.load(url, tex => /_side\./.test(url) ? capCabSideTexture(tex, THREE) : capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
+import { loadPicture } from './texload.js';
+const load = (url, flip) => loadPicture(THREE, url, { side: /_side\./.test(url) });
 function circuitTex() {   // flat printed ink on dark purple laminate: lit by the room, never emissive
   const c = document.createElement('canvas'); c.width = 256; c.height = 512; const g = c.getContext('2d');
   g.fillStyle = '#1c0f30'; g.fillRect(0, 0, 256, 512);
@@ -54,8 +54,9 @@ export function buildCyberCabinet() {
   const circ = circuitTex(), bodyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: circ, roughness: 0.55, metalness: 0.15 });   // printed art, no emissive
   const shape = new THREE.Shape(SPROFILE.map(([x, y]) => new THREE.Vector2(x, y)));
   add(new THREE.ExtrudeGeometry(shape, { depth: SW, bevelEnabled: false }).translate(0, 0, -SW / 2), bodyMat, 'body');
-  const sideMat = flip => new THREE.MeshStandardMaterial({ map: load('tex/cc_side.jpg', flip), roughness: 0.5, metalness: 0.05 });   // printed side art (lit, not glowing)
-  add(sideGeo(1), sideMat(false), 'sidePanelL'); add(sideGeo(-1), sideMat(true), 'sidePanelR');
+  const sideT = load('tex/cc_side.jpg');
+  const sideMat = new THREE.MeshStandardMaterial({ map: sideT, roughness: 0.5, metalness: 0.05 });   // printed side art (lit, not glowing)
+  add(sideGeo(1), sideMat, 'sidePanelL'); add(sideGeo(-1), sideMat, 'sidePanelR');
   const tm = []; for (const z of [-SW / 2 - 0.008, SW / 2 + 0.008]) for (let i = 1; i < SPROFILE.length - 1; i++) { const a = SPROFILE[i], b = SPROFILE[i + 1]; tm.push(bar(new THREE.Vector3(a[0], a[1], z), new THREE.Vector3(b[0], b[1], z), 0.03)); }
   add(mergeGeos(tm), new THREE.MeshStandardMaterial({ color: 0x120a1e, roughness: 0.35, metalness: 0.6 }), 'trim');   // dark satin edge trim, no neon
   const mq = load('tex/cc_marquee.jpg');

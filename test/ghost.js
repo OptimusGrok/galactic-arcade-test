@@ -1,6 +1,10 @@
 const { open } = require('./lib');
 (async () => {
-  const { page, errors, close, requests } = await open(); let ok = true; const chk = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) ok = false; };
+  // t916u: Strike/Ghost demos only attach when the player is near (or __forceDemo).
+  // At spawn they stay off, so waiting for ready without forcing never resolves.
+  const { page, errors, close, requests } = await open({ init: () => { window.__forceDemo = 1; } });
+  let ok = true; const chk = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) ok = false; };
+  try {
   await page.waitForFunction(() => (window.__arcade.ghostDemo.ready || window.__arcade.ghostDemo.err) && (window.__arcade.demo.ready || window.__arcade.demo.err), null, { timeout: 60000 });
   const info = await page.evaluate(() => { const A = window.__arcade, g = A.ghostCab, s = A.strikeCab; const names = []; g.traverse(o => o.name && names.push(o.name));
     const neonCheck = cab => { const bad = []; cab.traverse(o => { if (!o.isMesh) return; const m = o.material;
@@ -49,11 +53,16 @@ const { open } = require('./lib');
     A.keys.KeyW = false; A.keys.KeyA = false; return { inside, end: [A.monkey.position.x, A.monkey.position.z] }; });
   console.log(JSON.stringify(between));
   chk(between.inside === 0, 'walking into the corner never enters either cabinet box');
-  const ext = requests.filter(u => !u.startsWith('http://localhost'));
-  console.log('requests', requests.length, 'external', ext.length, ext.slice(0, 3));
-  chk(ext.length === 0, 'zero requests outside own origin');
+  const origin = new URL(page.url()).origin;
+  const ext = requests.filter(u => {
+    try { const x = new URL(u); if (x.protocol === 'data:' || x.protocol === 'blob:') return false; return x.origin !== origin; }
+    catch (e) { return false; }
+  });
+  console.log('requests', requests.length, 'origin', origin, 'external', ext.length, ext.slice(0, 5));
+  chk(ext.length === 0, 'zero requests outside own origin' + (ext.length ? ' ' + ext.slice(0, 5).join(' | ') : ''));
   chk(requests.filter(u => /supabase/i.test(u)).length === 0, 'zero supabase requests');
   const s = await page.evaluate(() => window.__arcade.stats); console.log('frame stats', JSON.stringify(s));
   chk(errors.length === 0, 'no page errors ' + errors.join(' | '));
-  await close(); process.exit(ok ? 0 : 1);
+  } finally { await close(); }
+  process.exit(ok ? 0 : 1);
 })();

@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import { cabWH, flagTex, capLoadedTexture, capCabSideTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos } from './strikecab.js';
-const L = new THREE.TextureLoader();
-const load = (url, flip) => { const t = L.load(url, tex => /_side\./.test(url) ? capCabSideTexture(tex, THREE) : capLoadedTexture(tex, THREE)); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; } return t; };
+import { loadPicture } from './texload.js';
+const load = (url, flip) => loadPicture(THREE, url, { side: /_side\./.test(url) });
 function screenTexture() {   // attract loop: the game's title art, INSERT CREDIT, 5 TICKETS TO PLAY
   const c = document.createElement('canvas'); { const sz = cabWH(270, 480); c.width = sz[0]; c.height = sz[1]; } const g = c.getContext('2d'); if (c.width !== 270 || c.height !== 480) g.scale(c.width / 270, c.height / 480);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
@@ -26,8 +26,9 @@ export function buildBerserkerCabinet() {
   const add = (geo, mat, name) => { const m = new THREE.Mesh(geo, mat); m.name = name; g.add(m); return m; };
   const shape = new THREE.Shape(SPROFILE.map(([x, y]) => new THREE.Vector2(x, y)));
   add(new THREE.ExtrudeGeometry(shape, { depth: SW, bevelEnabled: false }).translate(0, 0, -SW / 2), new THREE.MeshPhysicalMaterial({ color: 0x0d0806, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1 }), 'body');
-  const sideMat = flip => { const t = load('tex/bz_side.jpg', flip); return new THREE.MeshPhysicalMaterial({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.3, roughness: 0.32, clearcoat: 0.8 }); };
-  add(sideGeo(1), sideMat(false), 'sidePanelL'); add(sideGeo(-1), sideMat(true), 'sidePanelR');
+  const sideT = load('tex/bz_side.jpg');
+  const sideMat = new THREE.MeshPhysicalMaterial({ map: sideT, emissive: 0xffffff, emissiveMap: sideT, emissiveIntensity: 0.3, roughness: 0.32, clearcoat: 0.8 });
+  add(sideGeo(1), sideMat, 'sidePanelL'); add(sideGeo(-1), sideMat, 'sidePanelR');
   // plain dark-red trim (not emissive: no neon on the body)
   const tm = []; for (const z of [-SW / 2 - 0.006, SW / 2 + 0.006]) for (let i = 1; i < SPROFILE.length - 1; i++) { const a = SPROFILE[i], b = SPROFILE[i + 1]; tm.push(bar(new THREE.Vector3(a[0], a[1], z), new THREE.Vector3(b[0], b[1], z), 0.02)); }
   add(mergeGeos(tm), new THREE.MeshStandardMaterial({ color: 0x5a0d08, roughness: 0.35, metalness: 0.3 }), 'trim');

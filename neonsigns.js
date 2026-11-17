@@ -12,6 +12,7 @@
 // so lettering reads left-to-right from both sides; the claw prongs open/close on a cheap baked-frame loop.
 // Orc Attack’s icon is a detailed neon orc (tusks, horned helmet, axe) in the same dim-glow style as the Viking / Strike icons.
 import { NEON_ATLAS } from './neon_atlas.js';
+import { loadPicture } from './texload.js';
 
 function neonStroke(g, draw, col, w, glow) {
   g.save();
@@ -663,23 +664,36 @@ function applyPaintedIcons(THREE, icons, opt) {
   const S0 = oc ? oc.width / 4 : 256;
   // t890u: cap the painted atlas at 1024 (256 px cells) on every tier; walking-distance looks the same, saves ~16 MB with no mips.
   const C = st.cell = 256;
-  const cv = document.createElement('canvas'); cv.width = cv.height = C * 4; const g = cv.getContext('2d');
-  if (oc) g.drawImage(oc, 0, 0, cv.width, cv.height);
-  const info = {}; (icons.userData.icons || []).forEach(i => { info[i.key] = i; });
-  const load = k => new Promise(res => { const im = new Image(); im.onload = () => res([k, im]); im.onerror = () => res([k, null]); im.src = 'tex/icons/' + k + '.webp'; });
-  Promise.all(PAINTED_KEYS.filter(k => k !== 'claw').map(load)).then(list => { try {
-    for (const [k, im] of list) { if (!im) { st.failed.push(k); continue; }
-      const i = PAINTED_KEYS.indexOf(k), x = (i % 4) * C, y = Math.floor(i / 4) * C, pad = 12 * C / S0, inner = C - 2 * pad, q = info[k];
-      const r = q && q.w > 0 && q.h > 0 ? q.w / q.h : 1, dw = r >= 1 ? inner / r : inner, dh = r >= 1 ? inner : inner * r;
-      g.clearRect(x, y, C, C); g.drawImage(im, x + pad + (inner - dw) / 2, y + pad + (inner - dh) / 2, dw, dh); st.loaded.push(k); }
-    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = (opt && opt.aniso) || old.anisotropy || 4; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
+  const applyTex = (tex, nLoaded) => {
+    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = (opt && opt.aniso) || old.anisotropy || 4; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
     try { if (opt && opt.renderer) opt.renderer.initTexture(tex); } catch (e) {}
     icons.material.map = tex;
     icons.material.color.setScalar(st.k = Math.max(icons.material.color.r, 0.8));
     icons.material.needsUpdate = false;
-    st.atlas = cv.width;
+    st.atlas = (tex.image && tex.image.width) || (tex.image && 1024) || 1024;
+    st.loaded = nLoaded || st.loaded;
     try { old.dispose(); } catch (e) {}
     st.done = true;
+  };
+  // t911u: one prebuilt sheet (tex/icons_atlas.webp / ktx2) instead of 13 separate pictures
+  const pref = loadPicture(THREE, 'tex/icons_atlas.webp', { mips: false, onLoad: t => {
+    if (t && (t.isCompressedTexture || (t.image && (t.image.width || 0) >= 512))) {
+      st.sheet = true;
+      applyTex(t, PAINTED_KEYS.filter(k => k !== 'claw').slice());
+    }
+  }});
+  const info = {}; (icons.userData.icons || []).forEach(i => { info[i.key] = i; });
+  const load = k => new Promise(res => { const im = new Image(); im.onload = () => res([k, im]); im.onerror = () => res([k, null]); im.src = 'tex/icons/' + k + '.webp'; });
+  Promise.all(PAINTED_KEYS.filter(k => k !== 'claw').map(load)).then(list => { try {
+    if (st.sheet) return;
+    const cv = document.createElement('canvas'); cv.width = cv.height = C * 4; const g = cv.getContext('2d');
+    if (oc) g.drawImage(oc, 0, 0, cv.width, cv.height);
+    for (const [k, im] of list) { if (!im) { st.failed.push(k); continue; }
+      const i = PAINTED_KEYS.indexOf(k), x = (i % 4) * C, y = Math.floor(i / 4) * C, pad = 12 * C / S0, inner = C - 2 * pad, q = info[k];
+      const r = q && q.w > 0 && q.h > 0 ? q.w / q.h : 1, dw = r >= 1 ? inner / r : inner, dh = r >= 1 ? inner : inner * r;
+      g.clearRect(x, y, C, C); g.drawImage(im, x + pad + (inner - dw) / 2, y + pad + (inner - dh) / 2, dw, dh); st.loaded.push(k); }
+    const tex = new THREE.CanvasTexture(cv);
+    applyTex(tex, st.loaded);
   } catch (e) { st.done = true; st.error = String(e); } });
   return st;
 }
@@ -752,18 +766,11 @@ export function buildNeonSigns(THREE, mergeGeometries, list, opt = {}) {
     for (let k = 0; k < iuv.count; k++) iuv.setXY(k, iuv.getX(k) ? iu1 : iu0, iuv.getY(k) ? iv1 : iv0);
     ig.rotateY(Math.atan2(n.x, n.z)); ig.translate(ip.x, ip.y, ip.z); iconQuads.push(ig);
   }
-  const tex = new THREE.TextureLoader().load(opt.src || 'tex/neon_signs.webp', t => { try {
-    if (opt.atlasMax && t.image && t.image.width > opt.atlasMax) {
-      const c = document.createElement('canvas');
-      const r = opt.atlasMax / t.image.width;
-      c.width = opt.atlasMax; c.height = Math.max(1, Math.round(t.image.height * r));
-      c.getContext('2d').drawImage(t.image, 0, 0, c.width, c.height);
-      t.image = c; t.needsUpdate = true;
-    }
-    if (opt.lowMips === false || opt.atlasMax) t.generateMipmaps = false;
-    if (opt.renderer) opt.renderer.initTexture(t);
-  } catch (err) {} if (opt.onLoad) opt.onLoad(t); });
-  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = opt.aniso || 4;
+  const tex = loadPicture(THREE, opt.src || 'tex/neon_signs.webp', { mips: false, max: opt.atlasMax || 0, onLoad: t => {
+    try { if (opt.lowMips === false || opt.atlasMax) { t.generateMipmaps = false; if (THREE.LinearFilter) t.minFilter = THREE.LinearFilter; } if (opt.renderer) opt.renderer.initTexture(t); } catch (err) {}
+    if (opt.onLoad) opt.onLoad(t);
+  }});
+  tex.anisotropy = opt.aniso || 4;
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false, color: new THREE.Color(1, 1, 1).multiplyScalar(opt.k || 0.55) });   // t782u: 0.55 (t775u: 0.85, v188: 1.3), dimmer + the atlas itself is sharper / thinner
   mat.name = 'neonSigns';
   const mesh = new THREE.Mesh(mergeGeometries(quads), mat); mesh.name = 'neonSigns'; mesh.renderOrder = 3; mesh.matrixAutoUpdate = false; mesh.updateMatrix();

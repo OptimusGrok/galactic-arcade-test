@@ -168,9 +168,10 @@ export function buildStrikeCabinet() {
   const black = new THREE.MeshPhysicalMaterial({ color: 0x050507, roughness: 0.22, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.08 });
   add(new THREE.ExtrudeGeometry(shape, { depth: SW, bevelEnabled: false }).translate(0, 0, -SW / 2), black, 'body');
   // side art (mirrored composition, readable lettering on both sides)
-  const sideMat = (flip) => { const t = sideTexture(flip); return new THREE.MeshPhysicalMaterial({ map: t, roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.15, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.32 }); };
-  add(sideGeo(1), sideMat(false), 'sidePanelL');
-  add(sideGeo(-1), sideMat(true), 'sidePanelR');
+  const sideT = sideTexture(false);
+  const sideMat = new THREE.MeshPhysicalMaterial({ map: sideT, roughness: 0.3, clearcoat: 0.8, clearcoatRoughness: 0.15, emissive: 0xffffff, emissiveMap: sideT, emissiveIntensity: 0.32 });
+  add(sideGeo(1), sideMat, 'sidePanelL');
+  add(sideGeo(-1), sideMat, 'sidePanelR');
   // red T-molding along both side profiles + front edge of the top
   const red = new THREE.MeshStandardMaterial({ color: 0xc8101c, roughness: 0.32, metalness: 0.15 });
   const tm = [];
