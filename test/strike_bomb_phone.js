@@ -38,11 +38,21 @@ const SHOT = '/workspace/shots/strike_bomb_phone_v248.png';
     const r = cv.getBoundingClientRect(), WW = 270, HH = w.Function('return H')(), SS = w.Function('return S')();
     if (cv.height !== HH * SS) { w.dispatchEvent(new Event('resize')); }
     try { S.render(); } catch (e) {}
-    const btn = { x: WW - 30, y: HH - 52, r: 21 };
+    // v251: read live button positions (BOMB + HYPER SPEED are packed tight in the bottom-right corner)
+    S.layoutTouchBtns && S.layoutTouchBtns();
+    try { S.render(); } catch (e) {}
+    const btn = S.BOMB_BTN ? { x: S.BOMB_BTN.x, y: S.BOMB_BTN.y, r: S.BOMB_BTN.r } : { x: WW - 30, y: HH - 52, r: 21 };
+    const hyp = S.SLOW_BTN ? { x: S.SLOW_BTN.x, y: S.SLOW_BTN.y, r: S.SLOW_BTN.r } : null;
+    const icons = S.bombIconOrigin ? S.bombIconOrigin((C && C.p2on) ? 42 : 31) : null;
     const kx = r.width / WW, ky = r.height / HH;
     const box = { x: r.left + btn.x * kx, y: r.top + btn.y * ky, rad: btn.r * kx };
-    const pad = 8;
+    const pad = 6;
     const onScreen = box.x - box.rad >= -1 && box.x + box.rad <= vw + 1 && box.y - box.rad >= pad && box.y + box.rad <= vh - pad;
+    const hypBox = hyp ? { x: r.left + hyp.x * kx, y: r.top + hyp.y * ky, rad: hyp.r * kx } : null;
+    const hypOnScreen = !!(hypBox && hypBox.x - hypBox.rad >= -1 && hypBox.x + hypBox.rad <= vw + 1 && hypBox.y - hypBox.rad >= pad && hypBox.y + hypBox.rad <= vh - pad);
+    const tight = !!(hyp && Math.abs(hyp.x - btn.x) < 1 && (btn.y - hyp.y) > 2 * btn.r && (btn.y - hyp.y) <= 2 * btn.r + 8);
+    const corner = btn.x >= WW - btn.r - 12 && btn.y >= HH - btn.r - 12;
+    const iconsTop = !!(icons && icons.y < 80 && icons.x0 >= 6 && (icons.x0 + 2 * icons.dx) < WW - 40);
     // sample the button ring on the game canvas (green #40ff80 stroke)
     const g = cv.getContext('2d'), sx = (cv.width / WW), sy = (cv.height / HH);
     const ring = (ang) => {
@@ -66,7 +76,8 @@ const SHOT = '/workspace/shots/strike_bomb_phone_v248.png';
       onScreen, green: green.length, samples,
       covered: overlap(X) || overlap(tix),
       upright: document.body.classList.contains('upright'),
-      inner: [w.innerWidth, w.innerHeight]
+      inner: [w.innerWidth, w.innerHeight],
+      btn, hyp, icons, hypOnScreen, tight, corner, iconsTop
     };
   }, [W, H, label]);
 
@@ -74,6 +85,8 @@ const SHOT = '/workspace/shots/strike_bomb_phone_v248.png';
   chk(solo.upright && solo.inner[0] === W && solo.inner[1] === H, 'Strike is upright full-screen at 390x844', solo);
   chk(solo.touch && solo.bombs > 0, 'touch mode is on and the player has bombs', solo);
   chk(solo.onScreen && !solo.covered && solo.green >= 2, 'solo: BOMB button is visible and on-screen (not under close/tickets)', solo);
+  chk(solo.corner && solo.tight && solo.hypOnScreen, 'solo: BOMB + HYPER SPEED packed tight in the bottom-right corner', solo);
+  chk(solo.iconsTop, 'solo: 3 bomb icons sit at the top near the close X', solo);
 
   await page.evaluate(() => {
     const w = document.getElementById('game').contentWindow, C = w.__strikeCoop, S = w.STRIKE;
@@ -88,6 +101,8 @@ const SHOT = '/workspace/shots/strike_bomb_phone_v248.png';
   const coop = await probe('coop');
   chk(coop.coop && coop.role === 'host', 'co-op HUD is active (the path Dave was on)', coop);
   chk(coop.onScreen && !coop.covered && coop.green >= 2, 'co-op: BOMB button is visible and on-screen at 390x844 upright', coop);
+  chk(coop.corner && coop.tight && coop.hypOnScreen, 'co-op: BOMB + HYPER SPEED packed tight in the bottom-right corner', coop);
+  chk(coop.iconsTop, 'co-op: 3 bomb icons sit at the top near the close X', coop);
 
   // Prefer a page shot (close X + tickets + game). A just-resized iframe canvas can come
   // out black in this headless Chrome, so fall back to the canvas bitmap if needed.

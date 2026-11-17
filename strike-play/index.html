@@ -72,6 +72,7 @@ function resize() {
   // t879u: also update height. The default <canvas> is 540x960 (S=2, H=480); when S stays 2 but H grows to 584 on a tall phone, the old width-only check left the bitmap 480 tall and clipped the BOMB button (y=H-52).
   if (canvas.width !== W * S || canvas.height !== H * S) { canvas.width = W * S; canvas.height = H * S; }
   VIEW.l = Math.floor((vw - cw) / 2); VIEW.t = Math.floor((vh - ch) / 2); VIEW.w = cw; VIEW.h = ch; VIEW.sc = cw / W;
+  layoutTouchBtns();
 }
 window.addEventListener('resize', resize);
 
@@ -2233,7 +2234,41 @@ const UI = {
     return false;
   },
 };
-const BOMB_BTN = { x: W - 30, y: H - 52, r: 21 };
+const BOMB_BTN = { x: W - 24, y: H - 24, r: 21 };
+const SLOW_BTN = { x: W - 24, y: H - 70, r: 21 };
+// t904u: pack BOMB + HYPER SPEED tight in the bottom-right corner (small margins, close together,
+// still easy to tap, not off-screen, respect safe-area). t902u: 3 bomb icons sit at the top near the close X.
+function cssSafeInsets() {
+  let b = 0, r = 0;
+  try {
+    if (!cssSafeInsets.el) {
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;inset:auto 0 0 auto;padding:0 env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) 0;pointer-events:none;visibility:hidden';
+      document.body.appendChild(el);
+      cssSafeInsets.el = el;
+    }
+    const cs = getComputedStyle(cssSafeInsets.el);
+    b = parseFloat(cs.paddingBottom) || 0;
+    r = parseFloat(cs.paddingRight) || 0;
+  } catch (e) {}
+  return { b, r };
+}
+function layoutTouchBtns() {
+  const rad = BOMB_BTN.r, sc = VIEW.sc || 1, safe = cssSafeInsets();
+  // at least 8 CSS px from the edges (tight vs the old ~45px margin, still fully on-screen / tappable)
+  const mR = Math.max(8, safe.r) / sc, mB = Math.max(8, safe.b) / sc;
+  BOMB_BTN.x = W - rad - mR;
+  BOMB_BTN.y = H - rad - mB;
+  SLOW_BTN.x = BOMB_BTN.x;
+  SLOW_BTN.y = BOMB_BTN.y - (2 * rad + 4);
+}
+function bombIconOrigin(hudH) {
+  const sc = VIEW.sc || 1;
+  const leftCss = (typeof window.__gaLeft === 'number' && window.__gaLeft > 0) ? window.__gaLeft : 0;
+  return { x0: Math.max(8, leftCss / sc), y: (hudH || 31) + 8, dx: 14 };
+}
+layoutTouchBtns();
+
 function newStats() { return { kills: 0, spawned: 0, deaths: 0, bombs: 0, items: 0, bosses: 0 }; }
 function newGame(stage) {
   G.score = 0; G.lives = 2; G.bombs = 3; G.credits = 3; G.continues = 0; G.weapon = 'V'; G.wlv = 1; G.chips = 0; G.playT = 0; G.terrOff = 0; G.shipKills = 0; G.thr = 0; G.dangerT = 0; G.slowmo = 0; G.hitCauseT = 0; G.shield = 3; G.shieldFx = 0; G.shieldDropAt = 0; G.shieldDrops = 0; G.shieldHits = 0; G.mult = 1; G.medal = 500; G.nextExt = 0; G.deaths = 0;
@@ -2426,8 +2461,8 @@ function renderHUD() {
   if (G.dangerT > 0) { const k = G.dangerT, a = Math.min(1, k / 30, (210 - k) / 15), on = (k >> 3) & 1; ctx.globalAlpha = a; R(ctx, 0, H / 2 - 50, W, 74, 'rgba(70,0,12,0.72)'); R(ctx, 0, H / 2 - 50, W, 2, '#ff3040'); R(ctx, 0, H / 2 + 22, W, 2, '#ff3040');
     text('MAX POWER', W / 2, H / 2 - 38, '#ffffff', 2, 'c'); text('DANGER x3', W / 2, H / 2 - 8, on ? '#ff3040' : '#ffb0b0', 3, 'c'); ctx.globalAlpha = 1; }
   if (G.lvFlash > 0 && !(G.dangerT > 0)) { ctx.globalAlpha = G.lvFlash / 40; text('POWER UP!', W / 2, 96, wc, 2, 'c'); ctx.globalAlpha = 1; }
-  // bombs bottom
-  for (let i = 0; i < G.bombs; i++) blit(ITEM_SPR.bomb, 118 + i * 14, H - 10);
+  // t902u: bomb icons at the top, just under the HUD and to the right of the arcade close X
+  { const o = bombIconOrigin(31); for (let i = 0; i < G.bombs; i++) blit(ITEM_SPR.bomb, o.x0 + i * o.dx, o.y); }
   if (G.boss && !G.boss.mid || (G.boss && G.boss.mid)) { const b = G.boss, f = bossBar(b); text(b.name, W / 2, 24, b.mid ? '#ffb0b0' : '#ff6080', 1, 'c'); R(ctx, 30, 33, W - 60, 5, '#2a1020'); R(ctx, 30, 33, Math.round((W - 60) * f), 5, b.mid ? '#ff9080' : '#ff3a6a'); R(ctx, 30, 33, Math.round((W - 60) * f), 1, '#ffc0d0'); }
   if (Input.touchMode) { ctx.globalAlpha = G.bombs ? 0.55 : 0.25; C(ctx, BOMB_BTN.x, BOMB_BTN.y, BOMB_BTN.r, '#103a20'); ctx.strokeStyle = '#40ff80'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(BOMB_BTN.x, BOMB_BTN.y, BOMB_BTN.r, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1; text('BOMB', BOMB_BTN.x, BOMB_BTN.y - 7, '#80ffa0', 1, 'c'); text(String(G.bombs), BOMB_BTN.x, BOMB_BTN.y + 3, '#ffffff', 1, 'c'); }
   // banners
@@ -2510,7 +2545,7 @@ function boot() {
 }
 // ---------- test / dev API ----------
 window.STRIKE = {
-  G, pl, Opts, Input, PERF, STAGES, SCORES: () => SCORES, pools: { ebul, enemies, pshots, items, parts, lasers },
+  G, pl, Opts, Input, PERF, STAGES, BOMB_BTN, SLOW_BTN, bombIconOrigin, layoutTouchBtns, SCORES: () => SCORES, pools: { ebul, enemies, pshots, items, parts, lasers },
   start(stage, o) { Snd.unlock(); newGame(stage || 0); if (o && o.weapon) { G.weapon = o.weapon; G.wlv = o.lv || 1; } if (o && o.god) G.god = true; pl.entering = 0; pl.y = H - 70; },
   steps(n) { for (let i = 0; i < n; i++) step(); }, render, step,
   toBoss() { G.tli = G.tl.length - 1; G.waveT = G.tl[G.tli][0] - 1; enemies.clear(); },
@@ -3096,7 +3131,6 @@ function plzPickTargets(nb) {
 
 // ===== STRIKE v3.5: SLOW — 8 s enemy time-dilation (37.5%), 60 s cooldown from activation, speed streaks =====
 const SLOW = { F: 0.375, DUR: 480, CD: 3600, acc: 0, tick: true, trail: [] };
-const SLOW_BTN = { x: BOMB_BTN.x, y: BOMB_BTN.y - 50, r: BOMB_BTN.r };
 KEYMAP.KeyC = 'slow'; KEYMAP.KeyL = 'slow';
 G.slowT = 0; G.slowCD = 0;
 function slowOn() { return G.slowT > 0; }
@@ -4141,9 +4175,7 @@ window.TicketArt = (function () {
     // buttons never appeared, and the bomb icons sat at H-10 under a phone's home indicator.
     text('B' + (G.bombs | 0), 70, 21, '#40ff80', 1);
     text('B' + (G2.bombs | 0), W - 70, 21, '#40ff80', 1, 'r');
-    for (let i = 0; i < (G.bombs || 0); i++) { try { blit(ITEM_SPR.bomb, 16 + i * 14, H - 36); } catch (e) {} }
-    text('P1', 4, H - 48, '#80c8ff', 1);
-    text('P2', W - 4, H - 48, '#ffb060', 1, 'r');
+    { const o = bombIconOrigin(42); for (let i = 0; i < (G.bombs || 0); i++) { try { blit(ITEM_SPR.bomb, o.x0 + i * o.dx, o.y); } catch (e) {} } }
     if (Input.touchMode) {
       ctx.globalAlpha = G.bombs ? 0.55 : 0.25; ctx.fillStyle = '#103a20'; ctx.beginPath(); ctx.arc(BOMB_BTN.x, BOMB_BTN.y, BOMB_BTN.r, 0, TAU); ctx.fill();
       ctx.strokeStyle = '#40ff80'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(BOMB_BTN.x, BOMB_BTN.y, BOMB_BTN.r, 0, TAU); ctx.stroke();
