@@ -7,6 +7,19 @@ import { KTX2 as KTX2_MAP } from './tex_ktx2.js';
 
 const shared = new Map();
 let _ktx = null, _ktxOk = false;
+let _pending = 0;
+const _idleWait = [];
+
+function _begin() { _pending++; }
+function _end() {
+  _pending = Math.max(0, _pending - 1);
+  if (_pending === 0) { const w = _idleWait.splice(0); for (const fn of w) { try { fn(); } catch (e) {} } }
+}
+export function picturesPending() { return _pending; }
+export function whenPicturesIdle() {
+  if (_pending <= 0) return Promise.resolve();
+  return new Promise(r => _idleWait.push(r));
+}
 
 export function ktx2For(url) {
   if (!url || /\.ktx2(\?|$)/i.test(url)) return url;
@@ -27,15 +40,16 @@ export function initTexLoader(renderer, THREE) {
   return _ktxOk;
 }
 
-export function texReady() { return Promise.resolve(_ktxOk); }
+export function texReady() { return whenPicturesIdle(); }
 export function ktxSupported() { return _ktxOk; }
 export function ktxLoader() { return _ktx; }
 
 function isReady(t) {
   if (!t) return false;
+  if (t._gaReady) return true;
   if (t.isCompressedTexture) {
     const m = t.mipmaps;
-    return !!(m && m.length && (m[0].data || m[0].width > 4 || (m[0].data && m[0].data.length)));
+    return !!(m && m.length && ((m[0].width && m[0].width > 4) || (m[0].data && m[0].data.length)));
   }
   return !!(t.image && (t.image.width || t.image.videoWidth || t.image.mipmaps));
 }
@@ -129,31 +143,39 @@ export function loadPicture(THREE, url, opt = {}) {
   if (ktx) {
     // KTX2Loader.load() does not return a Texture; keep a CompressedTexture stub so
     // materials assigned before transcode finishes keep a stable identity.
+    // Do not needsUpdate the 4x4 stub — first GPU upload is the real image (avoids a pop).
     tex = new THREE.CompressedTexture([], 4, 4);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.generateMipmaps = false;
     tex.flipY = false;
+    tex._gaReady = false;
     if (THREE.LinearFilter) tex.minFilter = THREE.LinearFilter;
     flagTex(tex, THREE);
     applyWrap(tex, opt);
+    _begin();
     _ktx.load(ktx, loaded => {
       fillCompressed(tex, loaded, THREE, opt);
+      tex._gaReady = true;
       finish(tex);
+      _end();
     }, undefined, () => {
+      console.warn('KTX2 failed, fallback image loaded separately', url);
       const fb = new THREE.TextureLoader().load(url, imgTex => {
         applyFlags(imgTex, THREE, opt);
         applyWrap(imgTex, opt);
+        imgTex._gaReady = true;
         if (!opt.noShare) shared.set(key, imgTex);
         retargetMaps(tex, imgTex);
         const wait = tex._gaWait || [];
         imgTex._gaWait = wait;
         tex._gaWait = [];
         finish(imgTex);
-      });
-      console.warn('KTX2 failed, fallback image loaded separately', url);
+        _end();
+      }, undefined, () => { _end(); });
     });
   } else {
-    tex = new THREE.TextureLoader().load(url, finish);
+    _begin();
+    tex = new THREE.TextureLoader().load(url, t2 => { t2._gaReady = true; finish(t2); _end(); }, undefined, () => { _end(); });
     if (tex) {
       tex.colorSpace = THREE.SRGBColorSpace;
       flagTex(tex, THREE);

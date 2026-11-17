@@ -13,7 +13,7 @@ if os.environ.get('TOKTX_LIB'):
     env['LD_LIBRARY_PATH'] = os.environ['TOKTX_LIB'] + ':' + env.get('LD_LIBRARY_PATH', '')
 tmp = Path('/tmp/ktx-in'); tmp.mkdir(exist_ok=True)
 
-SIDES = {p.name for p in (ROOT/'tex').glob('*_side.*')}
+SIDES = {p.name for p in (ROOT/'tex').glob('*_side.*') if not p.name.startswith('shop_')}
 # 3D picture assets only (not CSS thumbs in img/, not unused mockups)
 SKIP = {'rf_cabinet_mockup.jpg', 'spq_cabinet_mockup.jpg'}
 MIPS = {'carpet.webp', 'viking_walls.jpg', 'space_nebula.webp'}
@@ -40,22 +40,23 @@ for src in srcs:
     im = Image.open(src)
     if im.mode not in ('RGB', 'RGBA', 'L'):
         im = im.convert('RGBA' if 'A' in im.getbands() else 'RGB')
-    is_side = src.name in SIDES or src.name.endswith('_side.jpg') or src.name.endswith('_side.webp')
+    is_side = src.name in SIDES  # cabinet side art only; shop_mural_side*.jpg must stay full-res
     if is_side:
         w, h = fit(*im.size, 512)
         if (w, h) != im.size:
             im = im.resize((w, h), Image.Resampling.LANCZOS)
-    # UASTC requires multiples of 4; pad (don't stretch) so art stays sharp
+    # UASTC requires multiples of 4. Resize (<=3px) rather than pad: padding shrinks art in
+    # 0-1 UV space and looks cut off. Tiling textures (carpet etc.) are already multiples of 4.
     nw, nh = (im.width + 3) // 4 * 4, (im.height + 3) // 4 * 4
     if (nw, nh) != im.size:
-        canvas = Image.new(im.mode, (nw, nh), (0, 0, 0, 0) if im.mode == 'RGBA' else (0, 0, 0))
-        canvas.paste(im, (0, 0))
-        im = canvas
+        im = im.resize((nw, nh), Image.Resampling.LANCZOS)
+    # OpenGL loaders (three.js KTX2Loader) ignore KTXorientation. toktx default is upper-left
+    # (T=d) which then appears upside down vs TextureLoader flipY=true. Flip pixels to lower-left.
     png = tmp / (src.stem + '.png')
     im.save(png, 'PNG')
     out = out_dir / (src.stem + '.ktx2')
     cmd = [TOKTX, '--t2', '--encode', 'uastc', '--uastc_quality', '2', '--uastc_rdo_l', '1',
-           '--zcmp', '18', '--assign_oetf', 'srgb', '--nowarn']
+           '--zcmp', '18', '--assign_oetf', 'srgb', '--lower_left_maps_to_s0t0', '--nowarn']
     if src.name in MIPS:
         cmd.append('--genmipmap')
     cmd += [str(out), str(png)]

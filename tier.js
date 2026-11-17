@@ -63,9 +63,9 @@ export function qualityForTier(tier, { mobile = false, powerSave = false } = {})
   // mips off saves ~33% GPU memory; shopCell is the prize-atlas cell (atlas is 16x16 cells).
   if (tier === 'low') return { dpr: 1, refl: 0, bloom: 0, post: false, samples: 0, mirrorSamples: 0, cabDemos: false, aniso: 1, fps: 30, warm: false, windowQ: 0.28, rtFloat: false, texMax: 384, cabScale: 0.5, mips: false, shopCell: 64, shopLab: 0.5, nbW: 256, nbH: 320, previewDpr: 1, stone: 256 };
   if (tier === 'mid' && powerSave) return { dpr: 1.25, refl: 0.22, bloom: 0.28, post: true, samples: 0, mirrorSamples: 0, cabDemos: true, aniso: 2, fps: 30, warm: true, windowQ: 0.5, rtFloat: false, texMax: 640, cabScale: 0.75, mips: true, shopCell: 96, shopLab: 0.75, nbW: 384, nbH: 480, previewDpr: 1.25, stone: 512 };
-  if (tier === 'mid') return { dpr: 1.5, refl: 0.28, bloom: 0.28, post: true, samples: 0, mirrorSamples: 0, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false, texMax: 768, cabScale: 0.75, mips: true, shopCell: 96, shopLab: 0.75, nbW: 384, nbH: 480, previewDpr: 1.25, stone: 512 };
+  if (tier === 'mid') return { dpr: 1.5, refl: 0.35, bloom: 0.5, post: true, samples: 0, mirrorSamples: 0, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false, texMax: 768, cabScale: 0.75, mips: true, shopCell: 96, shopLab: 0.75, nbW: 384, nbH: 480, previewDpr: 1.25, stone: 512 };
   if (powerSave) return { dpr: mobile ? 1.25 : 1.5, refl: mobile ? 0.22 : 0.35, bloom: 0.28, post: true, samples: 0, mirrorSamples: 0, cabDemos: true, aniso: 4, fps: 30, warm: true, windowQ: 0.75, rtFloat: false, texMax: 768, cabScale: 0.85, mips: true, shopCell: 128, shopLab: 1, nbW: 512, nbH: 640, previewDpr: 1.25, stone: 512 };
-  if (mobile) return { dpr: 1.5, refl: 0.35, bloom: 0.35, post: true, samples: 0, mirrorSamples: 0, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false, texMax: 0, cabScale: 1, mips: true, shopCell: 128, shopLab: 1, nbW: 512, nbH: 640, previewDpr: 1.5, stone: 1024 };
+  if (mobile) return { dpr: 1.5, refl: 0.35, bloom: 0.5, post: true, samples: 2, mirrorSamples: 0, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false, texMax: 0, cabScale: 1, mips: true, shopCell: 128, shopLab: 1, nbW: 512, nbH: 640, previewDpr: 1.5, stone: 1024 };
   return { dpr: 2, refl: 0.5, bloom: 0.5, post: true, samples: 2, mirrorSamples: 2, cabDemos: true, aniso: 8, fps: 60, warm: true, windowQ: 1, rtFloat: true, texMax: 0, cabScale: 1, mips: true, shopCell: 128, shopLab: 1, nbW: 512, nbH: 640, previewDpr: 1.5, stone: 1024 };
 }
 
@@ -153,6 +153,8 @@ export function bindStreamGpu(root, opt = {}) {
   const texSize = t => {
     if (!t) return 0;
     if (t.isWebGLRenderTarget) return Math.max(t.width || 0, t.height || 0);
+    const mip = t.mipmaps && t.mipmaps[0];
+    if (mip && (mip.width || mip.height)) return Math.max(mip.width || 0, mip.height || 0);
     const img = t.image || (t.source && t.source.data);
     return Math.max((img && (img.width || img.videoWidth)) || 0, (img && (img.height || img.videoHeight)) || 0);
   };
@@ -195,7 +197,9 @@ export function bindStreamGpu(root, opt = {}) {
             it.mat[it.slot] = null;
             if (it.slot === 'map' && it.mat.color) it.mat.color.setHex(it.color);
             it.mat.needsUpdate = true;
-            try { it.tex.dispose(); } catch (e) {}
+            // Don't dispose a KTX2/image that is still transcoding — dispose can drop the in-flight upload
+            // and leave murals/shelf maps blank when the room is streamed back on.
+            if (it.tex._gaReady !== false) { try { it.tex.dispose(); } catch (e) {} }
           }
         } catch (e) {}
       }

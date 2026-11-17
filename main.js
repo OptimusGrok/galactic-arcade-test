@@ -5,7 +5,7 @@ import { Reflector } from 'three/addons/objects/Reflector.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { initTexLoader, loadPicture } from './texload.js';
+import { initTexLoader, loadPicture, whenPicturesIdle, picturesPending } from './texload.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { buildStrikeCabinet, startStrikeDemo, tickStrikeDemo } from './strikecab.js';
 import { buildGhostCabinet, startGhostDemo, tickGhostDemo } from './ghostcab.js';
@@ -60,7 +60,7 @@ const PS = window.__powerSave = { on: readPowerSave(), key: PS_KEY, fps: TIER.na
 let Q = qualityFor(PS.on); TIER.quality = Q;
 
 // ---------- renderer / scene ----------
-const renderer = new THREE.WebGLRenderer({ antialias: !MOBILE && TIER.name === 'high' && !PS.on, powerPreference: (PS.on || TIER.name === 'low') ? 'low-power' : 'high-performance' }); renderer.localClippingEnabled = true; try { window.__texload = { ok: initTexLoader(renderer, THREE) }; } catch (e) { window.__texload = { ok: false, err: String(e) }; } const warm = { done: false, n: 0, ms: 0, linked: 0, slices: 0, drawn: false, post: false }; window.__warm = warm; if (!/[?&]glcheck/.test(location.search)) renderer.debug.checkShaderErrors = false;   // t295u: no sync getProgramInfoLog per shader (~3.9 s of the start-screen freeze at 4x CPU); ?glcheck turns it back on   // teleporter dissolve
+const renderer = new THREE.WebGLRenderer({ antialias: !MOBILE && TIER.name === 'high' && !PS.on, powerPreference: (PS.on || TIER.name === 'low') ? 'low-power' : 'high-performance' }); renderer.localClippingEnabled = true; try { window.__texload = { ok: initTexLoader(renderer, THREE), pending: picturesPending, whenIdle: whenPicturesIdle }; } catch (e) { window.__texload = { ok: false, err: String(e) }; } const warm = { done: false, n: 0, ms: 0, linked: 0, slices: 0, drawn: false, post: false, texReady: false, userVisible: false }; window.__warm = warm; if (!/[?&]glcheck/.test(location.search)) renderer.debug.checkShaderErrors = false;   // t295u: no sync getProgramInfoLog per shader (~3.9 s of the start-screen freeze at 4x CPU); ?glcheck turns it back on   // teleporter dissolve
 let dpr = Math.min(devicePixelRatio || 1, Q.dpr);
 renderer.setPixelRatio(dpr);
 renderer.setSize(innerWidth, innerHeight, false);   // CSS (100vw x 100dvh) owns the on-screen size; resize() matches the buffer to it
@@ -1985,22 +1985,26 @@ let paused = false, rafOn = true;
   const par = !!(renderer.extensions && renderer.extensions.get('KHR_parallel_shader_compile')), linked = new WeakSet();
   const linkOne = () => { for (const p of renderer.info.programs) { if (linked.has(p)) continue; if (par && !p.isReady()) return false;
       linked.add(p); try { p.getUniforms(); } catch (e) {} warm.linked++; return false; } return true; };
+  const startGone = () => !window.__skipStart && !document.getElementById('start');
   const staged = () => {
     if (!list.length) return true;
+    // Once the start overlay is gone the user can see the room — toggling visibility flickers
+    // and was leaving hidden objects (cabinet number badges, Neon Bricks) stuck visible.
+    if (warm.userVisible || startGone()) { warm.userVisible = true; return true; }
     const o = list.shift();
-    const hidden = [];
-    const hide = obj => { if (obj && obj.visible) { hidden.push(obj); obj.visible = false; } };
+    const prev = [];
+    const setVis = (obj, v) => { if (!obj || obj.visible === v) return; prev.push([obj, obj.visible]); obj.visible = v; };
     for (const c of scene.children) {
       if (c.isLight || c.isCamera) continue;
       let anc = o, keep = false; while (anc) { if (anc === c) { keep = true; break; } anc = anc.parent; }
-      if (!keep) hide(c);
+      if (!keep) setVis(c, false);
     }
-    if (o.parent) for (const s of o.parent.children) if (s !== o && !s.isLight && !s.isCamera) hide(s);
-    let p = o; while (p) { p.visible = true; p = p.parent; }
+    if (o.parent) for (const s of o.parent.children) if (s !== o && !s.isLight && !s.isCamera) setVis(s, false);
+    let p = o; while (p) { setVis(p, true); p = p.parent; }
     // keep every light on so this slice compiles the same light-count variants as a full-room frame
-    scene.traverse(obj => { if (obj.isLight) { const i = hidden.indexOf(obj); if (i >= 0) hidden.splice(i, 1); obj.visible = true; } });
+    scene.traverse(obj => { if (obj.isLight) setVis(obj, true); });
     try { if (composer && usePost) composer.render(); else renderer.render(scene, camera); } catch (e) {}
-    for (const h of hidden) h.visible = true;
+    for (const [obj, v] of prev) obj.visible = v;
     warm.n++; return false;
   };
   scan(); let rescans = 0, finalDraw = false;
@@ -2019,6 +2023,7 @@ let paused = false, rafOn = true;
   setTimeout(() => idle(slice), 300);
 }
 window.__warm = warm;
+whenPicturesIdle().then(() => { warm.texReady = true; });
 // t768u/t769u entry lag: play renders the room through the composer into its half-float target (linear, no tone mapping in the
 // material shaders), but the warm-up compiled against the canvas (sRGB + tone mapping) -> different program keys, so ~45
 // programs (walls, cabinets, windows, monkey...) still compiled in the first frames after PLAY (3-6 s stall). Compile for the
@@ -2077,6 +2082,7 @@ function frame(now) {
   if (draw && (warm.done || giveUp || window.__skipStart)) { if (warm.done) warm.drawn = true; if (composer && usePost) composer.render(); else renderer.render(scene, camera); PS.lastDraw = now; PS.draws++; stats.draws = PS.draws; }   // t295u: the opaque start screen hides the room; let its shaders compile in slices first
   else if (!draw) { PS.skipped++; stats.skipped = PS.skipped; }
   const cpu = performance.now() - t0;
+  if (DEV.badges) for (const b of DEV.badges) if (b.visible !== !!DEV.numbers) b.visible = !!DEV.numbers;
   stats.frames++; stats.cpu = cpu; stats.cpuAvg += (cpu - stats.cpuAvg) * 0.05; stats.gapAvg += (gap - stats.gapAvg) * 0.05; if (!(stats.cpuMax > cpu)) stats.cpuMax = cpu; if (!(stats.gapMax > gap)) stats.gapMax = gap;
   if (!window.__noAdapt) {
     if (stats.gapAvg > 24) { if (++slow > 90 && dpr > 0.75) { dpr = Math.max(0.75, dpr - 0.25); resize(); slow = 0; } } else slow = 0;
