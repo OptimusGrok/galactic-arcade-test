@@ -23,10 +23,11 @@ function marqueeArt(g, w, h) {
   g.fillStyle = '#05030c'; g.fillRect(0, 0, w, h); stars(g, w, h, 120);
   for (let i = 0; i < 6; i++) { g.fillStyle = ['#ff2a6a', '#2ae5ff', '#ff5a1a'][i % 3]; g.fillRect(i < 3 ? 14 : w - 150, 30 + (i % 3) * 22, 136, 3); }
   const F = { B: ['1110', '1001', '1110', '1001', '1110'], L: ['1000', '1000', '1000', '1000', '1111'], A: ['0110', '1001', '1111', '1001', '1001'], S: ['0111', '1000', '0110', '0001', '1110'], T: ['1111', '0110', '0110', '0110', '0110'], E: ['1111', '1000', '1110', '1000', '1111'], R: ['1110', '1001', '1110', '1010', '1001'] };
-  const word = 'BLASTER', s = 13, cw = 5 * s, x0 = (w - word.length * cw + s) / 2, y0 = 18;
-  g.save(); g.shadowColor = '#ffb000'; g.shadowBlur = 16;
-  [...word].forEach((ch, k) => F[ch].forEach((r, j) => { for (let i = 0; i < 4; i++) if (r[i] === '1') { g.fillStyle = j < 2 ? '#fff26a' : '#ffc21a'; g.fillRect(x0 + k * cw + i * s + (4 - j) * 2, y0 + j * s, s - 1, s - 1); } }));
-  g.restore(); g.font = 'bold 30px "Courier New", monospace'; g.textAlign = 'center'; g.fillStyle = '#bfe9ff'; g.shadowColor = '#2ae5ff'; g.shadowBlur = 8; g.fillText('1984', w / 2, h - 14);
+  // t924u: shrink the BLASTER title so it sits neatly on the marquee (neon wall sign above is unchanged)
+  const word = 'BLASTER', s = 9, cw = 5 * s, x0 = (w - word.length * cw + s) / 2, y0 = 28;
+  g.save(); g.shadowColor = '#ffb000'; g.shadowBlur = 12;
+  [...word].forEach((ch, k) => F[ch].forEach((r, j) => { for (let i = 0; i < 4; i++) if (r[i] === '1') { g.fillStyle = j < 2 ? '#fff26a' : '#ffc21a'; g.fillRect(x0 + k * cw + i * s + (4 - j) * 1.4, y0 + j * s, s - 1, s - 1); } }));
+  g.restore(); g.font = 'bold 24px "Courier New", monospace'; g.textAlign = 'center'; g.fillStyle = '#bfe9ff'; g.shadowColor = '#2ae5ff'; g.shadowBlur = 8; g.fillText('1984', w / 2, h - 16);
 }
 function attract(W, H) {
   const c = document.createElement('canvas'); { const sz = cabWH(W, H); c.width = sz[0]; c.height = sz[1]; } const g = c.getContext('2d'); if (c.width !== W || c.height !== H) g.scale(c.width / W, c.height / H);
