@@ -98,6 +98,33 @@ export function panelTexture(wz) {
 // Side profile, x = depth toward the player (front faces local +X), y = height. Taller screen slope for a portrait monitor.
 export const SPROFILE = [[0, 0], [0.86, 0], [0.86, 0.9], [1.04, 1.03], [1.02, 1.1], [0.74, 1.13], [0.56, 1.76], [0.84, 1.79], [0.84, 2.06], [0.02, 2.08]];
 export const SW = 0.82;
+// t883u: fill the bezel like the 4:3 wall cabinets (Orc, Cyber, Blaster…); portrait demos are cropped to cover.
+export const CAB_SCREEN_ASPECT = 4 / 3;
+export function cabScreenSize(sf) {
+  const sh = sf.L * 0.84, sw = Math.min(SW - 0.14, sh * CAB_SCREEN_ASPECT);
+  return { sh, sw };
+}
+export function blitCover(dst, src) {
+  if (!dst || !src) return;
+  const g = dst.getContext('2d'), dw = dst.width, dh = dst.height, sw = src.width, sh = src.height;
+  if (!dw || !dh || !sw || !sh) return;
+  const scale = Math.max(dw / sw, dh / sh), w = sw * scale, h = sh * scale;
+  g.imageSmoothingEnabled = false;
+  g.fillStyle = '#000'; g.fillRect(0, 0, dw, dh);
+  g.drawImage(src, (dw - w) / 2, (dh - h) / 2, w, h);
+}
+export function makeScreenView(drawAttract) {
+  const c = document.createElement('canvas'); const sz = cabWH(480, 360); c.width = sz[0]; c.height = sz[1];
+  if (drawAttract) drawAttract(c.getContext('2d'), c.width, c.height);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.NoColorSpace;
+  t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = false;
+  flagTex(t, THREE); return { canvas: c, texture: t };
+}
+function strikeAttract(g, w, h) {
+  spaceBg(g, w, h); stars(g, w, h, 80); streaks(g, w, h, 18, -0.4);
+  burst(g, w * 0.7, h * 0.35, h * 0.45, 0.7); jet(g, w * 0.32, h * 0.58, h * 0.42, -0.4, 0.9);
+  logo(g, w * 0.58, h * 0.48, h * 0.28, -0.04);
+}
 export const segFrame = (a, b) => { const d = new THREE.Vector2(b[0] - a[0], b[1] - a[1]), L = d.length(); d.normalize(); const n = new THREE.Vector2(d.y, -d.x); return { L, n, mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], ang: Math.atan2(n.y, n.x) }; };
 export function segPlane(a, b, w, inset = 0.004, hFrac = 1) {
   const f = segFrame(a, b); const g = new THREE.PlaneGeometry(w, f.L * hFrac).rotateY(Math.PI / 2).rotateZ(f.ang);
@@ -155,11 +182,11 @@ export function buildStrikeCabinet() {
   // bezel + screen on the slope
   const sf = segFrame(SPROFILE[5], SPROFILE[6]);
   add(segPlane(SPROFILE[5], SPROFILE[6], SW - 0.04, 0.003), new THREE.MeshStandardMaterial({ color: 0x0b0c12, roughness: 0.35, metalness: 0.3 }), 'bezel');
-  const sh = sf.L * 0.95, sw = Math.min(SW - 0.16, sh * 9 / 16 * 1.0);
+  const { sh, sw } = cabScreenSize(sf);
   const screenGeo = new THREE.PlaneGeometry(sw, sh).rotateY(Math.PI / 2).rotateZ(sf.ang).translate(sf.mid[0] + sf.n.x * 0.008, sf.mid[1] + sf.n.y * 0.008, 0);
-  // the bezel trim (thin dark-grey frame around the tube)
-  const bt = []; const P = (u, v) => new THREE.Vector3(sf.mid[0] + sf.n.x * 0.01 - sf.n.y * 0 + (-sf.n.y) * 0, 0, 0);
+  const view = makeScreenView(strikeAttract);
   const crt = new THREE.ShaderMaterial({ uniforms: THREE.UniformsUtils.clone(CRT.uniforms), vertexShader: CRT.vertexShader, fragmentShader: CRT.fragmentShader, toneMapped: false });
+  crt.uniforms.map.value = view.texture;
   const screen = add(screenGeo, crt, 'screen');
   const frame = new THREE.Mesh(new THREE.PlaneGeometry(sw + 0.05, sh + 0.05).rotateY(Math.PI / 2).rotateZ(sf.ang).translate(sf.mid[0] + sf.n.x * 0.006, sf.mid[1] + sf.n.y * 0.006, 0), new THREE.MeshStandardMaterial({ color: 0x22242c, roughness: 0.4, metalness: 0.6 }));
   frame.name = 'bezelFrame'; g.add(frame);
@@ -197,7 +224,7 @@ export function buildStrikeCabinet() {
   // soft screen glow (a real light, not neon)
   const glow = new THREE.PointLight(0x9ab8ff, 1.4, 3.2, 1.6); glow.name = 'screenGlow';
   glow.position.set(sf.mid[0] + sf.n.x * 0.45, sf.mid[1] - 0.15, 0); g.add(glow);
-  g.userData = { screen, crt, glow, profile: SPROFILE, width: SW, depth: 1.04 };
+  g.userData = { screen, crt, glow, profile: SPROFILE, width: SW, depth: 1.04, view: view.canvas, viewTex: view.texture };
   return g;
 }
 export function mergeGeos(list) { // tiny merge for non-indexed + indexed boxes
@@ -214,26 +241,27 @@ export function startStrikeDemo(cab) {
   const f = document.createElement('iframe');
   f.src = 'strike-demo/index.html'; f.title = 'strike demo'; f.tabIndex = -1; f.setAttribute('aria-hidden', 'true');
   f.style.cssText = `position:fixed;left:-${300 * S + 50}px;top:0;width:${270 * S}px;height:${480 * S}px;border:0;pointer-events:none;visibility:hidden`;
-  const demo = { ready: false, frames: 0, texture: null, running: false, iframe: f, err: null };
-  demo.attach = () => { if (!f.isConnected) document.body.appendChild(f); };   // t295u: main.js attaches it after the start screen (the iframe's boot froze the phone's first frames)
+  const SRC = 'strike-demo/index.html';
+  const demo = { ready: false, frames: 0, texture: cab.userData.viewTex, running: false, iframe: f, err: null, view: cab.userData.view };
+  demo.attach = () => { if (!/strike-demo/.test(f.getAttribute('src') || f.src || '')) f.src = SRC; if (!f.isConnected) document.body.appendChild(f); };   // t295u / t883u: restore src if detach blanked it
   demo.detach = () => {   // t854u: drop the off-screen WebGL/canvas on the low tier / context-loss downgrade
     try { if (f.contentWindow && f.contentWindow.__gaRelease) f.contentWindow.__gaRelease(); } catch (e) {}
     try { f.src = 'about:blank'; } catch (e) {}
     try { f.remove(); } catch (e) {}
     demo.ready = false; demo.running = false; };
 
-  const blank = document.createElement('canvas'); blank.width = 4; blank.height = 4;
-  cab.userData.crt.uniforms.map.value = new THREE.CanvasTexture(blank);
+  // t883u: keep the painted attract on the CRT until the iframe has drawn a frame (a 4x4 blank looked like a dead screen)
   f.addEventListener('load', () => {
     try {
-      const w = f.contentWindow; Object.defineProperty(w, 'devicePixelRatio', { get: () => 1 });
-      const SK = w.STRIKE; if (!SK) throw new Error('STRIKE missing');
+      const w = f.contentWindow; if (!w || !w.STRIKE) return;   // ignore about:blank after detach
+      Object.defineProperty(w, 'devicePixelRatio', { get: () => 1 });
+      const SK = w.STRIKE;
       w.dispatchEvent(new w.Event('resize'));
       const cv = w.document.getElementById('c');
-      const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.NoColorSpace; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = false;
-      cab.userData.crt.uniforms.map.value = t; demo.texture = t; demo.w = w; demo.SK = SK; demo.stage = 0;
+      demo.w = w; demo.SK = SK; demo.srcCv = cv; demo.stage = 0;
       SK.Opts.autofire = true; SK.Opts.mute = true; SK.Opts.shake = false;
-      newRun(demo, 0); demo.ready = true;
+      newRun(demo, 0); SK.render(); blitCover(demo.view, cv); if (demo.texture) demo.texture.needsUpdate = true;
+      demo.ready = true; demo.frames = 1;
     } catch (e) { demo.err = String(e); console.warn('strike demo', e); }
   });
   return demo;
@@ -262,6 +290,7 @@ export function tickStrikeDemo(d, dt, visible) {
     const steps = expert ? 3 : 2;
     for (let i = 0; i < steps; i++) { autopilot(d, expert); d.SK.step(); }
     d.SK.render();
-    d.texture.needsUpdate = true; d.frames++;
+    blitCover(d.view, d.srcCv || (d.w && d.w.document.getElementById('c')));
+    if (d.texture) d.texture.needsUpdate = true; d.frames++;
   } catch (e) { d.err = String(e); d.ready = false; console.warn('strike demo', e); }
 }
