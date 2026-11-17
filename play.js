@@ -255,6 +255,16 @@ export function setupPlay(A) {
     if (performance.now() < coinLock) { P.blocked++; return; }
     start(m);
   }
+  // t882u: drop a play iframe immediately (lose WebGL + close AudioContext, then remove). A 500ms delayed
+  // remove could leave two #game frames, and about:blank alone does not free GPU/audio on phones.
+  function killFrame(f) {
+    if (!f) return;
+    try { if (f.contentWindow && f.contentWindow.__skySnd) f.contentWindow.__skySnd.stop(); } catch (e) {}
+    try { if (f.contentWindow && f.contentWindow.__gaRelease) f.contentWindow.__gaRelease(); } catch (e) {}
+    try { f.removeAttribute('id'); } catch (e) {}
+    try { f.src = 'about:blank'; } catch (e) {}
+    try { f.remove(); } catch (e) {}
+  }
   function start(m) {
     if (P.mode !== 'walk') { P.blocked++; return; }
     // t753u: two players max at one machine (they stand side by side); a third waits / watches
@@ -264,8 +274,9 @@ export function setupPlay(A) {
     P.zooms++;
     if (m.prep) { P.mode = 'prep'; P.t = 0; P.t0 = performance.now(); P.pcam = null; P.cam0 = camera.position.clone(); P.look0 = monkey.position.clone().setY(1.25); m.anim('on', 0); }   // walk-up + headset on first, then zoomIn()
     else zoomIn(m);
-    const f = P.frame = document.createElement('iframe'); f.id = 'game'; const ver = window.__GA_VER || 'v248'; const tier = (window.__arcade && window.__arcade.tier && window.__arcade.tier.name) || ''; f.src = m.src + (m.src.indexOf('?') >= 0 ? '&' : '?') + 'ga=' + ver + (tier ? '&tier=' + encodeURIComponent(tier) : ''); f.allow = 'autoplay; fullscreen'; f.title = m.cab.name;
-    f.addEventListener('load', () => { P.loaded = true; try { f.contentWindow.addEventListener('keydown', ev => { if (TV.open) { ev.stopImmediatePropagation(); ev.preventDefault(); if (ev.code === 'Escape') closeView(); return; } if (ev.code === 'Escape') { ev.stopImmediatePropagation(); ev.preventDefault(); exit('esc'); return; } if (P.sub === 'demo') { ev.stopImmediatePropagation(); ev.preventDefault(); if (/^(Enter|Space|KeyE)$/.test(ev.code) && !ev.repeat) tryPlay(); } }, true); } catch (e) {} });
+    if (P.frame) killFrame(P.frame); P.frame = null;
+    const f = P.frame = document.createElement('iframe'); f.id = 'game'; const ver = window.__GA_VER || 'v249'; const tier = (window.__arcade && window.__arcade.tier && window.__arcade.tier.name) || ''; f.src = m.src + (m.src.indexOf('?') >= 0 ? '&' : '?') + 'ga=' + ver + (tier ? '&tier=' + encodeURIComponent(tier) : ''); f.allow = 'autoplay; fullscreen'; f.title = m.cab.name;
+    f.addEventListener('load', () => { if (P.frame !== f) return; P.loaded = true; try { f.contentWindow.addEventListener('keydown', ev => { if (TV.open) { ev.stopImmediatePropagation(); ev.preventDefault(); if (ev.code === 'Escape') closeView(); return; } if (ev.code === 'Escape') { ev.stopImmediatePropagation(); ev.preventDefault(); exit('esc'); return; } if (P.sub === 'demo') { ev.stopImmediatePropagation(); ev.preventDefault(); if (/^(Enter|Space|KeyE)$/.test(ev.code) && !ev.repeat) tryPlay(); } }, true); } catch (e) {} }, { once: true });
     P.loaded = false; document.body.appendChild(f);
   }
   function zoomIn(m) { P.mode = 'zoomIn'; P.t = 0; P.t0 = performance.now();
@@ -291,13 +302,9 @@ export function setupPlay(A) {
     // t854u / v236: also cancel a slow prep / zoom-in (Roadster step-in, Dead Signal headset) so a mid-tween close isn't a no-op
     if (P.mode !== 'game' && P.mode !== 'prep' && P.mode !== 'zoomIn') return; clearInterval(P.poll); clearTimeout(P.holdT); P.holdT = 0; over.style.display = 'none'; hideContinue();
     P.lastExit = why; P.sub = null; demoUI.classList.remove('on'); P.mode = 'zoomOut'; P.t = 0; P.t0 = performance.now(); bExit.style.display = 'none'; document.body.dataset.cab = '';
-    const f = P.frame; if (f) f.classList.remove('on');
-    try { if (f && f.contentWindow && f.contentWindow.__skySnd) f.contentWindow.__skySnd.stop(); } catch (e) {}
-    try { if (f && f.contentWindow && f.contentWindow.__gaRelease) f.contentWindow.__gaRelease(); } catch (e) {}   // t762u: free its GPU / canvas / audio now, not at some later GC (phones)
-    try { if (f) f.src = 'about:blank'; } catch (e) {}
+    const f = P.frame; P.frame = null; if (f) f.classList.remove('on');
     try { if (TV.open) closeView(); } catch (e) {}
-    try { if (f && f.contentWindow) f.contentWindow.document.body.style.display = 'none'; } catch (e) {}
-    if (f) setTimeout(() => { try { f.remove(); } catch (e) {} }, 500); P.frame = null;
+    killFrame(f);
     if (P.cur.onExit) P.cur.onExit();
     if (P.cur.upright || document.body.classList.contains('upright')) try { window.__orient && window.__orient(false); } catch (e) {}
     const m = P.cur, back = monkey.position.clone().setY(monkey.position.y + 1.25), out = back.clone().addScaledVector(m.cab.userData.inward, 2.6).setY(2.1);

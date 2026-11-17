@@ -767,7 +767,7 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
   try { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; } catch (e) {}
   const tts = (text) => { try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); if (voice) u.voice = voice; u.lang = (voice && voice.lang) || 'en-US'; u.pitch = 0.95; speechSynthesis.speak(u); } catch (e) {} };
   let talkT = 0, happyT = 0;
-  function say(text) { talkT = Math.max(1.4, text.length * 0.065); happyT = talkT + 1.2; api.said.push(text);
+  function say(text) { talkT = Math.max(1.4, text.length * 0.065); happyT = talkT + 1.2; api.said.push(text); if (api.said.length > 80) api.said.splice(0, api.said.length - 80);
     if (text !== GREET) return;   // t559: buying (and not-enough-tickets) is silent - only the welcome is spoken
     if (window.__muted || (window.__mute && window.__mute.on)) return;
     greet(); }
@@ -853,10 +853,10 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
     poolApi.open = true; poolApi.opens++; for (const b of poolBtns) b.classList.remove('on'); clearKeys(); if (api.open) closeShop();
     const f = poolApi.frame = document.createElement('iframe'); f.src = POOL_SRC; f.title = '8-Ball Pool'; f.allow = 'autoplay; fullscreen'; poolOv.appendChild(f); poolOv.classList.add('on');
     try { window.__updateTurn && window.__updateTurn(); } catch (e) {}
-    f.addEventListener('load', () => { try { f.contentWindow.focus(); f.contentWindow.addEventListener('keydown', e => { if (e.code === 'Escape') { e.preventDefault(); closePool(); } }, true); } catch (e) {} });
+    f.addEventListener('load', () => { if (poolApi.frame !== f) return; try { f.contentWindow.focus(); f.contentWindow.addEventListener('keydown', e => { if (e.code === 'Escape') { e.preventDefault(); closePool(); } }, true); } catch (e) {} }, { once: true });
     const cv = window.__arcade && window.__arcade.renderer && window.__arcade.renderer.domElement; if (cv) cv.style.visibility = 'hidden'; }
   function closePool() { if (!poolApi.open) return; poolApi.open = false; poolApi.closes++; poolOv.classList.remove('on'); const f = poolApi.frame; poolApi.frame = null;
-    if (f) { try { f.src = 'about:blank'; } catch (e) {} f.remove(); }   // unload: stops the pool game's render loop + audio
+    if (f) { try { if (f.contentWindow && f.contentWindow.__gaRelease) f.contentWindow.__gaRelease(); } catch (e) {} try { f.src = 'about:blank'; } catch (e) {} f.remove(); }   // t882u: release WebGL/audio before unload
     const cv = window.__arcade && window.__arcade.renderer && window.__arcade.renderer.domElement; if (cv) cv.style.visibility = ''; clearKeys(); try { window.focus(); } catch (e) {} try { window.__updateTurn && window.__updateTurn(); } catch (e) {} }
   for (const el of [poolBtn, poolBtn2, poolOv]) { el.addEventListener('pointerdown', stop); el.addEventListener('touchstart', stop, { passive: true }); }
   poolBtns.forEach((b, i) => { b.addEventListener('pointerup', e => { e.stopPropagation(); openPool(i); }); b.addEventListener('click', e => { e.stopPropagation(); openPool(i); }); });

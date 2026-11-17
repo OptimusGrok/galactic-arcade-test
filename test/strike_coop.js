@@ -127,8 +127,15 @@ let ok = true; const chk = (c, m, x) => { console.log((c ? 'PASS ' : 'FAIL ') + 
   await S(a, 'S.Input.keys.left = true; return 1;');
   for (let i = 0; i < 6; i++) { await S(a, 'S.steps(4); return 1;'); await guestIn('S.Input.keys.up = true', 1); }
   await S(a, 'S.Input.keys.left = false; C.sendState(); return 1;'); await guestIn('S.Input.keys.up = false', 1);
-  await a.waitForTimeout(150); await S(b, 'S.steps(1); return 1;');
-  const hA2 = await S(a, 'return C.hud();'), hB2 = await S(b, 'return C.hud();');
+  // t882u: wait for a guest snapshot to catch the host instead of a fixed 150 ms (live flake)
+  let hA2, hB2;
+  for (let i = 0; i < 20; i++) {
+    await S(a, 'C.sendState(); return 1;');
+    await a.waitForTimeout(50);
+    await S(b, 'S.steps(1); return 1;');
+    hA2 = await S(a, 'return C.hud();'); hB2 = await S(b, 'return C.hud();');
+    if (near(hA2.p1, hB2.p1) && near(hA2.p2, hB2.p2)) break;
+  }
   chk(hB2.p1.x < hB1.p1.x - 4 && hB2.p2.y < hB1.p2.y - 4, 'on the second phone P1 moves left and P2 moves up', { p1: [hB1.p1.x, hB2.p1.x], p2: [hB1.p2.y, hB2.p2.y] });
   chk(near(hA2.p1, hB2.p1) && near(hA2.p2, hB2.p2) && hB2.p2.x >= 0 && hB2.p2.x <= 270 && hB2.p2.y >= 0, 'after moving, both ships still match the host and P2 stays on screen', { a: [hA2.p1, hA2.p2], b: [hB2.p1, hB2.p2] });
   await S(b, "w.eval('Opts.autofire = true'); S.Input.ptrDown = false; return 1;");

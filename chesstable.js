@@ -141,11 +141,11 @@ export function setupChessTable(o) {
     api.lastExit = why || 'x'; closeFrame(); if (api.upright) upright(false);   // back to the side view inside the ✕ / Esc gesture (never turned upright before the game: nothing to undo)
     api.state = 'unzoom'; api.t = 0; bx.classList.remove('on'); camTo(camOver(), api.fast ? 0.2 : 1.0); return true; }
   function openFrame() { if (api.frame) return; const f = api.frame = document.createElement('iframe'); f.src = SRC; f.title = 'Chess'; f.allow = 'autoplay'; ov.appendChild(f);
-    f.addEventListener('load', () => { try { f.contentWindow.addEventListener('keydown', e => { if (e.code === 'Escape') { e.preventDefault(); leave('esc'); } }, true); } catch (e) {} }); }
+    f.addEventListener('load', () => { if (api.frame !== f) return; try { f.contentWindow.addEventListener('keydown', e => { if (e.code === 'Escape') { e.preventDefault(); leave('esc'); } }, true); } catch (e) {} }, { once: true }); }
   function showFrame() { api.open = true; ov.classList.add('on'); if (!api.upright) upright(true);   // t876u: rotate upright just as the game starts try { api.frame && api.frame.contentWindow.focus(); } catch (e) {}
     const cv = window.__arcade && window.__arcade.renderer && window.__arcade.renderer.domElement; if (cv) cv.style.visibility = 'hidden'; try { window.__updateTurn && window.__updateTurn(); } catch (e) {} }
   function closeFrame() { const was = api.open || !!api.frame; api.open = false; ov.classList.remove('on'); const f = api.frame; api.frame = null;
-    if (f) { try { f.src = 'about:blank'; } catch (e) {} f.remove(); }   // unload: stops the chess engine worker, battles + audio
+    if (f) { try { if (f.contentWindow && f.contentWindow.__gaRelease) f.contentWindow.__gaRelease(); } catch (e) {} try { f.src = 'about:blank'; } catch (e) {} f.remove(); }   // t882u: release WebGL/audio before unload
     const cv = window.__arcade && window.__arcade.renderer && window.__arcade.renderer.domElement; if (cv) cv.style.visibility = '';
     if (was) api.closes++; clearKeys(); try { window.focus(); } catch (e) {} try { window.__updateTurn && window.__updateTurn(); } catch (e) {} }
   addEventListener('keydown', e => {
