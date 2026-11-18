@@ -1894,10 +1894,13 @@ function streamWant() {
   const m = monkey.position, pad = tp && tp.PAD1;
   const inShop = (tp && tp.where === 2) || m.x > WX - 14;
   const padD = pad ? Math.hypot(m.x - pad.x, m.z - pad.z) : 99;
-  const locking = !!(tp && tp.locked);
+  // Only pad trips to/from the shop should pin shop GPU. tp.locked is also true during the
+  // first-PLAY beam-in remat (and any other remat), which was starting setShopGpu + hidden
+  // warm under the fading start screen (t940u 2 s black hitch).
+  const shopTrip = !!(tp && tp.locked && (tp.dest === 'shop' || tp.dest === 'arcade' || tp.where === 2));
   return {
-    wantShop: inShop || padD < 8 || locking,
-    evictShop: !inShop && padD > 10 && !locking,
+    wantShop: inShop || padD < 8 || shopTrip,
+    evictShop: !inShop && padD > 10 && !shopTrip,
     wantRoom2: m.z < -HALF + 5,
     evictRoom2: m.z > -HALF + 2
   };
@@ -1939,9 +1942,16 @@ function queueShopWarmItems() {
   if (tp && tp.whiteRoom) add(tp.whiteRoom, 0);
   if (_hidWarm.done && _hidWarm.i < _hidWarm.items.length) _hidWarm.done = false;
 }
+function hiddenWarmOk() {
+  if (document.getElementById('start')) return false;
+  if (!(window.__skipStart || (window.__start && window.__start.dismissed) || !window.__start)) return false;
+  if (!warm.userVisible) return false;
+  if (!(stats && stats.draws > 45)) return false;
+  if (tp && (tp.beaming || tp.state === 'remat' || tp.state === 'demat' || tp.state === 'flash' || tp.state === 'charge' || tp.state === 'walk')) return false;
+  return true;
+}
 function startWarmHiddenGpu() {
-  const startGone = !!(window.__skipStart || (window.__start && window.__start.dismissed) || !document.getElementById('start'));
-  if (!startGone && !window.__skipStart) return;
+  if (!hiddenWarmOk()) return;
   if (_hidWarm.started) { queueShopWarmItems(); return; }
   _hidWarm.started = true;
   const items = [], seen = new Set();
@@ -2071,16 +2081,16 @@ function tickRoomStream(now) {
   if (w.wantShop) { _streamT.shop = 0; setShopGpu(true); try { startWarmHiddenGpu(); } catch (e) {} }
   else if (w.evictShop) { if (!_streamT.shop) _streamT.shop = now; else if (now - _streamT.shop >= streamHold('tex')) setShopGpu(false); }
   else _streamT.shop = 0;
-  // t938u/t939u: first-beam hitch was first-time shop/hidden GPU work at the cut. After PLAY (or a few
-  // skipStart frames), warm it in the background; shop textures stay evicted until approach.
-  try {
-    const startGone = !!(window.__skipStart || (window.__start && window.__start.dismissed) || !document.getElementById('start'));
-    if (startGone && shop && stats.frames > 30) startWarmHiddenGpu();
-  } catch (e) {}
+  // t938u/t939u: first-beam hitch was first-time shop/hidden GPU work at the cut.
+  // t940u: do not start this at PLAY (dismissed) — it was a 1–2 s hitch while the start
+  // overlay faded to a black canvas. Wait until the overlay is gone, the entry remat is
+  // finished, and the room has been presenting for a while. Shop textures stay evicted until approach.
+  try { if (shop && hiddenWarmOk()) startWarmHiddenGpu(); } catch (e) {}
   if (w.wantRoom2) { _streamT.room2 = 0; setRoom2Gpu(true); }
   else if (w.evictRoom2) { if (!_streamT.room2) _streamT.room2 = now; else if (now - _streamT.room2 >= streamHold('tex')) setRoom2Gpu(false); }
   else _streamT.room2 = 0;
-  const playOk = !!(window.__skipStart || (window.__start && window.__start.dismissed) || !document.getElementById('start'));
+  // Demos wait until the start overlay is actually gone, not just dismissed (t940u: first PLAY remat + demo GPU used to hitch mid-fade).
+  const playOk = !!(window.__skipStart || !document.getElementById('start'));
   // Use the player's XZ position, not the camera: a lagging or showcase camera in room 1
   // would otherwise keep Strike/Ghost demos attached after the player has walked to room 2.
   const xzD = (cab) => {
@@ -2112,6 +2122,9 @@ let paused = false, rafOn = true;
   // compile() against a dummy/plane does not produce the same program keys as the real post path,
   // so the first full composer.render() was still a multi-second hitch. Rendering the real pipeline
   // a group at a time forces those programs to link on hidden frames.
+  // t940u: time-box several groups per slice so warmup usually finishes (and the first full-room
+  // present runs) under the opaque start screen, before PLAY. Play used to fade the overlay to a
+  // black canvas and then hitch 1.7–2 s on that first present, plus hidden-shop warm on v257.
   const seen = new WeakSet(), list = [];
   const scan = () => { for (const o of scene.children) for (const c of (o.isGroup && o.children.length > 8 ? o.children : [o])) if (!seen.has(c)) { seen.add(c); list.push(c); } };
   const par = !!(renderer.extensions && renderer.extensions.get('KHR_parallel_shader_compile')), linked = new WeakSet();
@@ -2139,20 +2152,44 @@ let paused = false, rafOn = true;
     for (const [obj, v] of prev) obj.visible = v;
     warm.n++; return false;
   };
-  scan(); let rescans = 0, finalDraw = false;
-  const slice = () => {
-    const t0 = performance.now(); warm.slices++;
-    const l0 = warm.linked; let linkedAll = linkOne();
-    if (linkedAll && list.length) { staged(); linkedAll = false; }
-    else if (linkedAll && !list.length && !finalDraw) { finalDraw = true; warm.post = true; }
-    warm.ms += performance.now() - t0; if (window.__warmDbg) window.__warmDbg.push([Math.round(t0), +(performance.now() - t0).toFixed(1), 0, warm.linked - l0, list.length, renderer.info.programs.length]);
-    if (!list.length && linkedAll && finalDraw) {
-      warm.done = true; warm.post = true; warm.drawn = true;
-      if (rescans++ < 40) { scan(); return setTimeout(() => idle(slice), list.length ? 0 : 250); } return;
-    }
-    idle(slice);
+  const presentFull = () => {
+    const renderOnce = () => { try { if (composer && usePost) composer.render(); else renderer.render(scene, camera); } catch (e) {} };
+    renderOnce();
+    try { if (tp && typeof tp.warmRemat === 'function') tp.warmRemat(renderOnce); } catch (e) {}
+    PS.lastDraw = performance.now(); PS.draws++; stats.draws = PS.draws;
+    warm.drawn = true; warm.post = true; warm.full = true;
   };
-  setTimeout(() => idle(slice), 300);
+  scan(); let rescans = 0, finalDraw = false, ticking = false;
+  const tick = (budget) => {
+    if (ticking) return !!warm.done;
+    if (warm.done && warm.full) return true;
+    ticking = true;
+    const t0 = performance.now(), budgetMs = budget == null ? 8 : budget;
+    try {
+      while (performance.now() - t0 < budgetMs) {
+        const s0 = performance.now();
+        warm.slices++;
+        const l0 = warm.linked; let linkedAll = linkOne();
+        if (linkedAll && list.length) { staged(); linkedAll = false; }
+        else if (linkedAll && !list.length && !finalDraw) { finalDraw = true; warm.post = true; }
+        warm.ms += performance.now() - s0;
+        if (window.__warmDbg) window.__warmDbg.push([Math.round(s0), +(performance.now() - s0).toFixed(1), 0, warm.linked - l0, list.length, renderer.info.programs.length]);
+        if (warm.userVisible && startGone()) break;
+        if (!list.length && linkedAll && finalDraw) {
+          // First full-room present under the still-opaque start screen (or during skipStart
+          // frames the user cannot see yet). Doing this at PLAY was the 2 s black hitch.
+          if (!warm.full && !warm.userVisible) presentFull();
+          warm.done = true; warm.post = true; if (warm.full) warm.drawn = true;
+          if (rescans++ < 40) { scan(); if (list.length) { finalDraw = false; continue; } }
+          break;
+        }
+      }
+    } finally { ticking = false; }
+    return !!warm.done;
+  };
+  warm.tick = tick;
+  const loop = () => { if (!(warm.done && warm.full)) idle(() => { tick(8); if (!(warm.done && warm.full)) loop(); }); };
+  setTimeout(loop, 200);
 }
 window.__warm = warm;
 whenPicturesIdle().then(() => { warm.texReady = true; });
@@ -2166,11 +2203,12 @@ function compileForPlay(o, cam, sc, sync) {
   catch (e) { return Promise.reject(e); } finally { if (t) renderer.setRenderTarget(prev); } }
 window.__compileForPlay = compileForPlay;
 function frame(now) {
+  try {
   syncJoyArm();
   const gap = Math.max(0, Math.min(100, now - last)); last = now;   // rAF time can be a hair before a resume timestamp
   applyQuestPad(gap / 1000);
   if (paused) { rafOn = false; return; }   // full-screen game running: arcade render loop stopped
-  if (document.hidden) { PS.hiddenSkips++; requestAnimationFrame(frame); return; }   // pause GPU work while the tab is in the background
+  if (document.hidden) { PS.hiddenSkips++; return; }   // pause GPU work while the tab is in the background (rAF rescheduled in finally)
   syncZoomBtn(); tickZoom(gap / 1000); if (nb) nb.restoreCam(camera);
   const t0 = performance.now();
   { const dtc = Math.min(gap / 1000, 0.05); if (play.update(dtc, kiosk && kiosk.mode !== 'walk' && kiosk.mode !== 'pick' ? null : nearCab) || (kiosk && kiosk.update(dtc))) { flyGuard(); stepClock(dtc); } else step(dtc); }
@@ -2208,11 +2246,20 @@ function frame(now) {
   }
   if (spaceWin) spaceWin.update(now);
   if (window.__neonSigns && window.__neonSigns.userData.tick) window.__neonSigns.userData.tick(now / 1000);   // t850u: claw icon prongs
+  // Drain remaining shader/texture warmup on the animation frame (in addition to idle slices).
+  // After PLAY / skipStart use a slightly larger budget so the first full present can finish
+  // under the overlay (or before skipStart tests screenshot an empty canvas).
+  if (!warm.done && typeof warm.tick === 'function') {
+    const entering = !!(window.__gaEntering || window.__skipStart || (window.__start && window.__start.dismissed));
+    try { warm.tick(entering ? 12 : 8); } catch (e) {}
+  }
   const startGone = !document.getElementById('start') || (window.__start && window.__start.dismissed);
   if (startGone && !warm.done && !warm.sinceGone) warm.sinceGone = now;
   const giveUp = !!(startGone && warm.sinceGone && (now - warm.sinceGone > 8000));
-  // tests set __skipStart and need the room drawn immediately; real users wait for sliced warmup under the start screen
-  if (draw && (warm.done || giveUp || window.__skipStart)) { if (warm.done) warm.drawn = true; if (composer && usePost) composer.render(); else renderer.render(scene, camera); PS.lastDraw = now; PS.draws++; stats.draws = PS.draws; }   // t295u: the opaque start screen hides the room; let its shaders compile in slices first
+  // Real users and skipStart both wait for sliced warmup + one hidden full present (warm.done)
+  // or an 8 s give-up. skipStart used to force a full composer.render on frame 1, which could
+  // stall past the 60 s open() timeout on SwiftShader / KTX2. frames still increment either way.
+  if (draw && (warm.done || giveUp)) { if (warm.done) warm.drawn = true; if (composer && usePost) composer.render(); else renderer.render(scene, camera); PS.lastDraw = now; PS.draws++; stats.draws = PS.draws; }   // t295u: the opaque start screen hides the room; let its shaders compile in slices first
   else if (!draw) { PS.skipped++; stats.skipped = PS.skipped; }
   const cpu = performance.now() - t0;
   if (DEV.badges) for (const b of DEV.badges) if (b.visible !== !!DEV.numbers) b.visible = !!DEV.numbers;
@@ -2227,7 +2274,8 @@ function frame(now) {
     } else TIER._slow = 0;
     stats.quality = dpr;
   }
-  requestAnimationFrame(frame);
+  } catch (e) { try { window.__frameErr = String((e && e.stack) || e); } catch (e2) {} }
+  if (!paused) requestAnimationFrame(frame);
 }
 function stepClock(dt) { st.t += dt; }
 // t754u: someone else is playing this machine. Sky Tower draws their climb live (skytowercab.js); the other cabinets'
