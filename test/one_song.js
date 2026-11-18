@@ -1,5 +1,5 @@
 // t911u: only one decoded music buffer at a time. Room track is freed after a cabinet takes over
-// (1s hold) and is decoded again on demand from the compact arraybuffer. Cabinet cache stays at 1.
+// (1s hold) and is decoded again on demand (re-fetch). t930u: the compressed copy is not kept after decode. Cabinet cache stays at 1.
 // NOSHOTS=1 node test/one_song.js
 const { open } = require('./lib');
 (async () => {
@@ -20,7 +20,7 @@ const { open } = require('./lib');
   await at(0, 4);
   await p.waitForFunction(() => window.__music.hasBuf || window.__music.err, null, { timeout: 30000 });
   let a = await snap();
-  chk(a.hasBuf && a.rawBytes > 1000 && !a.err, 'room track decoded, compact arraybuffer kept ' + JSON.stringify(a));
+  chk(a.hasBuf && a.rawBytes === 0 && !a.err, 'room track decoded, compressed copy dropped after decode ' + JSON.stringify(a));
   const dec0 = a.decodes, freed0 = a.freed;
 
   await atFront('monkey');

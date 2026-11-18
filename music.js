@@ -2,13 +2,13 @@
 // looped on exact sample points (encoder padding trimmed). Plays in room 1, the hallway and room 2 without a break (t244), while a cabinet
 // is zoomed in / played, on the start screen, when the tab is hidden, or when MUSIC is off in Options ('neonarcade.music' = '0').
 // t911u: keep only the currently playing decoded AudioBuffer. When the room track is fully stopped (cabinet loop, a game,
-// start screen, hidden tab, MUSIC off) for a short hold, drop the decoded buffer and decode again on demand from the
-// compact fetched arraybuffer (or a re-fetch).
+// start screen, hidden tab, MUSIC off) for a short hold, drop the decoded buffer and decode again on demand from a re-fetch.
+// t930u: drop the compressed ArrayBuffer as soon as decode finishes (saves ~1 MB); a later load re-fetches (HTTP cache).
 (function () {
   var N = 3225600, SR = 44100, VOL = 0.42, KEY = 'neonarcade.music', HOLD = 1000;
   var M = window.__music = { loaded: false, playing: false, gain: 0, target: 0, on: true, loopStart: 0, loopEnd: 0, len: 0, src: '', hasBuf: false, rawBytes: 0, freed: 0, decodes: 0 };
   try { M.on = localStorage.getItem(KEY) !== '0'; } catch (e) {}
-  var ac = null, g = null, node = null, loading = false, raw = null, buf = null, silentSince = 0;
+  var ac = null, g = null, node = null, loading = false, buf = null, silentSince = 0;
   function pickSrc() { var a = document.createElement('audio'); return a.canPlayType('audio/ogg; codecs="opus"') ? 'audio/neon_nights.ogg' : 'audio/neon_nights.m4a'; }
   function ctx() { if (!ac) { ac = window.__unlockAC || new (window.AudioContext || window.webkitAudioContext)(); window.__unlockAC = ac; } return ac; }
   function dropDecoded() {
@@ -22,7 +22,7 @@
     M.t0 = ctx().currentTime; M.loaded = true; M.playing = true; M.hasBuf = true;
   }
   function decodeRaw(ab) {
-    return new Promise(function (ok, no) { ctx().decodeAudioData(ab.slice(0), ok, no); });
+    return new Promise(function (ok, no) { ctx().decodeAudioData(ab, ok, no); });
   }
   function prepare(b) {
     var extra = b.length - Math.round(N * b.sampleRate / SR), lead = extra >= 2112 ? 2112 : extra >= 1024 ? 1024 : 0;
@@ -34,11 +34,10 @@
     ctx();
     if (!g) { g = ac.createGain(); g.gain.value = 0; g.connect(ac.destination); }
     var go = function (ab) {
-      raw = ab; M.rawBytes = ab.byteLength;
-      return decodeRaw(ab).then(function (b) { prepare(b); startNode(b); loading = false; });
+      M.rawBytes = ab.byteLength;
+      return decodeRaw(ab).then(function (b) { M.rawBytes = 0; prepare(b); startNode(b); loading = false; });
     };
-    if (raw) { go(raw).catch(function (e) { M.err = String(e); loading = false; }); return; }
-    M.src = pickSrc();
+    M.src = M.src || pickSrc();
     fetch(M.src).then(function (r) { return r.arrayBuffer(); }).then(go).catch(function (e) { M.err = String(e); loading = false; });
   }
   M.setOn = function (on) { M.on = !!on; try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (e) {} tick(); };
