@@ -12,7 +12,8 @@
 // so lettering reads left-to-right from both sides; the claw prongs open/close on a cheap baked-frame loop.
 // Orc Attack’s icon is a detailed neon orc (tusks, horned helmet, axe) in the same dim-glow style as the Viking / Strike icons.
 import { NEON_ATLAS } from './neon_atlas.js';
-import { loadPicture } from './texload.js';
+import { loadPicture, ktx2For, ktxSupported } from './texload.js';
+import { finishCanvasTex } from './tier.js';
 
 function neonStroke(g, draw, col, w, glow) {
   g.save();
@@ -791,16 +792,26 @@ export function buildNeonSigns(THREE, mergeGeometries, list, opt = {}) {
   if (clawPending) {
     const { iw, ih, ip, n } = clawPending._claw;
     const N = 10, S = 256, period = 3.6;
-    const strip = document.createElement('canvas'); strip.width = S * N; strip.height = S;
-    const sg = strip.getContext('2d');
-    for (let i = 0; i < N; i++) {
-      const t = document.createElement('canvas'); t.width = S; t.height = S;
-      const tctx = t.getContext('2d', { willReadFrequently: true });
-      if (tctx.reset) tctx.reset();
-      drawClawIcon(tctx, S, i / (N - 1));
-      sg.drawImage(t, i * S, 0);
+    let ctex;
+    if (ktxSupported() && ktx2For('tex/claw_icon_strip.png')) {
+      ctex = loadPicture(THREE, 'tex/claw_icon_strip.png', {
+        mips: false, wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping,
+        repeat: { x: 1 / N, y: 1 },
+        onLoad: t => { try { if (opt.renderer) opt.renderer.initTexture(t); } catch (e) {} }
+      });
+    } else {
+      const strip = document.createElement('canvas'); strip.width = S * N; strip.height = S;
+      const sg = strip.getContext('2d');
+      for (let i = 0; i < N; i++) {
+        const t = document.createElement('canvas'); t.width = S; t.height = S;
+        const tctx = t.getContext('2d', { willReadFrequently: true });
+        if (tctx.reset) tctx.reset();
+        drawClawIcon(tctx, S, i / (N - 1));
+        sg.drawImage(t, i * S, 0);
+      }
+      ctex = new THREE.CanvasTexture(strip);
+      finishCanvasTex(ctex, THREE);
     }
-    const ctex = new THREE.CanvasTexture(strip);
     ctex.colorSpace = THREE.SRGBColorSpace; ctex.anisotropy = opt.aniso || 4;
     ctex.wrapS = THREE.ClampToEdgeWrapping; ctex.wrapT = THREE.ClampToEdgeWrapping;
     ctex.repeat.set(1 / N, 1); ctex.offset.set(0, 0); ctex.needsUpdate = true;

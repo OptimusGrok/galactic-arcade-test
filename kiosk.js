@@ -2,6 +2,8 @@
 // ($1 = 10, $5 = 60, $10 = 150). After leaving the view the machine dispenses a gold ticket strip into its tray; PICK UP walks the
 // monkey over, he bends down, pockets them and the tickets count up. Cash: $5, topped back up to $5 every hour (never stacks). Purchases persist.
 import * as THREE from 'three';
+import { posterWH, finishCanvasTex } from './tier.js';
+import { loadPicture, ktx2For, ktxSupported } from './texload.js';
 const OFFERS = [[1, 10], [5, 60], [10, 150]], DAY = 36e5,   // cash refill period: 1 hour (name kept)
   CK = 'neonarcade.cash', PK = 'neonarcade.kioskPending';
 export function setupKiosk({ room, camera, monkey, st, play, blockers }) {
@@ -25,22 +27,30 @@ export function setupKiosk({ room, camera, monkey, st, play, blockers }) {
   box(W - 0.06, Hh - 0.12, 0.02, char, 0, Hh / 2 + 0.06, D / 2 + 0.005);   // charcoal front panel
   for (const [w, h, x, y] of [[W - 0.04, 0.012, 0, Hh - 0.005], [W - 0.04, 0.012, 0, 0.14], [0.012, Hh - 0.15, -(W / 2 - 0.02), Hh / 2 + 0.07], [0.012, Hh - 0.15, W / 2 - 0.02, Hh / 2 + 0.07]]) box(w, h, 0.03, gold, x, y, D / 2 + 0.012);   // gold trim
   // gold monkey ticket decals (same art as the HUD counter) on both side panels, readable from each side (not mirrored)
-  { const dc = document.createElement('canvas'); dc.width = 1024; dc.height = 676; const dg = dc.getContext('2d');
-    try { dg.translate(12, 12); TicketArt.paint(dg, 1000, 652, false); } catch (e) { dg.fillStyle = '#e8c45a'; dg.fillRect(0, 0, 1024, 676); }
-    const dt = new THREE.CanvasTexture(dc); dt.colorSpace = THREE.SRGBColorSpace; dt.anisotropy = 8;
+  { let dt;
+    if (ktxSupported() && ktx2For('tex/kiosk_ticket.png')) {
+      dt = loadPicture(THREE, 'tex/kiosk_ticket.png', { mips: false });
+    } else {
+      const [tw, th] = posterWH(1024, 676);
+      const dc = document.createElement('canvas'); dc.width = tw; dc.height = th; const dg = dc.getContext('2d');
+      dg.setTransform(tw / 1024, 0, 0, th / 676, 0, 0);
+      try { dg.translate(12, 12); TicketArt.paint(dg, 1000, 652, false); } catch (e) { dg.fillStyle = '#e8c45a'; dg.fillRect(0, 0, 1024, 676); }
+      dt = new THREE.CanvasTexture(dc); dt.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(dt, THREE); dt.anisotropy = 8;
+    }
     const dm = new THREE.MeshStandardMaterial({ map: dt, transparent: true, alphaTest: 0.5, roughness: 0.4, metalness: 0.35, emissiveMap: dt, emissive: 0xffffff, emissiveIntensity: 0.18 });
     const dw = D - 0.05, dh = dw * 676 / 1024;
     for (const s of [1, -1]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(dw, dh), dm); m.name = 'kioskSideTicket'; m.rotation.y = s * Math.PI / 2; m.position.set(s * (W / 2 + 0.003), 0.98, 0); K.add(m); } }
   // front face art (sign, screen, card pad, bills / coins, keypad, chute) on one canvas
-  const fc = document.createElement('canvas'); fc.width = 512; fc.height = 1100; const fg = fc.getContext('2d');
-  const ftex = new THREE.CanvasTexture(fc); ftex.colorSpace = THREE.SRGBColorSpace; ftex.anisotropy = 4;
+  const [fw, fh] = posterWH(512, 1100);
+  const fc = document.createElement('canvas'); fc.width = fw; fc.height = fh; const fg = fc.getContext('2d');
+  const ftex = new THREE.CanvasTexture(fc); ftex.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(ftex, THREE); ftex.anisotropy = 4;
   const face = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.08, Hh - 0.16), new THREE.MeshStandardMaterial({ map: ftex, emissiveMap: ftex, emissive: 0xffffff, emissiveIntensity: 0.55, roughness: 0.45, metalness: 0.2 }));
   face.position.set(0, Hh / 2 + 0.06, D / 2 + 0.017); K.add(face);
   const PX = (W - 0.08) / 512;   // metres per canvas px; canvas y -> local y
   const ly = y => Hh / 2 + 0.06 + (Hh - 0.16) / 2 - y * (Hh - 0.16) / 1100;
   const S = { sel: -1, entry: '', msg: '' };
   function rr(x, y, w, h, r) { fg.beginPath(); fg.roundRect(x, y, w, h, r); }
-  function drawFace() { const g = fg; g.fillStyle = '#1c1d22'; g.fillRect(0, 0, 512, 1100);
+  function drawFace() { const g = fg; g.setTransform(fw / 512, 0, 0, fh / 1100, 0, 0); g.fillStyle = '#1c1d22'; g.fillRect(0, 0, 512, 1100);
     // sign
     rr(20, 16, 472, 104, 12); g.fillStyle = '#0b0b0d'; g.fill(); g.strokeStyle = '#c9a24a'; g.lineWidth = 4; g.stroke();
     try { TicketArt.monkey(g, 78, 68, 30); } catch (e) {}
@@ -77,7 +87,7 @@ export function setupKiosk({ room, camera, monkey, st, play, blockers }) {
   // ticket strip (two columns of gold monkey tickets) pouring from the chute into the tray
   const sc = document.createElement('canvas'); sc.width = 256; sc.height = 512; { const g = sc.getContext('2d');
     for (let r = 0; r < 6; r++) for (let c = 0; c < 2; c++) { g.save(); g.translate(c * 128 + 4, r * 85 + 2); try { TicketArt.paint(g, 120, 80, false); } catch (e) { g.fillStyle = '#e8c45a'; g.fillRect(0, 0, 120, 80); } g.restore(); } }
-  const stex = new THREE.CanvasTexture(sc); stex.colorSpace = THREE.SRGBColorSpace; stex.wrapT = THREE.RepeatWrapping;
+  const stex = new THREE.CanvasTexture(sc); stex.colorSpace = THREE.SRGBColorSpace; stex.wrapT = THREE.RepeatWrapping; finishCanvasTex(stex, THREE);
   const strip = new THREE.Group(); K.add(strip); strip.visible = false;
   const sm = new THREE.MeshStandardMaterial({ map: stex, emissiveMap: stex, emissive: 0xffffff, emissiveIntensity: 0.35, roughness: 0.6, side: THREE.DoubleSide });
   const hang = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 1), sm); hang.position.set(0, 0, 0); strip.add(hang);

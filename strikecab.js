@@ -1,11 +1,12 @@
 // STRIKE cabinet: detailed model + live attract-mode screen driven from a sandboxed, network-free copy of Strike.
 import * as THREE from 'three';
-import { cabWH, flagTex, capLoadedTexture, capCabSideTexture } from './tier.js';
+import { cabWH, flagTex, finishCanvasTex, capLoadedTexture, capCabSideTexture } from './tier.js';
+import { loadBakedPoster } from './texload.js';
 
 const MOBILE = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
 function tex(w, h, draw) {
   const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } draw(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return t;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(t, THREE); return t;
 }
 // ---------- painting helpers ----------
 function burst(g, x, y, r, a = 1) {
@@ -72,6 +73,8 @@ export function sideTexture(flip) {
   }); return capCabSideTexture(t, THREE);
 }
 export function marqueeTexture() {
+  const baked = loadBakedPoster(THREE, 'tex/marquee_strikeCabinet_1024x256.png');
+  if (baked) return baked;
   return tex(1024, 256, (g, w, h) => {
     spaceBg(g, w, h); stars(g, w, h, 120); streaks(g, w, h, 40, -0.1);
     burst(g, w * 0.5, h * 0.5, 260, 0.9); burst(g, w * 0.12, h * 0.55, 110); burst(g, w * 0.9, h * 0.4, 120);
@@ -118,7 +121,7 @@ export function makeScreenView(drawAttract) {
   if (drawAttract) drawAttract(c.getContext('2d'), c.width, c.height);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.NoColorSpace;
   t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = false;
-  flagTex(t, THREE); return { canvas: c, texture: t };
+  finishCanvasTex(t, THREE); return { canvas: c, texture: t };
 }
 function strikeAttract(g, w, h) {
   spaceBg(g, w, h); stars(g, w, h, 80); streaks(g, w, h, 18, -0.4);

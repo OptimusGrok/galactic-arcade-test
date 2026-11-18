@@ -35,7 +35,7 @@ import { setupOpts } from './opts.js';
 import { setupTeleport, WX } from './teleport.js';
 import { lavaPaths, PATH_HW } from './lavapaths.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { detectTier, probeGPU, qualityForTier, persistTier, installContextLossHandler, memSnapshot, ensureLostOverlay, isSoftwareGL, capLoadedTexture, cabWH, flagTex, tierQuality } from './tier.js';
+import { detectTier, probeGPU, qualityForTier, persistTier, installContextLossHandler, memSnapshot, ensureLostOverlay, isSoftwareGL, capLoadedTexture, cabWH, flagTex, finishCanvasTex, tierQuality } from './tier.js';
 
 const MOBILE = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches);
 // t767u: iPad (incl. iPadOS 'desktop' Safari = MacIntel + multi-touch) plays as held: no landscape lock, no 'turn sideways' hint
@@ -93,8 +93,9 @@ const C = { pink: 0xff2bd6, mag: 0xff1fa8, cyan: 0x22d8ff, purple: 0x9b4dff, amb
 function canvasTex(w, h, draw, rep) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   draw(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); }
+  finishCanvasTex(t, THREE);
   return t;
 }
 const hexTex = canvasTex(TIER.name === 'low' ? 256 : 512, TIER.name === 'low' ? 256 : 512, (g, w, h) => {
@@ -189,8 +190,17 @@ function setWalls(mode) {
   if (md && !stoneTex) { stoneTex = stoneWallTex(THREE, renderer); stoneTex.repeat.set(4, +(H / 6).toFixed(3)); }   // t773u: plain stone, no stained-glass windows
   if (r2Ready) { const b = room2.getObjectByName('wallBandCyan'); if (b) b.visible = wallsMode === 'current'; }   // room 2's cloned bands follow room 1's
   if (r2Ready) { const hw0 = hall.getObjectByName('hallWallW'), hm = hw0.userData.mat0 || hw0.material; if (!hm.userData.map0) hm.userData.map0 = hm.map;
-    if (md && !hm.userData.stone) { hm.userData.stone = stoneTex.clone(); hm.userData.stone.repeat.set(+(HALL_L / 6).toFixed(3), +(DOOR_H / 6).toFixed(3)); hm.userData.stone.needsUpdate = true; }
-    hm.map = md ? hm.userData.stone : hm.userData.map0; hm.emissiveMap = md ? hm.userData.stone : null; hm.color.setHex(md ? 0x8a8078 : 0x2a1840); hm.emissive.setHex(md ? 0xffffff : 0); hm.emissiveIntensity = md ? 0.55 : 1; hm.roughness = md ? 0.95 : 0.85; hm.needsUpdate = true; }
+    // t930u: share the 1024 stone texture (do not clone / re-upload). Hall repeat is baked into UVs while medieval is on.
+    const hallGeo = hw0.geometry;
+    if (!hallGeo.userData.uv0) hallGeo.userData.uv0 = hallGeo.attributes.uv.array.slice();
+    const uv = hallGeo.attributes.uv, src = hallGeo.userData.uv0;
+    if (md && stoneTex) {
+      const su = (HALL_L / 6) / stoneTex.repeat.x, sv = (DOOR_H / 6) / stoneTex.repeat.y;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, src[i * 2] * su, src[i * 2 + 1] * sv);
+      uv.needsUpdate = true;
+      hm.userData.stone = stoneTex;
+    } else { uv.array.set(src); uv.needsUpdate = true; }
+    hm.map = md ? stoneTex : hm.userData.map0; hm.emissiveMap = md ? hm.userData.stone : null; hm.color.setHex(md ? 0x8a8078 : 0x2a1840); hm.emissive.setHex(md ? 0xffffff : 0); hm.emissiveIntensity = md ? 0.55 : 1; hm.roughness = md ? 0.95 : 0.85; hm.needsUpdate = true; }
   if (v && !vikTex) { vikTex = loadPicture(THREE, 'tex/viking_walls.jpg', { onLoad: t => { if (spaceWin) spaceWin.dirty(); }, wrapS: THREE.RepeatWrapping, wrapT: THREE.ClampToEdgeWrapping });
     vikTex.repeat.set(+(2 * HALF / (H * 928 / 576)).toFixed(3), 1); flagTex(vikTex, THREE); }   // one repeat = wall height
   wallMat.map = v ? vikTex : md ? stoneTex : wallTex; wallMat.color.setHex(v ? 0x8a7a70 : md ? 0x8a8078 : 0x2a1840); wallMat.roughness = v || md ? 0.95 : 0.85; wallMat.emissiveMap = v ? vikTex : md ? stoneTex : null; wallMat.emissive.setHex(v || md ? 0xffffff : 0x000000); wallMat.emissiveIntensity = v ? 1.6 : md ? 0.55 : 1; wallBands.forEach(m => { m.visible = !v && !po && !md }); wallMat.needsUpdate = true;   // a little dark so the neon pops

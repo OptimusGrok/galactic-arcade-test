@@ -5,13 +5,13 @@
 // (the station's standard edge glow); the body itself is matte black metal.
 // Local frame: origin = platform centre on the floor, +z = the front (the side you walk up to), the screen stands at -z.
 import * as THREE from 'three';
-import { bindStreamGpu, cabWH, flagTex, capLoadedTexture } from './tier.js';
+import { bindStreamGpu, cabWH, flagTex, finishCanvasTex, capLoadedTexture } from './tier.js';
 import { loadPicture } from './texload.js';
 export const DS = { R: 2.05, TOP: 0.32, SCR_Z: -2.5 };
 const black = (r = 0.45, m = 0.6) => new THREE.MeshStandardMaterial({ color: 0x111116, roughness: r, metalness: m });
 const glow = (hex, k) => new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(k * 0.62), fog: false });   // t782u: dimmer LEDs, matching the rest of the arcade neon
 function canvasTex(w, h, draw, rep) { const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } draw(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (rep) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = rep; } return t; }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; if (rep) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = rep; } finishCanvasTex(t, THREE); return t; }
 function signTex() {
   return canvasTex(1024, 300, (g, w, h) => {
     g.clearRect(0, 0, w, h); g.font = '900 150px "Arial Black", Arial, sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'left';

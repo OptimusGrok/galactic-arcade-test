@@ -42,6 +42,10 @@ export function initTexLoader(renderer, THREE) {
 
 export function texReady() { return whenPicturesIdle(); }
 export function ktxSupported() { return _ktxOk; }
+export function loadBakedPoster(THREE, url, opt = {}) {
+  if (!_ktxOk || !ktx2For(url)) return null;
+  return loadPicture(THREE, url, Object.assign({ mips: false }, opt));
+}
 export function ktxLoader() { return _ktx; }
 
 function isReady(t) {

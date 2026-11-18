@@ -1,3 +1,4 @@
+import { finishCanvasTex } from './tier.js';
 // LEVEL 2 doors: closed riveted steel double doors across the hallway opening at room 1.
 // Frame front face is flush with room 1's north interior wall (the z passed in, world z = -HALF).
 // The slab extends into the hallway (negative z) and overlaps both side walls, so the opening is
@@ -17,7 +18,7 @@ export function setupLevel2Door({ THREE, parent, mergeGeometries, x = 0, z, widt
   g.fillStyle = '#111'; g.fillRect(0, 128, 256, 128); g.fillStyle = '#f5c400';
   for (let i = -8; i < 16; i++) { g.beginPath(); g.moveTo(i * 32, 256); g.lineTo(i * 32 + 16, 256); g.lineTo(i * 32 + 16 + 128, 128); g.lineTo(i * 32 + 128, 128); g.fill(); }
   g.fillStyle = '#04223a'; g.fillRect(256, 128, 256, 128); g.fillStyle = '#5cc8ff'; g.font = 'bold 30px monospace'; g.textAlign = 'center'; g.fillText('LEVEL 2', 384, 165); g.font = 'bold 22px monospace'; g.fillText('ACCESS LOCKED', 384, 200); g.fillText('[ * * * * ]', 384, 232);
-  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(tex, THREE); tex.anisotropy = 4;
   const uvRect = (geo, u0, v0, u1, v1) => { const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, u0 + uv.getX(i) * (u1 - u0), v0 + uv.getY(i) * (v1 - v0)); return geo; };
   // ---- materials ----
   const steel = new THREE.MeshStandardMaterial({ color: 0xa9b2bd, metalness: 0.75, roughness: 0.38, emissive: 0x1c2026 });

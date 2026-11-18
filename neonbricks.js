@@ -9,7 +9,7 @@
 // v216: bigger/closer score panel with a live high score; line-clear beam + sound; Level 2 door opens after 3 tetrises in one game;
 // the playfield frame and the panel neon change colour every 30 s, always different colours from each other (t826u).
 // t827u: pinch-to-zoom anywhere while playing (two-finger pinch in/out, clamped; single-touch controls stay the same).
-import { tierQuality, flagTex } from './tier.js';
+import { tierQuality, flagTex, finishCanvasTex } from './tier.js';
 export function setupNeonBricks({ THREE, room, HALF, getMonkey, st, canStart, onState }) {
 const HI_KEY = 'neonarcade.neonbricks.hi';
 const TETRIS_LINES = 4;          // a tetris. 5 lines at once is impossible with standard tetrominoes (the I piece spans at most 4).
@@ -127,7 +127,7 @@ const put = (m, i, x, y, col) => { M4.makeTranslation(x, VIS - 1 - (y - HID), 0)
 // ---- score / level panel in the right-hand window section ----
 let msg = '', msgT = 0;
 const qNb = tierQuality(); const pc = document.createElement('canvas'); pc.width = qNb.nbW || 512; pc.height = qNb.nbH || 640; const px = pc.getContext('2d');
-const ptex = new THREE.CanvasTexture(pc); ptex.colorSpace = THREE.SRGBColorSpace; flagTex(ptex, THREE);
+const ptex = new THREE.CanvasTexture(pc); ptex.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(ptex, THREE);
 const panel = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 5.25), new THREE.MeshBasicMaterial({ map: ptex, transparent: true, depthWrite: false, fog: false }));
 panel.name = 'nbPanel'; panel.position.set(HALF - 0.55, 4.15, 5.15); panel.rotation.y = -Math.PI / 2; panel.renderOrder = 3; room.add(panel);
 let panelKey = '';

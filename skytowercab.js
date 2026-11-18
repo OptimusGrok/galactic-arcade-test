@@ -4,13 +4,14 @@
 // attract loop (platforms, jetpack, Lego aliens, INSERT CREDIT). visit.on hides INSERT CREDIT
 // while Grok is playing.
 import * as THREE from 'three';
-import { cabWH, flagTex, capLoadedTexture } from './tier.js';
+import { cabWH, flagTex, finishCanvasTex, capLoadedTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos } from './strikecab.js';
+import { loadBakedPoster } from './texload.js';
 
 const canvasTex = (w, h, paint) => {
   const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; }
   paint(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return t;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(t, THREE); return t;
 };
 
 function brickFill(g, x, y, w, h, col) {
@@ -195,7 +196,7 @@ export function buildSkyTowerCabinet() {
     }
   }
   add(mergeGeos(tm), new THREE.MeshPhysicalMaterial({ color: 0xf5cd2f, roughness: 0.3, metalness: 0.35, clearcoat: 0.6 }), 'trim');
-  const mq = canvasTex(512, 128, paintMarquee);
+  const mq = loadBakedPoster(THREE, 'tex/marquee_skyTowerCabinet_512x128.png') || canvasTex(512, 128, paintMarquee);
   add(segPlane(SPROFILE[7], SPROFILE[8], SW - 0.06, 0.004, 0.86), new THREE.MeshStandardMaterial({ map: mq, emissive: 0xffffff, emissiveMap: mq, emissiveIntensity: 0.65, roughness: 0.3 }), 'marquee');
   add(segPlane(SPROFILE[5], SPROFILE[6], SW - 0.04, 0.003), new THREE.MeshStandardMaterial({ color: 0x081018, roughness: 0.35, metalness: 0.3 }), 'bezel');
   const sf = segFrame(SPROFILE[5], SPROFILE[6]), sh = sf.L * 0.84, sw = Math.min(SW - 0.14, sh * 16 / 9);

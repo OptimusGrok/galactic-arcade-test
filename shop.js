@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
-import { bindStreamGpu, capLoadedTexture, flagTex, skipMips, tierQuality } from './tier.js';
+import { bindStreamGpu, capLoadedTexture, flagTex, finishCanvasTex, skipMips, tierQuality } from './tier.js';
 import { setupChessTable } from './chesstable.js';   // Dave via Arcade: chess table + chairs between the ACCESSORIES island and the pool tables
 
 let api_sky = null;
@@ -45,7 +45,7 @@ export function buildGrokClerk() {
     }
     const c = document.createElement('canvas'); c.width = ww; c.height = hh; const g = c.getContext('2d');
     if (ww !== w || hh !== h) { g.scale(ww / w, hh / h); draw(g, w, h); } else draw(g, ww, hh);
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return { t, c, g };
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(t, THREE); return { t, c, g };
   };
   const grok = new THREE.Group(); grok.name = 'grokClerk';
   // t639u look, cheaper path: Lambert (not Standard) + low-poly + merged per limb/material; castShadow off
@@ -140,7 +140,7 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
     }
     const c = document.createElement('canvas'); c.width = ww; c.height = hh; const g = c.getContext('2d');
     if (ww !== w || hh !== h) { g.scale(ww / w, hh / h); draw(g, w, h); } else draw(g, ww, hh);
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return { t, c, g };
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(t, THREE); return { t, c, g };
   };
 
   // ---------- plush / toy builders (local origin = bottom centre, facing +z) ----------
@@ -514,7 +514,7 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
   // pool-play/index.html (a same-origin copy of https://optimusgrok.github.io/pool/) full-screen in an iframe overlay with a ✕. Free for now.
   const PX = 12.1, PZ = 6.0, PZ2 = 10.9, PLW = 0.78, PLL = 1.42, PTY = 0.82;   // table centre (shop-local), felt half-width (x) / half-length (z), felt height
   const pool = new THREE.Group(); pool.name = 'poolTable'; pool.position.set(PX, 0, PZ); G.add(pool);
-  { const tex = (w, h, f) => { const c = document.createElement('canvas'); c.width = w; c.height = h; f(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return t; };
+  { const tex = (w, h, f) => { const c = document.createElement('canvas'); c.width = w; c.height = h; f(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(t, THREE); return t; };
     const woodT = tex(512, 64, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#5a2c12'); gr.addColorStop(1, '#3e1c0a'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
       for (let i = 0; i < 70; i++) { g.strokeStyle = `rgba(${20 + Math.random() * 40 | 0},${8 + Math.random() * 12 | 0},0,${0.15 + Math.random() * 0.3})`; g.lineWidth = 0.5 + Math.random() * 1.5; g.beginPath(); let y = Math.random() * h; g.moveTo(0, y); for (let x = 0; x <= w; x += 32) { y += (Math.random() - 0.5) * 2; g.lineTo(x, y); } g.stroke(); } });
     const feltT = tex(128, 128, (g, w, h) => { g.fillStyle = '#17734a'; g.fillRect(0, 0, w, h); const id = g.getImageData(0, 0, w, h), d = id.data; for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - 0.5) * 22; d[i] += n * 0.5; d[i + 1] += n; d[i + 2] += n * 0.6; } g.putImageData(id, 0, 0); });
@@ -735,7 +735,7 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), new THREE.MeshBasicMaterial({ map: sgT.t, transparent: true, depthWrite: false, toneMapped: false })); sign.position.set(0.1, 3.2, 0.08); sign.name = 'wardrobeSign'; wd.add(sign);
   }
   // ---------- CHESS TABLE (chesstable.js): table + 2 chairs between the wardrobe island and the pool tables; borrows this Grok to sit opposite ----------
-  const chess = setupChessTable({ THREE, mergeGeometries, flagTex, G, WXp, grok: _gk, home: { x: QX - 0.15, z: QZ + 0.1, yaw: GYAW }, st: st || (window.__arcade && window.__arcade.st), camera: camera || (window.__arcade && window.__arcade.camera), getMonkey,
+  const chess = setupChessTable({ THREE, mergeGeometries, flagTex: finishCanvasTex, G, WXp, grok: _gk, home: { x: QX - 0.15, z: QZ + 0.1, yaw: GYAW }, st: st || (window.__arcade && window.__arcade.st), camera: camera || (window.__arcade && window.__arcade.camera), getMonkey,
     clearKeys: () => { const k = window.__arcade && window.__arcade.keys; if (k) for (const c in k) k[c] = false; } });
   window.__chess = chess;
   // ---------- bounds + obstacles ----------

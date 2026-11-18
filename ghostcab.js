@@ -1,12 +1,13 @@
 // GHOST 256 cabinet: model (no neon, plain plum trim) + live attract-mode screen from a sandboxed copy of Ghost 256.
 import * as THREE from 'three';
-import { cabWH, flagTex, capLoadedTexture, capCabSideTexture } from './tier.js';
+import { cabWH, flagTex, finishCanvasTex, capLoadedTexture, capCabSideTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos, CRT, cabScreenSize, blitCover, makeScreenView } from './strikecab.js';
+import { loadBakedPoster } from './texload.js';
 
 const MOBILE = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
 function tex(w, h, draw, nearest) {
   const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } const g = c.getContext('2d'); g.imageSmoothingEnabled = false; draw(g, w, h);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); if (nearest) t.magFilter = THREE.NearestFilter; return t;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(t, THREE); if (nearest) t.magFilter = THREE.NearestFilter; return t;
 }
 const GHOST = ['....####....', '..########..', '.##########.', '###WW###WW##', '##WWPP##WWPP', '##WWPP##WWPP', '###WW###WW##', '############', '############', '############', '##.###..###.##'.slice(1, 13), '#...##..##...#'.slice(1, 13)];
 function ghost(g, x, y, px, col) {
@@ -32,6 +33,8 @@ export function ghostSideTexture(flip) {
   }, true); capCabSideTexture(t, THREE); return t;
 }
 export function ghostMarqueeTexture() {
+  const baked = loadBakedPoster(THREE, 'tex/marquee_ghostCabinet_512x160.png');
+  if (baked) return baked;
   return tex(512, 160, (g, w, h) => {
     g.fillStyle = '#0d0a14'; g.fillRect(0, 0, w, h); glitch(g, w, h, 0, 40);
     g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(0, 0, w, h);

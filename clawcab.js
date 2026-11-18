@@ -3,14 +3,15 @@
 // edges glow (thin neon tubes on the corner posts and the top/bottom rims). Glass box with a gantry, a 3-prong claw and a pile of plush
 // inside; a '1 TICKET' price plate on the front (Dave: it costs 1 ticket). tick(t): the claw wanders slowly and bobs (attract).
 import * as THREE from 'three';
-import { cabWH, flagTex, capLoadedTexture } from './tier.js';
+import { cabWH, flagTex, finishCanvasTex, capLoadedTexture } from './tier.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { loadBakedPoster } from './texload.js';
 // health fix: bake a static group into one mesh per material (same look, far fewer draw calls)
 function bake(grp) { grp.updateMatrixWorld(true); const inv = new THREE.Matrix4().copy(grp.matrixWorld).invert(), by = new Map();
   grp.traverse(o => { if (!o.isMesh) return; const gm = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone(); gm.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld)); for (const k of Object.keys(gm.attributes)) if (!/^(position|normal|uv)$/.test(k)) gm.deleteAttribute(k); (by.get(o.material) || by.set(o.material, []).get(o.material)).push(gm); });
   grp.userData.baked = grp.children.length; const keep = [...grp.children]; keep.forEach(c => grp.remove(c)); for (const [mat, gs] of by) { const m = new THREE.Mesh(mergeGeometries(gs), mat); grp.add(m); gs.forEach(x => x.dispose()); } return grp; }
 export const CLAW = { W: 1.40, D: 1.00, BASE_H: 0.82, GLASS_H: 0.92, TOP_H: 0.30 };
-const canvasTex = (w, h, paint) => { const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } paint(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return t; };
+const canvasTex = (w, h, paint) => { const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } paint(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(t, THREE); return t; };
 export function buildClawCabinet() {
   const { W, D, BASE_H, GLASS_H, TOP_H } = CLAW, g = new THREE.Group(); g.name = 'clawCabinet';
   const add = (geo, mat, name, p) => { const m = new THREE.Mesh(geo, mat); m.name = name; if (p) m.position.set(...p); g.add(m); return m; };
@@ -54,7 +55,7 @@ export function buildClawCabinet() {
     c.font = '900 84px Arial Black, Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.shadowColor = '#ffb020'; c.shadowBlur = 18; c.fillStyle = '#ffe14a'; c.fillText('1 TICKET', w / 2, h / 2 + 4); });
   add(new THREE.PlaneGeometry(0.62, 0.194), new THREE.MeshStandardMaterial({ map: price, emissive: 0xffffff, emissiveMap: price, emissiveIntensity: 0.8, roughness: 0.4 }), 'priceTag', [0.2, BASE_H - 0.2, D / 2 + 0.003]);
   add(new THREE.PlaneGeometry(0.34, 0.26), new THREE.MeshStandardMaterial({ color: 0x1a0a2a, roughness: 0.5, metalness: 0.3 }), 'prizeDoor', [-W / 2 + 0.24, BASE_H - 0.3, D / 2 + 0.003]);
-  const marq = canvasTex(1024, 220, (c, w, h) => { const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#2a0f4f'); gr.addColorStop(1, '#14062a'); c.fillStyle = gr; c.fillRect(0, 0, w, h);
+  const marq = loadBakedPoster(THREE, 'tex/marquee_clawCabinet_1024x220.png') || canvasTex(1024, 220, (c, w, h) => { const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#2a0f4f'); gr.addColorStop(1, '#14062a'); c.fillStyle = gr; c.fillRect(0, 0, w, h);
     c.font = '900 120px system-ui, Arial Black, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.shadowColor = '#ff2bd6'; c.shadowBlur = 30; c.fillStyle = '#ff4fe0'; c.fillText('CLAW MACHINE', w / 2, h / 2 + 6); });
   add(new THREE.PlaneGeometry(W - 0.08, TOP_H - 0.06), new THREE.MeshStandardMaterial({ map: marq, emissive: 0xffffff, emissiveMap: marq, emissiveIntensity: 0.9, roughness: 0.3 }), 'marquee', [0, y1 + TOP_H / 2, D / 2 + 0.003]);
   // neon edge glow only (corner verticals, top + bottom rims): one merged tube set
