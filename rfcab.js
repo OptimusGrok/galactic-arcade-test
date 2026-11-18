@@ -5,11 +5,11 @@
 // two buttons matching the mockup; coin door with two red slots. Screen: a silent attract loop until the arcade
 // zooms into the real game.
 import * as THREE from 'three';
-import { cabWH, flagTex, capLoadedTexture, capCabSideTexture } from './tier.js';
+import { cabWH, flagTex, finishCanvasTex, capLoadedTexture, capCabSideTexture } from './tier.js';
 import { SPROFILE, SW, segFrame, segPlane, bar, sideGeo, mergeGeos } from './strikecab.js';
 import { loadPicture } from './texload.js';
 const load = (url, flip) => loadPicture(THREE, url, { side: /_side\./.test(url) });
-const canvasTex = (w, h, paint) => { const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } paint(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return t; };
+const canvasTex = (w, h, paint) => { const c = document.createElement('canvas'); { const sz = cabWH(w, h); c.width = sz[0]; c.height = sz[1]; w = c.width; h = c.height; } paint(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(t, THREE); return t; };
 const COL = { Y: '#e8c030', y: '#f8d848', S: '#f0b088', B: '#3a4cc8', b: '#5a70f0', K: '#101010', R: '#6a3a18', D: '#5a3012', W: '#f4f4f4' };
 const MINER = ['...YYYY...', '..YYYYYY..', '..YYYYYY..', '..SSSSSS..', '..SKSSKS..', '..SSSSSS..', '..BBBBBB..', '.B.BBBB.B.', '...BBBB...', '...KK.KK..', '..RR...RR.', '..........'];
 const px = (g, rows, x, y, s) => rows.forEach((r, j) => { for (let i = 0; i < r.length; i++) if (COL[r[i]]) { g.fillStyle = COL[r[i]]; g.fillRect(x + i * s, y + j * s, s, s); } });

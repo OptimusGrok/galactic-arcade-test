@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
-import { bindStreamGpu, capLoadedTexture, flagTex, skipMips, tierQuality } from './tier.js';
+import { bindStreamGpu, capLoadedTexture, flagTex, finishCanvasTex, skipMips, tierQuality } from './tier.js';
 import { setupChessTable } from './chesstable.js';   // Dave via Arcade: chess table + chairs between the ACCESSORIES island and the pool tables
 
 let api_sky = null;
@@ -45,7 +45,7 @@ export function buildGrokClerk() {
     }
     const c = document.createElement('canvas'); c.width = ww; c.height = hh; const g = c.getContext('2d');
     if (ww !== w || hh !== h) { g.scale(ww / w, hh / h); draw(g, w, h); } else draw(g, ww, hh);
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return { t, c, g };
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(t, THREE); return { t, c, g };
   };
   const grok = new THREE.Group(); grok.name = 'grokClerk';
   // t639u look, cheaper path: Lambert (not Standard) + low-poly + merged per limb/material; castShadow off
@@ -140,7 +140,7 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
     }
     const c = document.createElement('canvas'); c.width = ww; c.height = hh; const g = c.getContext('2d');
     if (ww !== w || hh !== h) { g.scale(ww / w, hh / h); draw(g, w, h); } else draw(g, ww, hh);
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return { t, c, g };
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(t, THREE); return { t, c, g };
   };
 
   // ---------- plush / toy builders (local origin = bottom centre, facing +z) ----------
@@ -466,13 +466,14 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
   const counterMat = new THREE.MeshStandardMaterial({ color: 0x0e1638, roughness: 0.35, emissive: 0x060a20 });   // shared with the wardrobe island
   add([ring(RO, RI, 1.0).translate(QX, 0.04, QZ)], counterMat, 'checkoutCounter');
   add([ring(RO + 0.08, RI - 0.05, 0.06).translate(QX, 1.04, QZ)], new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2, emissive: 0xb0b4bc }), 'checkoutTop');
-  { const AL = A1 - A0, CW = 2048, CHh = 256, ft = canvasTex(CW, CHh, (g, w, h) => { g.fillStyle = '#0e1638'; g.fillRect(0, 0, w, h);
+  { const AL = A1 - A0, ss = Math.max(0.5, tierQuality().shopLab || 1), CW = Math.round(2048 * ss), CHh = Math.round(256 * ss);
+    const ft = canvasTex(CW, CHh, (g, w, h) => { g.setTransform(w / 2048, 0, 0, h / 256, 0, 0); g.fillStyle = '#0e1638'; g.fillRect(0, 0, 2048, 256);
       const neon = (c, blur, lw, fn) => { g.save(); g.strokeStyle = c; g.shadowColor = c; g.shadowBlur = blur; g.lineWidth = lw; g.lineCap = 'round'; g.beginPath(); fn(); g.stroke(); g.restore(); };
-      for (const [y, c] of [[10, '#40f0ff'], [22, '#c04dff'], [h - 22, '#c04dff'], [h - 10, '#40f0ff']]) for (let k = 0; k < 2; k++) neon(c, 18, 6, () => { g.moveTo(0, y); g.lineTo(w, y); });
-      for (const x of [140, 300, w - 300, w - 140]) for (let k = 0; k < 2; k++) neon(x % 2 ? '#c04dff' : '#40f0ff', 14, 4, () => { g.moveTo(x, 44); g.lineTo(x, h - 44); });
-      const bw = 820, bx = (w - bw) / 2; for (let k = 0; k < 2; k++) neon('#b04dff', 22, 7, () => g.roundRect(bx, 50, bw, h - 100, 40));
+      for (const [y, c] of [[10, '#40f0ff'], [22, '#c04dff'], [256 - 22, '#c04dff'], [256 - 10, '#40f0ff']]) for (let k = 0; k < 2; k++) neon(c, 18, 6, () => { g.moveTo(0, y); g.lineTo(2048, y); });
+      for (const x of [140, 300, 2048 - 300, 2048 - 140]) for (let k = 0; k < 2; k++) neon(x % 2 ? '#c04dff' : '#40f0ff', 14, 4, () => { g.moveTo(x, 44); g.lineTo(x, 256 - 44); });
+      const bw = 820, bx = (2048 - bw) / 2; for (let k = 0; k < 2; k++) neon('#b04dff', 22, 7, () => g.roundRect(bx, 50, bw, 256 - 100, 40));
       g.font = '900 120px Arial Rounded MT Bold, Arial Black, Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.save(); g.shadowColor = '#40f0ff'; g.shadowBlur = 30; g.lineWidth = 12; g.strokeStyle = '#40e8ff'; g.strokeText('GROK SHOP', w / 2, h / 2 + 4); g.shadowBlur = 0; g.lineWidth = 4; g.strokeStyle = '#e8ffff'; g.strokeText('GROK SHOP', w / 2, h / 2 + 4); g.restore(); });
+      g.save(); g.shadowColor = '#40f0ff'; g.shadowBlur = 30; g.lineWidth = 12; g.strokeStyle = '#40e8ff'; g.strokeText('GROK SHOP', 1024, 128 + 4); g.shadowBlur = 0; g.lineWidth = 4; g.strokeStyle = '#e8ffff'; g.strokeText('GROK SHOP', 1024, 128 + 4); g.restore(); });
     const fg = new THREE.CylinderGeometry(RO + 0.006, RO + 0.006, 0.98, 48, 1, true, A0 + Math.PI / 2, AL).translate(QX, 0.53, QZ);
     add([fg], new THREE.MeshBasicMaterial({ map: ft.t, toneMapped: false }), 'grokShopSign');
     const mg2 = canvasTex(128, 128, (g) => { const r = g.createRadialGradient(64, 64, 34, 64, 64, 64); r.addColorStop(0, 'rgba(190,70,255,0)'); r.addColorStop(0.6, 'rgba(190,70,255,.7)'); r.addColorStop(1, 'rgba(190,70,255,0)'); g.fillStyle = r; g.fillRect(0, 0, 128, 128); });
@@ -513,7 +514,7 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
   // pool-play/index.html (a same-origin copy of https://optimusgrok.github.io/pool/) full-screen in an iframe overlay with a ✕. Free for now.
   const PX = 12.1, PZ = 6.0, PZ2 = 10.9, PLW = 0.78, PLL = 1.42, PTY = 0.82;   // table centre (shop-local), felt half-width (x) / half-length (z), felt height
   const pool = new THREE.Group(); pool.name = 'poolTable'; pool.position.set(PX, 0, PZ); G.add(pool);
-  { const tex = (w, h, f) => { const c = document.createElement('canvas'); c.width = w; c.height = h; f(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE); return t; };
+  { const tex = (w, h, f) => { const c = document.createElement('canvas'); c.width = w; c.height = h; f(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; finishCanvasTex(t, THREE); return t; };
     const woodT = tex(512, 64, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#5a2c12'); gr.addColorStop(1, '#3e1c0a'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
       for (let i = 0; i < 70; i++) { g.strokeStyle = `rgba(${20 + Math.random() * 40 | 0},${8 + Math.random() * 12 | 0},0,${0.15 + Math.random() * 0.3})`; g.lineWidth = 0.5 + Math.random() * 1.5; g.beginPath(); let y = Math.random() * h; g.moveTo(0, y); for (let x = 0; x <= w; x += 32) { y += (Math.random() - 0.5) * 2; g.lineTo(x, y); } g.stroke(); } });
     const feltT = tex(128, 128, (g, w, h) => { g.fillStyle = '#17734a'; g.fillRect(0, 0, w, h); const id = g.getImageData(0, 0, w, h), d = id.data; for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - 0.5) * 22; d[i] += n * 0.5; d[i + 1] += n; d[i + 2] += n * 0.6; } g.putImageData(id, 0, 0); });
@@ -734,7 +735,7 @@ export function setupShop({ scene, tp, play, monkey, camera, st } = {}) {
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), new THREE.MeshBasicMaterial({ map: sgT.t, transparent: true, depthWrite: false, toneMapped: false })); sign.position.set(0.1, 3.2, 0.08); sign.name = 'wardrobeSign'; wd.add(sign);
   }
   // ---------- CHESS TABLE (chesstable.js): table + 2 chairs between the wardrobe island and the pool tables; borrows this Grok to sit opposite ----------
-  const chess = setupChessTable({ THREE, mergeGeometries, flagTex, G, WXp, grok: _gk, home: { x: QX - 0.15, z: QZ + 0.1, yaw: GYAW }, st: st || (window.__arcade && window.__arcade.st), camera: camera || (window.__arcade && window.__arcade.camera), getMonkey,
+  const chess = setupChessTable({ THREE, mergeGeometries, flagTex: finishCanvasTex, G, WXp, grok: _gk, home: { x: QX - 0.15, z: QZ + 0.1, yaw: GYAW }, st: st || (window.__arcade && window.__arcade.st), camera: camera || (window.__arcade && window.__arcade.camera), getMonkey,
     clearKeys: () => { const k = window.__arcade && window.__arcade.keys; if (k) for (const c in k) k[c] = false; } });
   window.__chess = chess;
   // ---------- bounds + obstacles ----------

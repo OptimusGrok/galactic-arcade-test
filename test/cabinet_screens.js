@@ -5,7 +5,7 @@ const { open } = require('./lib');
 const fs = require('fs'), path = require('path');
 const SHOT = process.env.CAB_SHOT || '';
 (async () => {
-  const o = await open({ phone: true, w: 844, h: 390 }), page = o.page; page.setDefaultTimeout(60000);
+  const o = await open({ grokVisit: true, phone: true, w: 844, h: 390 }), page = o.page; page.setDefaultTimeout(60000);
   let ok = true; const chk = (c, m, x) => { console.log((c ? 'PASS ' : 'FAIL ') + m + (x !== undefined ? ' ' + JSON.stringify(x).slice(0, 700) : '')); if (!c) ok = false; };
   await page.addInitScript(() => { const M = new WeakMap(); window.__cvT = c => [...(M.get(c) || [])]; window.__cvReset = c => M.delete(c);
     for (const k of ['fillText', 'strokeText']) { const f = CanvasRenderingContext2D.prototype[k]; CanvasRenderingContext2D.prototype[k] = function (t, ...a) { let s = M.get(this.canvas); if (!s) M.set(this.canvas, s = new Set()); if (s.size < 80) s.add(String(t)); return f.call(this, t, ...a); }; } });

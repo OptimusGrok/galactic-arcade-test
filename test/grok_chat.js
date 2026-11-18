@@ -15,7 +15,7 @@ const QS = [
 ];
 async function run(phone) {
   const tag = phone ? 'phone' : 'desktop';
-  const o = phone ? await open({ phone: true, w: 844, h: 390 }) : await open({ w: 960, h: 600 });
+  const o = phone ? await open({ grokVisit: true, phone: true, w: 844, h: 390 }) : await open({ grokVisit: true, w: 960, h: 600 });
   const page = o.page;
   await page.waitForFunction(() => window.__shop && window.__grokVisit && window.__grokVisit.ready && window.__grokChat, null, { timeout: 90000 });
   await page.evaluate(() => { const s = document.getElementById('start'); if (s) s.remove(); if (window.__start) window.__start.dismissed = true; });

@@ -2,11 +2,13 @@
 const { open, play } = require('./lib');
 const SH = process.env.NOSHOTS ? 0 : 1;
 const PH = process.argv[2] === 'phone';
-(async () => { const { page, errors, close } = await open({ phone: PH, start: true }); await page.waitForTimeout(4000); await play(page, PH, 'Astro'); await page.evaluate(() => { localStorage.setItem('neonarcade.tickets', '50'); window.__neonSync && window.__neonSync(); }); let ok = true; const chk = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) ok = false; };
+(async () => { const { page, errors, close } = await open({ phone: PH, start: true, supa: r => r.fulfill({ status: 200, contentType: 'application/json', body: 'true' }) }); await page.waitForTimeout(4000); await play(page, PH, 'Astro'); await page.evaluate(() => { localStorage.setItem('neonarcade.tickets', '50'); window.__neonSync && window.__neonSync(); });
+  await page.waitForFunction(() => { const A = window.__arcade, t = A && A.wallMat && A.wallMat.map; if (!t) return false; const img = t.image, w = (img && (img.width || (t.mipmaps && t.mipmaps[0] && t.mipmaps[0].width))) || 0; return w >= 1024 || !!(t.isCompressedTexture && t._gaReady && w >= 1024); }, null, { timeout: 20000 }).catch(() => {}); let ok = true; const chk = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) ok = false; };
   const r = await page.evaluate(() => { const A = window.__arcade; const w = A.setWalls('medieval'), f = A.setFloor('cobble'); const g = A.room.getObjectByName('gothicWindows');
-    return { w, f, map: A.wallMat.map && A.wallMat.map.image.tagName, g: !g, n: 0, shelf: (() => { let k = 0; [A.room, A.room2].forEach(R => R.traverse(o => { if (/^ledge|gothic/.test(o.name)) k++; })); return k; })(), ls: [localStorage.getItem('neonarcade.walls'), localStorage.getItem('neonarcade.floor')],
+    const map = A.wallMat.map, img = map && map.image, tw = (img && (img.width || (map.mipmaps && map.mipmaps[0] && map.mipmaps[0].width))) || 0;
+    return { w, f, map: map && (map.isCompressedTexture ? 'KTX2' : (img && img.tagName)), tw, g: !g, n: 0, shelf: (() => { let k = 0; [A.room, A.room2].forEach(R => R.traverse(o => { if (/^ledge|gothic/.test(o.name)) k++; })); return k; })(), ls: [localStorage.getItem('neonarcade.walls'), localStorage.getItem('neonarcade.floor')],
       bands: ['Cyan'].every(n => !A.room.getObjectByName('wallBand' + n).visible), tiles: !!window.__startUI.opt.querySelector('[data-walls="medieval"]') && !!window.__startUI.opt.querySelector('[data-floor="cobble"]'), carpet: A.carpet.visible }; });
-  chk(r.w === 'medieval' && r.f === 'cobble' && r.map === 'CANVAS' && r.g && r.shelf === 0 && r.ls[0] === 'medieval' && r.ls[1] === 'cobble' && r.bands && r.tiles && r.carpet, 'MEDIEVAL walls (t773u: plain stone, no stained-glass windows, no wall shelf) + COBBLE floor applied, saved, tiles present ' + JSON.stringify(r));
+  chk(r.w === 'medieval' && r.f === 'cobble' && (r.map === 'KTX2' || r.map === 'CANVAS') && r.tw === 1024 && r.g && r.shelf === 0 && r.ls[0] === 'medieval' && r.ls[1] === 'cobble' && r.bands && r.tiles && r.carpet, 'MEDIEVAL walls (t773u: plain stone, no stained-glass windows, no wall shelf) + COBBLE floor applied, saved, tiles present ' + JSON.stringify(r));
   const shot = async (pos, at, f, wait = 3000) => { await page.evaluate(([p, a]) => { window.__camOverride = { pos: p, at: a }; }, [pos, at]); await page.waitForTimeout(wait); if (SH) await page.screenshot({ path: f }); };
   const s = PH ? '_phone' : '';
   await shot([6, 2.2, 9], [-6, 3.5, -12], `shots/medieval_wide${s}.png`, 4000);
@@ -14,8 +16,9 @@ const PH = process.argv[2] === 'phone';
   await shot([0, 2.5, 6], [0, 4, -12], `shots/medieval_north${s}.png`);
   await shot([0, 2.0, 2], [0, 0, -2.5], `shots/medieval_floor${s}.png`);
   const r2 = await page.evaluate(() => { const A = window.__arcade, R = A.room2, hm = A.hall.getObjectByName('hallWallW').material;
-    return { walls: [0, 1, 2, 3].map(i => { const w = R.getObjectByName('wall' + i); return !!w && w.material === A.wallMat && A.wallMat.map.image.width === 1024; }), win: !R.getObjectByName('gothicWindows2'),
-      dup: R.children.filter(c => c.name === 'gothicWindows').length, bands: ['Cyan'].every(n => !R.getObjectByName('wallBand' + n).visible), hall: hm.map === hm.userData.stone && !!hm.userData.stone }; });
+    const map = A.wallMat.map, img = map && map.image, tw = (img && (img.width || (map.mipmaps && map.mipmaps[0] && map.mipmaps[0].width))) || 0;
+    return { walls: [0, 1, 2, 3].map(i => { const w = R.getObjectByName('wall' + i); return !!w && w.material === A.wallMat && tw === 1024; }), win: !R.getObjectByName('gothicWindows2'),
+      dup: R.children.filter(c => c.name === 'gothicWindows').length, bands: ['Cyan'].every(n => !R.getObjectByName('wallBand' + n).visible), hall: hm.map === hm.userData.stone && hm.map === A.wallMat.map && !!hm.userData.stone, shared: hm.map === A.wallMat.map }; });
   chk(r2.walls.every(Boolean) && r2.win && r2.dup === 0 && r2.bands && r2.hall, 'room 2 + hallway: stone walls, no gothic windows, no neon bands ' + JSON.stringify(r2));
   await page.evaluate(() => { const A = window.__arcade; A.monkey.position.set(0, 0, A.Z2 + 6); });
   await shot([4, 2.5, -29 + 9], [-4, 4.2, -29 - 10], `shots/medieval_room2${s}.png`, 5000);

@@ -8,7 +8,7 @@ const PH = process.argv[2] === 'phone', sfx = PH ? '_phone' : '';
   let ok = true; const chk = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) ok = false; };
   const ev = (f, a) => page.evaluate(f, a);
   const tapEl = async sel => { const b = await page.locator(sel).boundingBox(); if (!b) throw new Error('no box for ' + sel); const x = b.x + b.width / 2, y = b.y + b.height / 2; if (PH) await page.touchscreen.tap(x, y); else await page.mouse.click(x, y); await page.waitForTimeout(400); };
-  const M = () => ev(() => { const m = window.__music; return { loaded: m.loaded, on: m.on, target: +m.target.toFixed(3), gain: +m.gain.toFixed(3), ls: m.loopStart, le: m.loopEnd, len: m.len, src: m.src, pos: m.pos(), err: m.err }; });
+  const M = () => ev(() => { const m = window.__music; return { loaded: m.loaded, on: m.on, target: +m.target.toFixed(3), gain: +m.gain.toFixed(3), ls: m.loopStart, le: m.loopEnd, len: m.len, sr: m.sr || 0, ch: m.ch || 0, src: m.src, pos: m.pos(), err: m.err }; });
   const at = z => ev(z => { const A = window.__arcade; A.st.vel.set(0, 0, 0); A.monkey.position.set(0, 0, z); }, z);
   await page.waitForTimeout(1000);
   await ev(() => { localStorage.setItem('neonarcade.vikingTickets', '2'); localStorage.setItem('neonarcade.tickets', '7'); });
@@ -17,7 +17,8 @@ const PH = process.argv[2] === 'phone', sfx = PH ? '_phone' : '';
   await page.waitForFunction(() => window.__pa && window.__pa.playing, null, { timeout: 10000 }).catch(() => {}); await page.waitForFunction(() => !(window.__pa && window.__pa.playing), null, { timeout: 60000 }).catch(() => {});   // the PA welcome ducks music x0.3 while it plays
   await ev(() => window.__neonSync && window.__neonSync()); await at(4); await page.waitForTimeout(2500); m = await M();
   chk(m.loaded && m.target > 0.3 && m.gain > 0.15, 'music starts after START in room 1 ' + JSON.stringify(m));
-  chk(Math.abs(m.le - m.ls - 3225600 / 44100) < 1e-6 && m.len >= 3225600 * 0.99, 'exact 32-bar loop points ' + (m.le - m.ls).toFixed(6) + ' s, decoded ' + m.len + ' samples, ' + m.src);
+  const LOOP = 1612800 / 22050; // 73.142857 s, 32 bars @ 105 BPM (t930u mono 22.05 kHz)
+  chk(Math.abs(m.le - m.ls - LOOP) < 1e-6 && m.len >= LOOP * (m.sr || 22050) * 0.99 && m.ch === 1, 'exact 32-bar loop points ' + (m.le - m.ls).toFixed(6) + ' s, decoded ' + m.len + ' samples x ' + m.ch + 'ch @ ' + m.sr + ' Hz, ' + m.src);
   // loop wraps: jump the context clock offset so position passes the loop end
   await ev(() => { const m = window.__music; m.t0 -= (m.loopEnd - m.loopStart) - m.pos() - 0.5; });   // 0.5 s before the loop end await page.waitForTimeout(1200); m = await M(); chk(m.pos < 5 && m.target > 0.3, 'position wraps past the loop end (pos ' + m.pos.toFixed(2) + ' s)');
   await at(-16); await page.waitForTimeout(1500); m = await M(); chk(m.target > 0.3 && m.gain > 0.15, 't244: keeps playing down the hallway ' + JSON.stringify([m.target, m.gain]));

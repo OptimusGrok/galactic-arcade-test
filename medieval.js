@@ -1,10 +1,25 @@
 import { tierQuality, flagTex, cabWH } from './tier.js';
+import { loadPicture, ktx2For, ktxSupported } from './texload.js';
 // t230 MEDIEVAL walls (Dave: 'Add a medieval cobblestone floor and walls with goth windows'):
 // castle stone-block wall texture (canvas, procedural). t773u: the gothic stained-glass windows were removed (plain stone walls).
 //
 const rnd = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(230);
 
 export function stoneWallTex(THREE, renderer) {
+  const apply = t => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    flagTex(t, THREE);
+    t.anisotropy = Math.min((tierQuality().aniso || 1), renderer.capabilities.getMaxAnisotropy());
+    return t;
+  };
+  // t930u: prefer the baked KTX2 (ASTC, with mips). Fallback paints the same procedural canvas.
+  if (ktxSupported() && ktx2For('tex/stone_wall.png') && (tierQuality().stone || 1024) >= 512) {
+    const t = loadPicture(THREE, 'tex/stone_wall.png', {
+      wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping,
+      onLoad: tex => { apply(tex); try { renderer.initTexture(tex); } catch (e) {} }
+    });
+    return apply(t);
+  }
   const _st = (tierQuality().stone || 1024); const W = _st, Hh = _st, c = document.createElement('canvas'); c.width = W; c.height = Hh; const x = c.getContext('2d', { willReadFrequently: true });
   x.fillStyle = '#2a2522'; x.fillRect(0, 0, W, Hh);                                   // mortar
   const rows = 12, rh = Hh / rows;
@@ -23,5 +38,5 @@ export function stoneWallTex(THREE, renderer) {
   for (let k = 0; k < 40; k++) { const px = rnd() * W, py = rnd() * Hh; x.strokeStyle = 'rgba(10,8,6,0.5)'; x.lineWidth = 1.2; x.beginPath(); x.moveTo(px, py);
     for (let j = 0; j < 4; j++) x.lineTo(px + (rnd() - 0.5) * 40, py + rnd() * 30 * (j + 1)); x.stroke(); }
   for (let k = 0; k < 60; k++) { x.fillStyle = `rgba(40,70,30,${0.05 + rnd() * 0.08})`; x.beginPath(); x.ellipse(rnd() * W, rnd() * Hh, 8 + rnd() * 30, 4 + rnd() * 10, 0, 0, 7); x.fill(); }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; flagTex(t, THREE); t.anisotropy = Math.min((tierQuality().aniso || 1), renderer.capabilities.getMaxAnisotropy()); return t;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return apply(t);
 }

@@ -7,7 +7,7 @@ let ok = true;
 const chk = (c, m, x) => { console.log((c ? 'PASS ' : 'FAIL ') + m + (x !== undefined ? ' ' + JSON.stringify(x).slice(0, 700) : '')); if (!c) ok = false; };
 
 (async () => {
-  const o = await open({ phone: true, w: 390, h: 844 });
+  const o = await open({ grokVisit: true, phone: true, w: 390, h: 844 });
   const page = o.page, { errors } = o;
   await page.evaluate(() => { localStorage.setItem('neonarcade.tickets', '40'); });
   await page.reload();

@@ -35,7 +35,7 @@ import { setupOpts } from './opts.js';
 import { setupTeleport, WX } from './teleport.js';
 import { lavaPaths, PATH_HW } from './lavapaths.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { detectTier, probeGPU, qualityForTier, persistTier, installContextLossHandler, memSnapshot, ensureLostOverlay, isSoftwareGL, capLoadedTexture, cabWH, flagTex, tierQuality } from './tier.js';
+import { detectTier, probeGPU, qualityForTier, persistTier, installContextLossHandler, memSnapshot, ensureLostOverlay, isSoftwareGL, capLoadedTexture, cabWH, flagTex, finishCanvasTex, tierQuality } from './tier.js';
 
 const MOBILE = matchMedia('(pointer:coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0 && matchMedia('(hover: none)').matches);
 // t767u: iPad (incl. iPadOS 'desktop' Safari = MacIntel + multi-touch) plays as held: no landscape lock, no 'turn sideways' hint
@@ -93,8 +93,9 @@ const C = { pink: 0xff2bd6, mag: 0xff1fa8, cyan: 0x22d8ff, purple: 0x9b4dff, amb
 function canvasTex(w, h, draw, rep) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   draw(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; flagTex(t, THREE);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); }
+  finishCanvasTex(t, THREE);
   return t;
 }
 const hexTex = canvasTex(TIER.name === 'low' ? 256 : 512, TIER.name === 'low' ? 256 : 512, (g, w, h) => {
@@ -189,8 +190,17 @@ function setWalls(mode) {
   if (md && !stoneTex) { stoneTex = stoneWallTex(THREE, renderer); stoneTex.repeat.set(4, +(H / 6).toFixed(3)); }   // t773u: plain stone, no stained-glass windows
   if (r2Ready) { const b = room2.getObjectByName('wallBandCyan'); if (b) b.visible = wallsMode === 'current'; }   // room 2's cloned bands follow room 1's
   if (r2Ready) { const hw0 = hall.getObjectByName('hallWallW'), hm = hw0.userData.mat0 || hw0.material; if (!hm.userData.map0) hm.userData.map0 = hm.map;
-    if (md && !hm.userData.stone) { hm.userData.stone = stoneTex.clone(); hm.userData.stone.repeat.set(+(HALL_L / 6).toFixed(3), +(DOOR_H / 6).toFixed(3)); hm.userData.stone.needsUpdate = true; }
-    hm.map = md ? hm.userData.stone : hm.userData.map0; hm.emissiveMap = md ? hm.userData.stone : null; hm.color.setHex(md ? 0x8a8078 : 0x2a1840); hm.emissive.setHex(md ? 0xffffff : 0); hm.emissiveIntensity = md ? 0.55 : 1; hm.roughness = md ? 0.95 : 0.85; hm.needsUpdate = true; }
+    // t930u: share the 1024 stone texture (do not clone / re-upload). Hall repeat is baked into UVs while medieval is on.
+    const hallGeo = hw0.geometry;
+    if (!hallGeo.userData.uv0) hallGeo.userData.uv0 = hallGeo.attributes.uv.array.slice();
+    const uv = hallGeo.attributes.uv, src = hallGeo.userData.uv0;
+    if (md && stoneTex) {
+      const su = (HALL_L / 6) / stoneTex.repeat.x, sv = (DOOR_H / 6) / stoneTex.repeat.y;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, src[i * 2] * su, src[i * 2 + 1] * sv);
+      uv.needsUpdate = true;
+      hm.userData.stone = stoneTex;
+    } else { uv.array.set(src); uv.needsUpdate = true; }
+    hm.map = md ? stoneTex : hm.userData.map0; hm.emissiveMap = md ? hm.userData.stone : null; hm.color.setHex(md ? 0x8a8078 : 0x2a1840); hm.emissive.setHex(md ? 0xffffff : 0); hm.emissiveIntensity = md ? 0.55 : 1; hm.roughness = md ? 0.95 : 0.85; hm.needsUpdate = true; }
   if (v && !vikTex) { vikTex = loadPicture(THREE, 'tex/viking_walls.jpg', { onLoad: t => { if (spaceWin) spaceWin.dirty(); }, wrapS: THREE.RepeatWrapping, wrapT: THREE.ClampToEdgeWrapping });
     vikTex.repeat.set(+(2 * HALF / (H * 928 / 576)).toFixed(3), 1); flagTex(vikTex, THREE); }   // one repeat = wall height
   wallMat.map = v ? vikTex : md ? stoneTex : wallTex; wallMat.color.setHex(v ? 0x8a7a70 : md ? 0x8a8078 : 0x2a1840); wallMat.roughness = v || md ? 0.95 : 0.85; wallMat.emissiveMap = v ? vikTex : md ? stoneTex : null; wallMat.emissive.setHex(v || md ? 0xffffff : 0x000000); wallMat.emissiveIntensity = v ? 1.6 : md ? 0.55 : 1; wallBands.forEach(m => { m.visible = !v && !po && !md }); wallMat.needsUpdate = true;   // a little dark so the neon pops
@@ -1906,12 +1916,27 @@ function setRoom2Gpu(on) {
   STREAM.room2 = on ? 'on' : 'off';
 }
 let _shopGpuGen = 0;
+// t930u: the mini-golf room stays hidden until the camera nears the stairwell, so its ~200
+// geometries were first uploaded mid-session (looked like a parent-renderer leak). Compile them
+// (and the rest of the visible scene) once, the first time the shop GPU is bound.
+function warmHiddenGpu() {
+  if (warmHiddenGpu.done) return;
+  warmHiddenGpu.done = true;
+  const flipped = [], culled = [];
+  // compile() only links programs; geometries increment on first render, and only if they pass the frustum test.
+  // Unhide + un-cull for this one frame so later-shown rooms (golf basement, Grok visitor, ticket FX, …) are already uploaded.
+  try { scene.traverse(o => { if (o.visible === false) { flipped.push(o); o.visible = true; } if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; } }); } catch (e) {}
+  try { if (composer && usePost) composer.render(); else renderer.render(scene, camera); }
+  catch (e) { try { renderer.render(scene, camera); } catch (e2) {} }
+  for (const o of culled) o.frustumCulled = true;
+  for (const o of flipped) o.visible = false;
+}
 function setShopGpu(on) {
   on = !!on;
   const gen = ++_shopGpuGen;
   if (on) {
     const p = loadShop();
-    const apply = () => { if (gen !== _shopGpuGen) return; try { if (shop && shop.gpu) shop.gpu.set(true); } catch (e) {} STREAM.shop = (shop && shop.gpu && shop.gpu.on) ? 'on' : 'off'; };
+    const apply = () => { if (gen !== _shopGpuGen) return; try { if (shop && shop.gpu) shop.gpu.set(true); } catch (e) {} STREAM.shop = (shop && shop.gpu && shop.gpu.on) ? 'on' : 'off'; try { if (monkey.position.x > WX - 14) warmHiddenGpu(); } catch (e) {} };
     if (shop && shop.gpu) apply();
     else if (p && p.then) p.then(apply).catch(() => {});
   } else {
@@ -2262,7 +2287,7 @@ const opts = setupOpts({ play, kiosk, shield, st, monkey, setFloor, getFloor: ()
 requestAnimationFrame(frame);
 
 // hooks for tests / future art work
-window.__arcade = { powerSave: PS, tier: TIER, mem: () => memSnapshot({ THREE, renderer, scene, composer, extras: { tier: TIER.name, why: TIER.why, gpu: TIER.gpu, post: !!usePost, cabDemos: !!Q.cabDemos, gapAvg: stats.gapAvg, cpuAvg: stats.cpuAvg } }), setTier: name => { if (name !== 'low' && name !== 'mid' && name !== 'high') return TIER; TIER.name = name; TIER.forced = true; persistTier(name); applyQuality(); return TIER; }, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, floorMats, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, skyTowerCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, joyFrom, joyClear, joyFromPad, applyQuestPad, isQuestPad, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, get neonBricks() { return nb; }, nbFade: dt => nbFade(dt), get playerFade() { return PF.k; }, get pfClones() { return PF.clones; }, nbWarm: () => nbWarm(), get randomRoom() { return window.__randomRoom; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow), stream: STREAM };
+window.__arcade = { powerSave: PS, tier: TIER, mem: () => memSnapshot({ THREE, renderer, scene, composer, extras: { tier: TIER.name, why: TIER.why, gpu: TIER.gpu, post: !!usePost, cabDemos: !!Q.cabDemos, gapAvg: stats.gapAvg, cpuAvg: stats.cpuAvg } }), setTier: name => { if (name !== 'low' && name !== 'mid' && name !== 'high') return TIER; TIER.name = name; TIER.forced = true; persistTier(name); applyQuality(); return TIER; }, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, floorMats, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, skyTowerCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, joyFrom, joyClear, joyFromPad, applyQuestPad, isQuestPad, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, get neonBricks() { return nb; }, nbFade: dt => nbFade(dt), get playerFade() { return PF.k; }, get pfClones() { return PF.clones; }, nbWarm: () => nbWarm(), warmHiddenGpu: () => warmHiddenGpu(), get randomRoom() { return window.__randomRoom; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow), stream: STREAM };
 const mp = setupMP({ scene, camera, monkey, makeMonkey, makeAlien, st, play, getTp: () => tp, HALF, Z2, HALL_L, WX: 80 }); window.__arcade.mp = mp;   // multiplayer step 1: public room, 10 players
 // after the first room frames: pull in the shop, then the window scenery, off the critical path
 { const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 1500 }) : setTimeout(f, 200));

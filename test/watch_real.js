@@ -15,7 +15,7 @@ const CABS = [
   ['nova', 'novaCab'],
 ];
 (async () => {
-  const { page, close } = await open({ phone: true, w: 844, h: 390 });
+  const { page, close } = await open({ grokVisit: true, phone: true, w: 844, h: 390 });
   let ok = true; const chk = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) ok = false; };
   await page.waitForFunction(() => window.__shop && window.__grokVisit && window.__grokVisit.ready && window.__arcade && window.__arcade.play, null, { timeout: 90000 });
   await page.evaluate(() => { const s = document.getElementById('start'); if (s) s.remove(); if (window.__start) window.__start.dismissed = true; });

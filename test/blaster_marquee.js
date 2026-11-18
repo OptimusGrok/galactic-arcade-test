@@ -31,12 +31,22 @@ const DIR = process.env.SHOTDIR || '/workspace/ga-v255-shots';
     const ev = (f, a) => page.evaluate(f, a);
     const frames = async n => { const f0 = await ev(() => window.__arcade.stats.frames); await page.waitForFunction(([f, n]) => window.__arcade.stats.frames > f + n, [f0, n], { timeout: 60000 }).catch(() => {}); };
     await frames(6);
+    await page.waitForFunction(() => {
+      const mq = window.__arcade && window.__arcade.blasterCab && window.__arcade.blasterCab.getObjectByName('marquee');
+      const map = mq && mq.material && mq.material.map;
+      if (!map) return false;
+      if (map.isCompressedTexture) return !!(map.mipmaps && map.mipmaps[0] && (map.mipmaps[0].width || (map.mipmaps[0].data && map.mipmaps[0].data.byteLength)));
+      return !!(map.image && (map.image.width || (map.image.getContext)));
+    }, null, { timeout: 20000 }).catch(() => {});
     const info = await ev(() => {
       const A = window.__arcade, cab = A.blasterCab, mq = cab.getObjectByName('marquee');
       const map = mq && mq.material && mq.material.map, img = map && map.image;
-      const w = img && (img.width || 0), h = img && (img.height || 0);
+      const mip = map && map.mipmaps && map.mipmaps[0];
+      const w = (img && img.width) || (mip && mip.width) || 0, h = (img && img.height) || (mip && mip.height) || 0;
       let art = null;
-      if (img && img.getContext) {
+      if (map && map.isCompressedTexture) {
+        art = { w, h, ktx2: true, yellow: null, year: null };
+      } else if (img && img.getContext) {
         const g = img.getContext('2d'), d = g.getImageData(0, 0, w, h).data;
         let minX = w, minY = h, maxX = 0, maxY = 0, yMinX = w, yMinY = h, yMaxX = 0, yMaxY = 0, yCount = 0;
         // First pass: yellow pixel-letter cells (not stars).
@@ -64,7 +74,7 @@ const DIR = process.env.SHOTDIR || '/workspace/ga-v255-shots';
       return {
         ver: window.__GA_VER, tier: window.__gaTier && window.__gaTier.name,
         cabScale: window.__gaTier && window.__gaTier.quality && window.__gaTier.quality.cabScale,
-        hasMap: !!(map && img), src: !!(map && map.source && map.source.data), art
+        hasMap: !!(map && (img || (map.mipmaps && map.mipmaps[0]))), src: !!(map && map.source && map.source.data), kind: map && (map.isCompressedTexture ? 'KTX2' : (img && img.tagName)), art
       };
     });
     await frames(5);
@@ -76,8 +86,10 @@ const DIR = process.env.SHOTDIR || '/workspace/ga-v255-shots';
     }
     console.log(JSON.stringify(info));
     const a = info.art;
-    chk(info.hasMap && a && a.w > 0, tier + ': marquee is a canvas texture ' + JSON.stringify({ w: a && a.w, h: a && a.h, cabScale: info.cabScale, ver: info.ver }));
-    if (a && a.yellow && a.year) {
+    chk(info.hasMap && a && a.w > 0, tier + ': marquee has a texture ' + JSON.stringify({ kind: info.kind, w: a && a.w, h: a && a.h, cabScale: info.cabScale, ver: info.ver }));
+    if (a && a.ktx2) {
+      chk(a.w >= 256 && a.h >= 64, tier + ': baked KTX2 marquee has a usable size ' + JSON.stringify({ kind: info.kind, w: a.w, h: a.h }));
+    } else if (a && a.yellow && a.year) {
       const padX = a.w * 0.08, padY = a.h * 0.04;
       chk(a.yellow.minX >= padX && a.yellow.maxX <= a.w - padX, tier + ': BLASTER has side margin ' + JSON.stringify(a));
       chk(a.yellow.minY >= padY && a.yellow.maxY <= a.h - padY, tier + ': BLASTER has vertical margin ' + JSON.stringify(a));

@@ -22,6 +22,7 @@ async function open(opts = {}) {
   if (!opts.start) await page.addInitScript(() => { window.__skipStart = 1; });   // only test/start.js sees the start screen
   if (!opts.unloadWarn) await page.addInitScript(() => { window.__noUnloadWarn = 1; });   // tests reload freely; test/nosave.js checks the warning
   if (!opts.randomRoom) await page.addInitScript(() => { window.__noRandomRoom = 1; });   // t779u: the floor/walls shuffle every minute; only test/random_room.js wants it
+  if (!opts.grokVisit) await page.addInitScript(() => { window.__noGrokVisit = 1; });   // t930u: Grok's 30s tour must not fire mid-session (his first GPU upload looks like a leak)
   if (opts.shieldOpen) await page.addInitScript(() => { window.__sessSeed = Object.assign(window.__sessSeed || {}, { 'neonarcade.shieldOpen': '1' }); });   // hallway tests walk through the doorway
   await page.goto(process.env.GA_URL || `http://localhost:${srv.address().port}/index.html`, { timeout: 180000 });
   // t855u: a stale galactic-arcade-v* cache reloads once in the head script; waitForFunction dies with the old document

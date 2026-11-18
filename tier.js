@@ -61,12 +61,14 @@ export function detectTier(opt = {}) {
 export function qualityForTier(tier, { mobile = false, powerSave = false } = {}) {
   // t854u / v232: texMax = longest image edge after downsample; cabScale shrinks cabinet canvases;
   // mips off saves ~33% GPU memory; shopCell is the prize-atlas cell (atlas is 16x16 cells).
-  if (tier === 'low') return { dpr: 1, refl: 0, bloom: 0, post: false, samples: 0, mirrorSamples: 0, cabDemos: false, aniso: 1, fps: 30, warm: false, windowQ: 0.28, rtFloat: false, texMax: 384, cabScale: 0.5, mips: false, shopCell: 64, shopLab: 0.5, nbW: 256, nbH: 320, previewDpr: 1, stone: 256 };
-  if (tier === 'mid' && powerSave) return { dpr: 1.25, refl: 0.22, bloom: 0.28, post: true, samples: 0, mirrorSamples: 0, cabDemos: true, aniso: 2, fps: 30, warm: true, windowQ: 0.5, rtFloat: false, texMax: 640, cabScale: 0.75, mips: true, shopCell: 96, shopLab: 0.75, nbW: 384, nbH: 480, previewDpr: 1.25, stone: 512 };
-  if (tier === 'mid') return { dpr: 1.5, refl: 0.35, bloom: 0.5, post: true, samples: 0, mirrorSamples: 0, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false, texMax: 768, cabScale: 0.75, mips: true, shopCell: 96, shopLab: 0.75, nbW: 384, nbH: 480, previewDpr: 1.25, stone: 512 };
-  if (powerSave) return { dpr: mobile ? 1.25 : 1.5, refl: mobile ? 0.22 : 0.35, bloom: 0.28, post: true, samples: 0, mirrorSamples: 0, cabDemos: true, aniso: 4, fps: 30, warm: true, windowQ: 0.75, rtFloat: false, texMax: 768, cabScale: 0.85, mips: true, shopCell: 128, shopLab: 1, nbW: 512, nbH: 640, previewDpr: 1.25, stone: 512 };
-  if (mobile) return { dpr: 1.5, refl: 0.35, bloom: 0.5, post: true, samples: 2, mirrorSamples: 0, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false, texMax: 0, cabScale: 1, mips: true, shopCell: 128, shopLab: 1, nbW: 512, nbH: 640, previewDpr: 1.5, stone: 1024 };
-  return { dpr: 2, refl: 0.5, bloom: 0.5, post: true, samples: 2, mirrorSamples: 2, cabDemos: true, aniso: 8, fps: 60, warm: true, windowQ: 1, rtFloat: true, texMax: 0, cabScale: 1, mips: true, shopCell: 128, shopLab: 1, nbW: 512, nbH: 640, previewDpr: 1.5, stone: 1024 };
+  // t930u: high uses mid's shopCell/shopLab so the prize atlas and labels are not 2K-wide on desktop.
+  if (tier === 'low') return { dpr: 1, refl: 0, bloom: 0, post: false, samples: 0, mirrorSamples: 0, cabDemos: false, aniso: 1, fps: 30, warm: false, windowQ: 0.28, rtFloat: false, texMax: 384, cabScale: 0.5, mips: false, shopCell: 64, shopLab: 0.5, nbW: 256, nbH: 320, previewDpr: 1, stone: 256, posterScale: 0.5, posterMax: 384 };
+  if (tier === 'mid' && powerSave) return { dpr: 1.25, refl: 0.22, bloom: 0.28, post: true, samples: 0, mirrorSamples: 0, cabDemos: true, aniso: 2, fps: 30, warm: true, windowQ: 0.5, rtFloat: false, texMax: 640, cabScale: 0.75, mips: true, shopCell: 96, shopLab: 0.75, nbW: 384, nbH: 480, previewDpr: 1.25, stone: 512, posterScale: 0.75, posterMax: 768 };
+  if (tier === 'mid') return { dpr: 1.5, refl: 0.35, bloom: 0.5, post: true, samples: 0, mirrorSamples: 0, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false, texMax: 768, cabScale: 0.75, mips: true, shopCell: 96, shopLab: 0.75, nbW: 384, nbH: 480, previewDpr: 1.25, stone: 512, posterScale: 0.75, posterMax: 768 };
+  if (powerSave) return { dpr: mobile ? 1.25 : 1.5, refl: mobile ? 0.22 : 0.35, bloom: 0.28, post: true, samples: 0, mirrorSamples: 0, cabDemos: true, aniso: 4, fps: 30, warm: true, windowQ: 0.75, rtFloat: false, texMax: 768, cabScale: 0.85, mips: true, shopCell: 96, shopLab: 0.75, nbW: 512, nbH: 640, previewDpr: 1.25, stone: 512, posterScale: 0.75, posterMax: 768 };
+  if (mobile) return { dpr: 1.5, refl: 0.35, bloom: 0.5, post: true, samples: 2, mirrorSamples: 0, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false, texMax: 0, cabScale: 1, mips: true, shopCell: 96, shopLab: 0.75, nbW: 512, nbH: 640, previewDpr: 1.5, stone: 1024, posterScale: 0.75, posterMax: 768 };
+  // t930u: 8-bit post targets on high (same as mid/mobile). Bloom is already half-res (Q.bloom 0.5); MSAA 2 stays.
+  return { dpr: 2, refl: 0.5, bloom: 0.5, post: true, samples: 2, mirrorSamples: 2, cabDemos: true, aniso: 8, fps: 60, warm: true, windowQ: 1, rtFloat: false, texMax: 0, cabScale: 1, mips: true, shopCell: 96, shopLab: 0.75, nbW: 512, nbH: 640, previewDpr: 1.5, stone: 1024, posterScale: 0.75, posterMax: 768 };
 }
 
 export function tierQuality() {
@@ -108,6 +110,29 @@ export function skipMips(t, THREE) {
     t.minFilter = near ? THREE.NearestFilter : THREE.LinearFilter;
   }
   return t;
+}
+
+// After wrapS/wrapT are set: tiling maps keep mipmaps; non-tiling posters skip them (saves ~1/3 GPU).
+// A RepeatWrapping used only to flip (repeat.x < 0) is treated as a poster.
+export function finishCanvasTex(t, THREE) {
+  if (!t) return t;
+  flagTex(t, THREE);
+  const rx = (t.repeat && t.repeat.x) || 1, ry = (t.repeat && t.repeat.y) || 1;
+  const flipOnly = rx < 0 || ry < 0;
+  const tiles = !flipOnly && THREE && (
+    (t.wrapS === THREE.RepeatWrapping && t.wrapT === THREE.RepeatWrapping) ||
+    (t.wrapS === THREE.RepeatWrapping && Math.abs(rx) > 1.01) ||
+    (t.wrapT === THREE.RepeatWrapping && Math.abs(ry) > 1.01)
+  );
+  if (!tiles) skipMips(t, THREE);
+  return t;
+}
+
+// High uses mid's poster budget so room posters (kiosk tickets, painted marquees) are not full-res RGBA.
+export function posterWH(w, h) {
+  const q = tierQuality();
+  const scale = q.posterScale == null ? 1 : q.posterScale;
+  return scaleWH(w, h, scale, q.posterMax || 0);
 }
 
 // Downsample a loaded image texture to quality.texMax (or opt.max) and apply mip/aniso flags.

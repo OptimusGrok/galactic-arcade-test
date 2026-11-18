@@ -275,7 +275,7 @@ export function setupPlay(A) {
     if (m.prep) { P.mode = 'prep'; P.t = 0; P.t0 = performance.now(); P.pcam = null; P.cam0 = camera.position.clone(); P.look0 = monkey.position.clone().setY(1.25); m.anim('on', 0); }   // walk-up + headset on first, then zoomIn()
     else zoomIn(m);
     if (P.frame) killFrame(P.frame); P.frame = null;
-    const f = P.frame = document.createElement('iframe'); f.id = 'game'; const ver = window.__GA_VER || 'v255'; const tier = (window.__arcade && window.__arcade.tier && window.__arcade.tier.name) || ''; f.src = m.src + (m.src.indexOf('?') >= 0 ? '&' : '?') + 'ga=' + ver + (tier ? '&tier=' + encodeURIComponent(tier) : ''); f.allow = 'autoplay; fullscreen'; f.title = m.cab.name;
+    const f = P.frame = document.createElement('iframe'); f.id = 'game'; const ver = window.__GA_VER || 'v256'; const tier = (window.__arcade && window.__arcade.tier && window.__arcade.tier.name) || ''; f.src = m.src + (m.src.indexOf('?') >= 0 ? '&' : '?') + 'ga=' + ver + (tier ? '&tier=' + encodeURIComponent(tier) : ''); f.allow = 'autoplay; fullscreen'; f.title = m.cab.name;
     f.addEventListener('load', () => { if (P.frame !== f) return; P.loaded = true; try { f.contentWindow.addEventListener('keydown', ev => { if (TV.open) { ev.stopImmediatePropagation(); ev.preventDefault(); if (ev.code === 'Escape') closeView(); return; } if (ev.code === 'Escape') { ev.stopImmediatePropagation(); ev.preventDefault(); exit('esc'); return; } if (P.sub === 'demo') { ev.stopImmediatePropagation(); ev.preventDefault(); if (/^(Enter|Space|KeyE)$/.test(ev.code) && !ev.repeat) tryPlay(); } }, true); } catch (e) {} }, { once: true });
     P.loaded = false; document.body.appendChild(f);
   }
@@ -284,7 +284,8 @@ export function setupPlay(A) {
     P.target = e.c; P.end = e.p; curve = new THREE.CatmullRomCurve3([camera.position.clone(), head, mid, e.p]); look0.copy(m.post ? e.c : head); look1.copy(e.c); }
   function launch() {
     const f = P.frame, m = P.cur; P.mode = 'game'; document.body.dataset.cab = m ? m.key : ''; P.over = false; P.goShown = false; clearTimeout(P.holdT); P.holdT = 0; P.scene = null;
-    const go = () => { P.sub = 'demo'; try { idle(m, f.contentWindow); } catch (e) { console.warn('demo start', e); } demoRefresh(); demoUI.classList.add('on'); f.classList.add('on'); bExit.style.display = 'block'; f.focus(); try { f.contentWindow.focus(); } catch (e) {}
+    const go = () => { if (P.frame !== f || P.mode !== 'game') return;   // t930u: a late load after exit must not re-pause the arcade or start poll
+      P.sub = 'demo'; try { idle(m, f.contentWindow); } catch (e) { console.warn('demo start', e); } demoRefresh(); demoUI.classList.add('on'); f.classList.add('on'); bExit.style.display = 'block'; f.focus(); try { f.contentWindow.focus(); } catch (e) {}
       A.pause(true); P.poll = setInterval(poll, 200); showTix(); };
     if (P.loaded) go(); else f.addEventListener('load', go, { once: true });
   }
@@ -301,7 +302,7 @@ export function setupPlay(A) {
   function exit(why) {
     // t854u / v236: also cancel a slow prep / zoom-in (Roadster step-in, Dead Signal headset) so a mid-tween close isn't a no-op
     if (P.mode !== 'game' && P.mode !== 'prep' && P.mode !== 'zoomIn') return; clearInterval(P.poll); clearTimeout(P.holdT); P.holdT = 0; over.style.display = 'none'; hideContinue();
-    P.lastExit = why; P.sub = null; demoUI.classList.remove('on'); P.mode = 'zoomOut'; P.t = 0; P.t0 = performance.now(); bExit.style.display = 'none'; document.body.dataset.cab = '';
+    P.lastExit = why; P.sub = null; P.scene = null; P.loaded = false; demoUI.classList.remove('on'); P.mode = 'zoomOut'; P.t = 0; P.t0 = performance.now(); bExit.style.display = 'none'; document.body.dataset.cab = '';
     const f = P.frame; P.frame = null; if (f) f.classList.remove('on');
     try { if (TV.open) closeView(); } catch (e) {}
     killFrame(f);
