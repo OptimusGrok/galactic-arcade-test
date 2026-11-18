@@ -67,8 +67,8 @@ export function qualityForTier(tier, { mobile = false, powerSave = false } = {})
   if (tier === 'mid') return { dpr: 1.5, refl: 0.35, bloom: 0.5, post: true, samples: 0, mirrorSamples: 0, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false, texMax: 768, cabScale: 0.75, mips: true, shopCell: 96, shopLab: 0.75, nbW: 384, nbH: 480, previewDpr: 1.25, stone: 512, posterScale: 0.75, posterMax: 768 };
   if (powerSave) return { dpr: mobile ? 1.25 : 1.5, refl: mobile ? 0.22 : 0.35, bloom: 0.28, post: true, samples: 0, mirrorSamples: 0, cabDemos: true, aniso: 4, fps: 30, warm: true, windowQ: 0.75, rtFloat: false, texMax: 768, cabScale: 0.85, mips: true, shopCell: 96, shopLab: 0.75, nbW: 512, nbH: 640, previewDpr: 1.25, stone: 512, posterScale: 0.75, posterMax: 768 };
   if (mobile) return { dpr: 1.5, refl: 0.35, bloom: 0.5, post: true, samples: 2, mirrorSamples: 0, cabDemos: true, aniso: 4, fps: 60, warm: true, windowQ: 0.75, rtFloat: false, texMax: 0, cabScale: 1, mips: true, shopCell: 96, shopLab: 0.75, nbW: 512, nbH: 640, previewDpr: 1.5, stone: 1024, posterScale: 0.75, posterMax: 768 };
-  // t930u: 8-bit post targets on high (same as mid/mobile). Bloom is already half-res (Q.bloom 0.5); MSAA 2 stays.
-  return { dpr: 2, refl: 0.5, bloom: 0.5, post: true, samples: 2, mirrorSamples: 2, cabDemos: true, aniso: 8, fps: 60, warm: true, windowQ: 1, rtFloat: false, texMax: 0, cabScale: 1, mips: true, shopCell: 96, shopLab: 0.75, nbW: 512, nbH: 640, previewDpr: 1.5, stone: 1024, posterScale: 0.75, posterMax: 768 };
+  // v259: half-float composer targets on high desktop again. 8-bit post (test-v9 / 1a9fabe) clips HDR bloom and washes bright shop / neon colours to white. Mid and mobile stay 8-bit.
+  return { dpr: 2, refl: 0.5, bloom: 0.5, post: true, samples: 2, mirrorSamples: 2, cabDemos: true, aniso: 8, fps: 60, warm: true, windowQ: 1, rtFloat: true, texMax: 0, cabScale: 1, mips: true, shopCell: 96, shopLab: 0.75, nbW: 512, nbH: 640, previewDpr: 1.5, stone: 1024, posterScale: 0.75, posterMax: 768 };
 }
 
 export function tierQuality() {

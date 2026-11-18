@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head>
 <link rel="preload" as="image" href="img/start.webp" type="image/webp" fetchpriority="high">
-<script>window.__GA_VER="v258";</script>
+<script>window.__GA_VER="v259";</script>
 <script>/* t921u: test-v3 warmup left cabinet number badges visible. A tap on NUMBERS: OFF then wrote '1'.
    One-time clear (keyed for v253) so nobody stays stuck ON unless they choose it again. Default remains off. */
 (function(){try{if(!localStorage.getItem('neonarcade.dev.v253numReset')){localStorage.setItem('neonarcade.dev.v253numReset','1');localStorage.removeItem('neonarcade.dev.numbers');}}catch(e){}})();
@@ -9,7 +9,7 @@
 <script>/* t855u / v233: if an older galactic-arcade-v* cache is still on this phone, clear it and reload ONCE
    before the start screen is interactive — never mid-session (v228 did this 6s after the room started drawing). */
 (function(){if(!('caches'in window)||location.protocol==='file:')return;
-  var want='galactic-arcade-v258',key='gaReloaded.'+want,skip=false;
+  var want='galactic-arcade-v259',key='gaReloaded.'+want,skip=false;
   try{skip=!!sessionStorage.getItem(key);}catch(e){skip=true;}
   window.__gaUpdate={want:want,checked:!!skip,reloading:false};
   if(skip)return;
@@ -44,6 +44,10 @@ html,body{margin:0;height:100%;background:#07040c;overflow:hidden;touch-action:n
 canvas{display:block;width:100vw;height:100vh;height:100dvh;outline:none}
 #ui{position:fixed;top:max(8px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));display:flex;gap:6px;z-index:26}
 #ui button{width:30px;height:30px;border-radius:7px;border:1px solid #ff2bd666;background:#0a0612aa;color:#ff8ce8;font:600 13px system-ui;padding:0;opacity:.55}
+#ui button#bFs{display:flex;align-items:center;justify-content:center;opacity:.9}
+#bFs .fsI{width:12px;height:12px;border:2px solid currentColor;border-radius:1px;box-sizing:border-box;position:relative}
+#bFs.min .fsI{width:8px;height:8px;margin:0 2px 2px 0}
+#bFs.min .fsI:after{content:"";position:absolute;right:-5px;top:-5px;width:8px;height:8px;border:2px solid currentColor;border-left:0;border-bottom:0;box-sizing:border-box}
 #bUse,#bPick{position:fixed;left:50%;top:58%;transform:translate(-50%,-50%) scale(.85);z-index:6;font:900 clamp(24px,5.5vw,40px)/1 'Courier New',monospace;letter-spacing:.12em;color:#fff;padding:16px 38px 14px;border-radius:14px;border:3px solid #ffb000;background:linear-gradient(#2a1a04ee,#120a02ee);text-shadow:0 0 10px #ffb000;box-shadow:0 0 18px #ffb00088;opacity:0;pointer-events:none;transition:opacity .3s,transform .3s;cursor:pointer}
 #bUse.on,#bPick.on{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
 #bPick{top:66%;border-color:#3cff7a;text-shadow:0 0 10px #3cff7a;box-shadow:0 0 18px #3cff7a88}
@@ -433,7 +437,7 @@ function wdBtnInit() {
 wdBtnInit();
 if (document.getElementById('flBtn')) flBtnInit(); else document.addEventListener('DOMContentLoaded', flBtnInit);
 </script>
-<div id="ui"><button id="bView" title="First / third person (V)">V</button><button id="bFs" title="Fullscreen">⛶</button><button id="bOpt" title="Options"><canvas></canvas></button></div>
+<div id="ui"><button id="bView" title="First / third person (V)">V</button><button id="bFs" type="button" title="Fullscreen" aria-label="Fullscreen"><span class="fsI" aria-hidden="true"></span></button><button id="bOpt" title="Options"><canvas></canvas></button></div>
 <div id="homeQ" aria-hidden="true"><div id="homeP"><div id="homeT">BACK TO START SCREEN?</div><div id="homeN"></div><div id="homeB"><button class="stB" id="homeYes">YES</button><button class="stB" id="homeNo">NO</button></div></div></div>
 <div id="playUI"><button id="bPlay">PLAY</button><div id="credit">CREDIT 1</div><div id="hint">ENTER / E / SPACE</div></div>
 <div id="demoUI"><div id="dTag">DEMO</div><div id="dInsert">INSERT CREDIT</div><div id="dCredit">CREDIT 0</div><div id="dCost" style="display:none"></div><button id="bRejoin" type="button">REJOIN<small>5 TICKETS</small></button><button id="bTicket">INSERT TICKET · 1 🎟</button></div><button id="bExit" title="Exit (Esc)">✕</button><button id="flBtn" title="Floor &amp; walls (1 ticket to change)"><img id="flBtnA" src="img/floor_neon.webp" alt=""><img id="flBtnB" class="off" alt=""><span>FLOOR·WALLS</span></button><div id="tix" role="button" tabindex="0" title="Show ticket"><canvas id="tixIco"></canvas><span id="tixN">0</span></div><div id="vix" role="button" tabindex="0" title="Show Viking ticket" style="display:none"><canvas id="vixIco"></canvas><span id="vixN">0</span></div><div id="tview" aria-hidden="true"><button id="tvX" title="Close (Esc)">✕</button><div id="tvWrap"><canvas id="tvCv"></canvas><div id="tvShine"></div></div><div id="tvCount">🎟 0 TICKETS</div><div id="tvHint">TAP OR ESC TO CLOSE</div></div><button id="bContinue" type="button">CONTINUE<small>5 TICKETS</small></button><div id="over">GAME OVER</div>
@@ -456,8 +460,8 @@ if (document.getElementById('flBtn')) flBtnInit(); else document.addEventListene
 <script src="inventory.js"></script>
 <script src="roomfire.js"></script>
 <script>/* FAST LOAD (t229): register the service worker (its install pre-caches ~7 MB) only after the room is drawing and things settle, so it never competes with the first load */
-if('serviceWorker' in navigator&&location.protocol!=='file:'){(function(){window.__GA_VER=window.__GA_VER||'v258';
-var done=0,want='galactic-arcade-v258';
+if('serviceWorker' in navigator&&location.protocol!=='file:'){(function(){window.__GA_VER=window.__GA_VER||'v259';
+var done=0,want='galactic-arcade-v259';
 var reg=function(){if(done)return;done=1;navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(){
   return caches.keys();}).then(function(ks){var stale=ks.filter(function(k){return k.indexOf('galactic-arcade-v')===0&&k!==want;});
   if(!stale.length)return;return Promise.all(stale.map(function(k){return caches.delete(k);}));

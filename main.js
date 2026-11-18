@@ -586,7 +586,11 @@ let carpetTex = null;
 function currentCarpetTex() { return carpetTex || carpetStub; }
 function ensureCarpetTex() {
   if (carpetTex) return carpetTex;
-  carpetTex = loadPicture(THREE, 'tex/carpet.webp', { onLoad: t => { if (spaceWin && floorMode === 'carpet') spaceWin.dirty(); }, wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping });
+  carpetTex = loadPicture(THREE, 'tex/carpet.webp', { onLoad: t => {
+    if (floorMats.carpet) { floorMats.carpet.map = floorMats.carpet.emissiveMap = t; floorMats.carpet.needsUpdate = true; }
+    bindShopCarpetTex();
+    if (spaceWin && floorMode === 'carpet') spaceWin.dirty();
+  }, wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping });
   carpetTex.colorSpace = THREE.SRGBColorSpace; carpetTex.wrapS = carpetTex.wrapT = THREE.RepeatWrapping;   // seamless tile (edge-cut figures removed): plain repeat, never mirrored (mirroring put copies head to head)
   carpetTex.repeat.set(3, 3); flagTex(carpetTex, THREE);
   if (floorMats.carpet) { floorMats.carpet.map = floorMats.carpet.emissiveMap = carpetTex; floorMats.carpet.needsUpdate = true; }
@@ -597,6 +601,7 @@ function releaseCarpetTex() {
   try { carpetTex.dispose(); } catch (e) {}
   carpetTex = null;
   if (floorMats.carpet) { floorMats.carpet.map = floorMats.carpet.emissiveMap = carpetStub; floorMats.carpet.needsUpdate = true; }
+  bindShopCarpetTex();
 }
 // the carpet covers every walkable floor (Dave: 'when a floor is selected have it cover all floors'): room 1 + hallway (one mesh,
 // UVs in metres so the tile keeps room 1's scale), room 2 (carpet2) and the teleporter white room (carpetW, added in carpetWhite()).
@@ -607,11 +612,59 @@ const carpet = new THREE.Mesh(carpetGeo, new THREE.MeshStandardMaterial({
 carpet.rotation.x = -Math.PI / 2; carpet.position.y = 0.005; carpet.name = 'carpet1'; carpet.visible = false; room.add(carpet);
 const carpet2 = new THREE.Mesh(new THREE.PlaneGeometry(HALF * 2, HALF * 2), carpet.material); carpet2.rotation.x = -Math.PI / 2; carpet2.position.y = 0.005; carpet2.name = 'carpet2'; carpet2.visible = false; room2.add(carpet2);
 let carpetW = null;
+function shopFloorPlane() {
+  if (!tp || !tp.whiteRoom) return null;
+  return tp.whiteRoom.children.find(o => o.isMesh && o.geometry.type === 'PlaneGeometry' && o.rotation.x < -1.5 && Math.abs(o.position.y) < 1e-3) || null;
+}
+// shop carpet used to clone the KTX2 stub before transcode finished; Texture.clone() copies mipmaps at that moment
+// so the shop kept an empty 4x4 compressed map (black on a real GPU, or the white shade showing through).
+function bindShopCarpetTex() {
+  if (!carpetW || !carpetW.userData.carpetMat) return;
+  const src = currentCarpetTex(); if (!src) return;
+  const m = carpetW.userData.carpetMat, prev = m.map;
+  const t = src.clone();
+  if (src.isCompressedTexture) {
+    t.mipmaps = src.mipmaps ? src.mipmaps.slice() : [];
+    t.image = src.image;
+    if (src.format != null) t.format = src.format;
+    if (src.type != null) t.type = src.type;
+    t.minFilter = src.minFilter; t.magFilter = src.magFilter;
+    t.generateMipmaps = false; t.flipY = !!src.flipY;
+  }
+  t.colorSpace = src.colorSpace; t.wrapS = src.wrapS; t.wrapT = src.wrapT;
+  const fl = carpetW.parent, sx = (fl && fl.scale && fl.scale.x) || 1, sy = (fl && fl.scale && fl.scale.y) || 1;
+  t.repeat.set(3 * sx, 3 * sy); t.needsUpdate = true; t._gaReady = src._gaReady;
+  m.map = m.emissiveMap = t; m.needsUpdate = true;
+  if (prev && prev !== t && prev !== src && prev !== carpetStub) { try { prev.dispose(); } catch (e) {} }
+}
+let floorHexW = null, floorBaseW = null;
+function shopNeonFloors() {   // neon in the shop should be the dark hex floor, not the white room shade (Dave: a picked floor covers every room)
+  const fl = shopFloorPlane(); if (!fl) return null;
+  if (!floorBaseW) {
+    floorBaseW = new THREE.Mesh(fl.geometry, new THREE.MeshStandardMaterial({ color: 0x05030a, roughness: 0.3, metalness: 0.6 }));
+    floorBaseW.position.z = 0.002; floorBaseW.name = 'floorBaseW'; fl.add(floorBaseW);
+  }
+  if (!floorHexW) {
+    const hm = floorTop.material.clone();
+    hm.emissiveIntensity = 0.55; hm.opacity = 0.75;   // no live reflector in the shop; a little more self-light so the hex doesn't fall to black
+    floorHexW = new THREE.Mesh(fl.geometry, hm);
+    floorHexW.position.z = 0.006; floorHexW.name = 'floorHexW'; floorHexW.renderOrder = 2; fl.add(floorHexW);
+  }
+  return { floorHexW, floorBaseW };
+}
+function coverShopFloor() {
+  shopNeonFloors();
+  const neonOn = floorMode === 'neon';
+  if (floorHexW) floorHexW.visible = neonOn;
+  if (floorBaseW) floorBaseW.visible = neonOn;
+  const gloss = tp && tp.whiteRoom && tp.whiteRoom.getObjectByName('glossFloor');
+  if (gloss) gloss.visible = false;   // fake white-room reflections would wash out a covered floor
+}
 function carpetWhite() {   // white room floor plane lives in teleport.js (shop.js only scales it); the carpet rides on it as a child so it follows the shop's size
-  if (carpetW || !tp) return carpetW; const fl = tp.whiteRoom.children.find(o => o.isMesh && o.geometry.type === 'PlaneGeometry' && o.rotation.x < -1.5 && Math.abs(o.position.y) < 1e-3); if (!fl) return null;
-  const t = currentCarpetTex().clone(); t.repeat.set(3 * fl.scale.x, 3 * fl.scale.y); t.needsUpdate = true;
-  const m = floorMats.carpet.clone(); m.map = m.emissiveMap = t;
-  carpetW = new THREE.Mesh(fl.geometry, m); carpetW.position.z = 0.005; carpetW.name = 'carpetW'; carpetW.userData.carpetMat = m; carpetW.visible = false; fl.add(carpetW); return carpetW; }
+  if (carpetW || !tp) return carpetW; const fl = shopFloorPlane(); if (!fl) return null;
+  const m = floorMats.carpet.clone();
+  carpetW = new THREE.Mesh(fl.geometry, m); carpetW.position.z = 0.005; carpetW.name = 'carpetW'; carpetW.userData.carpetMat = m; carpetW.visible = false; fl.add(carpetW);
+  bindShopCarpetTex(); return carpetW; }
 // ---------- CHECKERS (black + gold 1 m checkerboard, slight gloss) and LAVA ('floor is lava' with cave-rock paths) ----------
 // both tile by WORLD x/z in the shader, so one material covers room 1 + hallway, room 2 and the white room at the same scale.
 const floorWP = (sh, head) => { sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vFW;').replace('#include <project_vertex>', '#include <project_vertex>\nvFW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -692,6 +745,7 @@ function setFloor(mode) {
   carpet.visible = carpet2.visible = c; floorTop.visible = room2.getObjectByName('floorHex2').visible = !c;   // mirrors/bases are hidden per frame in cullRooms
   const cw = carpetWhite(); if (cw) { cw.visible = c; if (c) cw.material = floorMode === 'carpet' ? cw.userData.carpetMat : floorMats[floorMode]; cw.onBeforeRender = carpet.onBeforeRender; }
   if (c) mirror.visible = floorBase1.visible = room2.userData.mirror.visible = room2.userData.base.visible = false;   // right away (cullRooms keeps them off every frame)
+  coverShopFloor();
   if (spaceWin) spaceWin.dirty();
   try { localStorage.setItem(FLOOR_KEY, floorMode); } catch (e) {}
   return floorMode;
@@ -1331,7 +1385,15 @@ function tickZoom(dt) {
   st.lookT = st.t;   // keep cabinet showcase from fighting the zoom
 }
 function toggleView() { st.fp = !st.fp; }
-function toggleFs() { const d = document; if (!d.fullscreenElement) d.documentElement.requestFullscreen?.().catch(() => {}); else d.exitFullscreen?.(); }
+function toggleFs() { const d = document, el = d.documentElement; if (!(d.fullscreenElement || d.webkitFullscreenElement)) (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el).catch(() => {}); else (d.exitFullscreen || d.webkitExitFullscreen)?.call(d); }
+function syncFsBtn() {
+  const b = document.getElementById('bFs'); if (!b) return;
+  const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  b.style.display = '';   // keep the control visible so you can minimise / exit fullscreen (was hidden in display-mode:fullscreen / standalone)
+  b.classList.toggle('min', on);
+  b.title = on ? 'Exit fullscreen' : 'Fullscreen';
+  b.setAttribute('aria-label', b.title);
+}
 function updateTurn() {
   const el = document.getElementById('turnHint'); if (!el) return;
   const portrait = MOBILE && innerHeight > innerWidth * 1.08;
@@ -1385,7 +1447,9 @@ window.__fsNow = () => { if (MOBILE && !IPAD) goFs(); };   // t876u: chess (re)e
 window.__wantWide = wantWide; window.__orient = orient; window.__updateTurn = updateTurn;
 document.getElementById('bView').onclick = toggleView;
 document.getElementById('bFs').onclick = toggleFs;
-if (matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) document.getElementById('bFs').style.display = 'none';
+syncFsBtn();
+document.addEventListener('fullscreenchange', syncFsBtn);
+document.addEventListener('webkitfullscreenchange', syncFsBtn);
 
 // ---------- post ----------
 // t854u: low tier skips the composer (half-float targets + bloom mip chain were a big part of the cheap-phone GPU crash).

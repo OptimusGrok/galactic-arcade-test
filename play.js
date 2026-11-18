@@ -275,7 +275,7 @@ export function setupPlay(A) {
     if (m.prep) { P.mode = 'prep'; P.t = 0; P.t0 = performance.now(); P.pcam = null; P.cam0 = camera.position.clone(); P.look0 = monkey.position.clone().setY(1.25); m.anim('on', 0); }   // walk-up + headset on first, then zoomIn()
     else zoomIn(m);
     if (P.frame) killFrame(P.frame); P.frame = null;
-    const f = P.frame = document.createElement('iframe'); f.id = 'game'; const ver = window.__GA_VER || 'v258'; const tier = (window.__arcade && window.__arcade.tier && window.__arcade.tier.name) || ''; f.src = m.src + (m.src.indexOf('?') >= 0 ? '&' : '?') + 'ga=' + ver + (tier ? '&tier=' + encodeURIComponent(tier) : ''); f.allow = 'autoplay; fullscreen'; f.title = m.cab.name;
+    const f = P.frame = document.createElement('iframe'); f.id = 'game'; const ver = window.__GA_VER || 'v259'; const tier = (window.__arcade && window.__arcade.tier && window.__arcade.tier.name) || ''; f.src = m.src + (m.src.indexOf('?') >= 0 ? '&' : '?') + 'ga=' + ver + (tier ? '&tier=' + encodeURIComponent(tier) : ''); f.allow = 'autoplay; fullscreen'; f.title = m.cab.name;
     f.addEventListener('load', () => { if (P.frame !== f) return; P.loaded = true; try { f.contentWindow.addEventListener('keydown', ev => { if (TV.open) { ev.stopImmediatePropagation(); ev.preventDefault(); if (ev.code === 'Escape') closeView(); return; } if (ev.code === 'Escape') { ev.stopImmediatePropagation(); ev.preventDefault(); exit('esc'); return; } if (P.sub === 'demo') { ev.stopImmediatePropagation(); ev.preventDefault(); if (/^(Enter|Space|KeyE)$/.test(ev.code) && !ev.repeat) tryPlay(); } }, true); } catch (e) {} }, { once: true });
     P.loaded = false; document.body.appendChild(f);
   }
