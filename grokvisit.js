@@ -991,14 +991,16 @@ export function setupGrokVisit({ scene, tp, play, monkey, camera, st } = {}) {
 
     if (api.state === 'done') {
       // t810u: after a rest in the shop he comes back for another all-machine tour
-      if (playableArcade()) api.doneT += dt;
+      // t930u: tests set __noGrokVisit so a long session does not start a repeat tour
+      if (playableArcade() && !window.__noGrokVisit) api.doneT += dt;
       if (api.doneT >= api.repeatAfter && !busy()) { api.doneT = 0; begin('repeat'); }
       return;
     }
     if (api.state === 'idle') {
       // 30s after the player is in the arcade. The start screen and the entry beam do not count.
       // A menu or game at the due moment waits; it does not cancel the visit or spawn him early.
-      if (!api.visited && playableArcade()) {
+      // t930u: __noGrokVisit (lib.js default) skips the auto tour; skipTo / begin still work when a test asks
+      if (!window.__noGrokVisit && !api.visited && playableArcade()) {
         api.entryT += dt;
         if (api.entryT >= APPEAR_AFTER) api.due = true;
         if (api.due && !busy()) {

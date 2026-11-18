@@ -97,7 +97,8 @@ export function startGhostDemo(cab) {
     try { if (f.contentWindow && f.contentWindow.__gaRelease) f.contentWindow.__gaRelease(); } catch (e) {}
     try { f.src = 'about:blank'; } catch (e) {}
     try { f.remove(); } catch (e) {}
-    d.ready = false; d.running = false; };
+    d.ready = false; d.running = false;
+    d.w = d.gh = d.srcCv = null; };   // t930u: drop the contentWindow so a detached demo can be GC'd
 
   // t883u: keep the painted attract on the CRT until the iframe has drawn a frame
   f.addEventListener('load', () => {

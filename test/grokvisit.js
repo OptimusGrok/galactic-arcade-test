@@ -3,7 +3,7 @@ const { open } = require('./lib');
 const S = '/workspace/galactic-shop/shots/';
 const fs = require('fs');
 (async () => {
-  const { page, close } = await open({ phone: true, w: 390, h: 844 });
+  const { page, close } = await open({ grokVisit: true, phone: true, w: 390, h: 844 });
   let ok = true; const chk = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) ok = false; };
   fs.mkdirSync(S, { recursive: true });
 

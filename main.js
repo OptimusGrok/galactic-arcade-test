@@ -1906,12 +1906,27 @@ function setRoom2Gpu(on) {
   STREAM.room2 = on ? 'on' : 'off';
 }
 let _shopGpuGen = 0;
+// t930u: the mini-golf room stays hidden until the camera nears the stairwell, so its ~200
+// geometries were first uploaded mid-session (looked like a parent-renderer leak). Compile them
+// (and the rest of the visible scene) once, the first time the shop GPU is bound.
+function warmHiddenGpu() {
+  if (warmHiddenGpu.done) return;
+  warmHiddenGpu.done = true;
+  const flipped = [], culled = [];
+  // compile() only links programs; geometries increment on first render, and only if they pass the frustum test.
+  // Unhide + un-cull for this one frame so later-shown rooms (golf basement, Grok visitor, ticket FX, …) are already uploaded.
+  try { scene.traverse(o => { if (o.visible === false) { flipped.push(o); o.visible = true; } if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; } }); } catch (e) {}
+  try { if (composer && usePost) composer.render(); else renderer.render(scene, camera); }
+  catch (e) { try { renderer.render(scene, camera); } catch (e2) {} }
+  for (const o of culled) o.frustumCulled = true;
+  for (const o of flipped) o.visible = false;
+}
 function setShopGpu(on) {
   on = !!on;
   const gen = ++_shopGpuGen;
   if (on) {
     const p = loadShop();
-    const apply = () => { if (gen !== _shopGpuGen) return; try { if (shop && shop.gpu) shop.gpu.set(true); } catch (e) {} STREAM.shop = (shop && shop.gpu && shop.gpu.on) ? 'on' : 'off'; };
+    const apply = () => { if (gen !== _shopGpuGen) return; try { if (shop && shop.gpu) shop.gpu.set(true); } catch (e) {} STREAM.shop = (shop && shop.gpu && shop.gpu.on) ? 'on' : 'off'; try { if (monkey.position.x > WX - 14) warmHiddenGpu(); } catch (e) {} };
     if (shop && shop.gpu) apply();
     else if (p && p.then) p.then(apply).catch(() => {});
   } else {
@@ -2262,7 +2277,7 @@ const opts = setupOpts({ play, kiosk, shield, st, monkey, setFloor, getFloor: ()
 requestAnimationFrame(frame);
 
 // hooks for tests / future art work
-window.__arcade = { powerSave: PS, tier: TIER, mem: () => memSnapshot({ THREE, renderer, scene, composer, extras: { tier: TIER.name, why: TIER.why, gpu: TIER.gpu, post: !!usePost, cabDemos: !!Q.cabDemos, gapAvg: stats.gapAvg, cpuAvg: stats.cpuAvg } }), setTier: name => { if (name !== 'low' && name !== 'mid' && name !== 'high') return TIER; TIER.name = name; TIER.forced = true; persistTier(name); applyQuality(); return TIER; }, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, floorMats, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, skyTowerCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, joyFrom, joyClear, joyFromPad, applyQuestPad, isQuestPad, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, get neonBricks() { return nb; }, nbFade: dt => nbFade(dt), get playerFade() { return PF.k; }, get pfClones() { return PF.clones; }, nbWarm: () => nbWarm(), get randomRoom() { return window.__randomRoom; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow), stream: STREAM };
+window.__arcade = { powerSave: PS, tier: TIER, mem: () => memSnapshot({ THREE, renderer, scene, composer, extras: { tier: TIER.name, why: TIER.why, gpu: TIER.gpu, post: !!usePost, cabDemos: !!Q.cabDemos, gapAvg: stats.gapAvg, cpuAvg: stats.cpuAvg } }), setTier: name => { if (name !== 'low' && name !== 'mid' && name !== 'high') return TIER; TIER.name = name; TIER.forced = true; persistTier(name); applyQuality(); return TIER; }, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, floorMats, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, skyTowerCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, joyFrom, joyClear, joyFromPad, applyQuestPad, isQuestPad, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, get neonBricks() { return nb; }, nbFade: dt => nbFade(dt), get playerFade() { return PF.k; }, get pfClones() { return PF.clones; }, nbWarm: () => nbWarm(), warmHiddenGpu: () => warmHiddenGpu(), get randomRoom() { return window.__randomRoom; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow), stream: STREAM };
 const mp = setupMP({ scene, camera, monkey, makeMonkey, makeAlien, st, play, getTp: () => tp, HALF, Z2, HALL_L, WX: 80 }); window.__arcade.mp = mp;   // multiplayer step 1: public room, 10 players
 // after the first room frames: pull in the shop, then the window scenery, off the critical path
 { const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 1500 }) : setTimeout(f, 200));

@@ -124,7 +124,11 @@ const chk = (c, m, x) => { console.log((c ? 'PASS ' : 'FAIL ') + m + (x !== unde
 
   chk(!after.game && after.chessFr === 0 && after.poolFr === 0, 'no leftover play/chess/pool iframes after the session', { before: before.iframes, after: after.iframes, game: after.game, chessFr: after.chessFr, poolFr: after.poolFr });
   chk(Math.abs(after.meshes - before.meshes) <= 8 && Math.abs(after.geos - before.geos) <= 8, 'scene mesh/geometry counts stay flat', { before: [before.meshes, before.geos], after: [after.meshes, after.geos] });
+  // t930u: hidden golf / off-screen cabinets used to first-upload here (~+200 geos, +24 tex). They are pre-rendered on first shop visit.
+  chk(Math.abs(growth.dRgeo) <= 4 && Math.abs(growth.dRtex) <= 8, 'parent renderer geometry/texture counts stay flat after warmup', growth);
+  chk(growth.dProg != null && growth.dProg <= 40, 'shader program growth stays bounded after warmup', growth);
   // After warmup, JS heap growth over 10 more open/close cycles should stay modest (AudioContexts / WebGL / detached iframes used to add tens of MB).
+  // t930u: r.info geo/tex are flat; JS heap is still ~1.5 MB/cycle (parent retains Strike/Chess iframe JS). Keep the 20 MB cap until that is gone.
   const heap = dCdp != null ? dCdp : dUsed;
   chk(heap != null && heap < 20, 'JS heap growth after warmup stays under 20 MB over 10 Strike+Chess cycles', { heap, dCdp, dUsed });
   chk((after.said || 0) <= 80, 'Grok said-log is capped', { said: after.said });

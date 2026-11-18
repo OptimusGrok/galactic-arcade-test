@@ -249,7 +249,8 @@ export function startStrikeDemo(cab) {
     try { if (f.contentWindow && f.contentWindow.__gaRelease) f.contentWindow.__gaRelease(); } catch (e) {}
     try { f.src = 'about:blank'; } catch (e) {}
     try { f.remove(); } catch (e) {}
-    demo.ready = false; demo.running = false; };
+    demo.ready = false; demo.running = false;
+    demo.w = demo.SK = demo.srcCv = null; };   // t930u: drop the contentWindow so a detached demo can be GC'd
 
   // t883u: keep the painted attract on the CRT until the iframe has drawn a frame (a 4x4 blank looked like a dead screen)
   f.addEventListener('load', () => {
