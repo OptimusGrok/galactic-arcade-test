@@ -1,15 +1,15 @@
-// Room 1 background music: "Neon Nights" (105 BPM, 32-bar seamless loop, 3225600 samples @ 44.1 kHz), decoded with WebAudio and
+// Room 1 background music: "Neon Nights" (105 BPM, 32-bar seamless loop, 1612800 samples @ 22.05 kHz mono)  // t930u: was stereo 44.1 kHz / 3225600, decoded with WebAudio and
 // looped on exact sample points (encoder padding trimmed). Plays in room 1, the hallway and room 2 without a break (t244), while a cabinet
 // is zoomed in / played, on the start screen, when the tab is hidden, or when MUSIC is off in Options ('neonarcade.music' = '0').
 // t911u: keep only the currently playing decoded AudioBuffer. When the room track is fully stopped (cabinet loop, a game,
 // start screen, hidden tab, MUSIC off) for a short hold, drop the decoded buffer and decode again on demand from a re-fetch.
 // t930u: drop the compressed ArrayBuffer as soon as decode finishes (saves ~1 MB); a later load re-fetches (HTTP cache).
 (function () {
-  var N = 3225600, SR = 44100, VOL = 0.42, KEY = 'neonarcade.music', HOLD = 1000;
+  var N = 1612800, SR = 22050, VOL = 0.42, KEY = 'neonarcade.music', HOLD = 1000;
   var M = window.__music = { loaded: false, playing: false, gain: 0, target: 0, on: true, loopStart: 0, loopEnd: 0, len: 0, src: '', hasBuf: false, rawBytes: 0, freed: 0, decodes: 0 };
   try { M.on = localStorage.getItem(KEY) !== '0'; } catch (e) {}
   var ac = null, g = null, node = null, loading = false, buf = null, silentSince = 0;
-  function pickSrc() { var a = document.createElement('audio'); return a.canPlayType('audio/ogg; codecs="opus"') ? 'audio/neon_nights.ogg' : 'audio/neon_nights.m4a'; }
+  function pickSrc() { return 'audio/neon_nights.m4a'; }   // t930u: one format (AAC, Safari-safe); the stereo opus copy is gone
   function ctx() { if (!ac) { ac = window.__unlockAC || new (window.AudioContext || window.webkitAudioContext)(); window.__unlockAC = ac; } return ac; }
   function dropDecoded() {
     if (node) { try { node.stop(); } catch (e) {} try { node.disconnect(); } catch (e) {} node = null; }
@@ -25,8 +25,13 @@
     return new Promise(function (ok, no) { ctx().decodeAudioData(ab, ok, no); });
   }
   function prepare(b) {
-    var extra = b.length - Math.round(N * b.sampleRate / SR), lead = extra >= 2112 ? 2112 : extra >= 1024 ? 1024 : 0;
-    M.len = b.length; M.loopStart = lead / b.sampleRate; M.loopEnd = M.loopStart + N / SR;
+    // Encoder padding is a short prefix. Scale the classic 1024/2112-sample delays to the
+    // decoded rate, or if the leftover is a short pad of any size, treat all of it as lead
+    // so a 22.05 kHz file decoded at 48 kHz still loops on the 32-bar boundary.
+    var expect = Math.round(N * b.sampleRate / SR), extra = b.length - expect, lead = 0, scale = b.sampleRate / SR;
+    [2112, 1024].forEach(function (n) { var s = Math.round(n * scale); if (Math.abs(extra - s) <= 8) lead = s; });
+    if (!lead && extra > 0 && extra < b.sampleRate * 0.25) lead = extra;
+    M.len = b.length; M.sr = b.sampleRate; M.ch = b.numberOfChannels; M.loopStart = lead / b.sampleRate; M.loopEnd = M.loopStart + N / SR;
     buf = b; M.hasBuf = true; M.decodes = (M.decodes || 0) + 1;
   }
   function load() {
