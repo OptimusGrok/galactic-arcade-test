@@ -1916,27 +1916,128 @@ function setRoom2Gpu(on) {
   STREAM.room2 = on ? 'on' : 'off';
 }
 let _shopGpuGen = 0;
-// t930u: the mini-golf room stays hidden until the camera nears the stairwell, so its ~200
-// geometries were first uploaded mid-session (looked like a parent-renderer leak). Compile them
-// (and the rest of the visible scene) once, the first time the shop GPU is bound.
-function warmHiddenGpu() {
-  if (warmHiddenGpu.done) return;
-  warmHiddenGpu.done = true;
-  const flipped = [], culled = [];
-  // compile() only links programs; geometries increment on first render, and only if they pass the frustum test.
-  // Unhide + un-cull for this one frame so later-shown rooms (golf basement, Grok visitor, ticket FX, …) are already uploaded.
-  try { scene.traverse(o => { if (o.visible === false) { flipped.push(o); o.visible = true; } if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; } }); } catch (e) {}
-  try { if (composer && usePost) composer.render(); else renderer.render(scene, camera); }
-  catch (e) { try { renderer.render(scene, camera); } catch (e2) {} }
-  for (const o of culled) o.frustumCulled = true;
-  for (const o of flipped) o.visible = false;
+// t930u / t938u: the mini-golf room stays hidden until the camera nears the stairwell, so its
+// ~200 geometries were first uploaded mid-session (looked like a parent-renderer leak). v256
+// compiled them in one synchronous composer.render() the first time the player arrived in the
+// shop (setShopGpu while x > WX-14), which stalled the beam cut (~2 s on a phone, much more
+// in SwiftShader). v257 spreads that upload + shop texture/shader work across idle / approach
+// frames, off-screen, so the beam animation can start immediately. Shop textures still evict
+// after leaving; compiled programs and golf geos stay.
+const _hidWarm = { done: false, started: false, items: null, i: 0, ms: 0, slices: 0, rt: null, cam: null };
+function queueShopWarmItems() {
+  if (!_hidWarm.items) return;
+  const shopRoot = scene.getObjectByName('prizeShop');
+  if (!shopRoot) return;
+  const seen = new Set(_hidWarm.items.map(it => it.o));
+  const add = (o, pri) => {
+    if (!o || seen.has(o)) return;
+    seen.add(o);
+    _hidWarm.items.push({ o, pri, vis: o.visible, culled: o.frustumCulled });
+  };
+  add(shopRoot, 0);
+  for (const c of shopRoot.children) add(c, 0);
+  if (tp && tp.whiteRoom) add(tp.whiteRoom, 0);
+  if (_hidWarm.done && _hidWarm.i < _hidWarm.items.length) _hidWarm.done = false;
 }
+function startWarmHiddenGpu() {
+  const startGone = !!(window.__skipStart || (window.__start && window.__start.dismissed) || !document.getElementById('start'));
+  if (!startGone && !window.__skipStart) return;
+  if (_hidWarm.started) { queueShopWarmItems(); return; }
+  _hidWarm.started = true;
+  const items = [], seen = new Set();
+  const add = (o, pri) => {
+    if (!o || seen.has(o)) return;
+    seen.add(o);
+    items.push({ o, pri, vis: o.visible, culled: o.frustumCulled });
+  };
+  try {
+    const shopRoot = scene.getObjectByName('prizeShop');
+    if (shopRoot) {
+      add(shopRoot, 0);
+      for (const c of shopRoot.children) add(c, 0);
+    }
+    if (tp && tp.whiteRoom) add(tp.whiteRoom, 0);
+    add(scene.getObjectByName('golfStairs'), 1);
+    add(scene.getObjectByName('golfRoom'), 1);
+    add(scene.getObjectByName('golfSign'), 1);
+    scene.traverse(o => {
+      if (seen.has(o) || o === scene) return;
+      if (o.visible === false && (o.parent === scene || (o.isGroup && o.children.length > 2))) add(o, 2);
+    });
+  } catch (e) {}
+  items.sort((a, b) => a.pri - b.pri);
+  _hidWarm.items = items;
+}
+function tickWarmHiddenGpu(budget) {
+  if (_hidWarm.done) return true;
+  if (!_hidWarm.started) return false;
+  if (!_hidWarm.items) return false;
+  budget = Math.max(2, budget || 6);
+  if (!_hidWarm.rt) {
+    try {
+      _hidWarm.rt = new THREE.WebGLRenderTarget(64, 64, { depthBuffer: true, stencilBuffer: false });
+      _hidWarm.cam = camera.clone();
+    } catch (e) { _hidWarm.done = true; return true; }
+  }
+  const t0 = performance.now();
+  const prevRT = renderer.getRenderTarget();
+  const items = _hidWarm.items;
+  while (_hidWarm.i < items.length && performance.now() - t0 < budget) {
+    const it = items[_hidWarm.i++];
+    const o = it.o;
+    if (!o) continue;
+    // Shop murals only upload once their maps are bound (after setShopGpu(true)).
+    // Defer those items; keep warming golf / other hidden rooms in the meantime.
+    if (it.pri === 0 && !(shop && shop.gpu && shop.gpu.on)) { (_hidWarm.defer || (_hidWarm.defer = [])).push(it); continue; }
+    const flipped = [], culled = [];
+    try {
+      const wasVis = o.visible;
+      o.visible = true;
+      o.traverse(c => {
+        if (c.visible === false) { flipped.push(c); c.visible = true; }
+        if (c.frustumCulled) { culled.push(c); c.frustumCulled = false; }
+      });
+      const box = new THREE.Box3();
+      try { box.setFromObject(o); } catch (e) { box.makeEmpty(); }
+      const cam = _hidWarm.cam;
+      if (!box.isEmpty()) {
+        const c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3());
+        const r = Math.max(s.x, s.y, s.z, 2) * 1.4;
+        cam.position.set(c.x, c.y + r * 0.4, c.z + r);
+        cam.lookAt(c);
+        cam.updateMatrixWorld(true);
+      } else {
+        cam.position.copy(camera.position); cam.quaternion.copy(camera.quaternion); cam.updateMatrixWorld(true);
+      }
+      renderer.setRenderTarget(_hidWarm.rt);
+      try { if (typeof compileForPlay === 'function') compileForPlay(o, cam, scene, true); } catch (e) {}
+      try { renderer.render(o, cam); } catch (e) { try { renderer.render(scene, cam); } catch (e2) {} }
+      o.visible = wasVis;
+      for (const c of culled) c.frustumCulled = true;
+      for (const c of flipped) c.visible = false;
+    } catch (e) {}
+    _hidWarm.slices++;
+  }
+  try { renderer.setRenderTarget(prevRT); } catch (e) {}
+  _hidWarm.ms += performance.now() - t0;
+  if (_hidWarm.i >= items.length) {
+    if (_hidWarm.defer && _hidWarm.defer.length && shop && shop.gpu && shop.gpu.on) {
+      items.push.apply(items, _hidWarm.defer); _hidWarm.defer = [];
+    } else if (!(_hidWarm.defer && _hidWarm.defer.length)) {
+      _hidWarm.done = true;
+      try { if (_hidWarm.rt) { _hidWarm.rt.dispose(); _hidWarm.rt = null; } } catch (e) {}
+    }
+  }
+  return _hidWarm.done;
+}
+function warmHiddenGpu() { startWarmHiddenGpu(); }
+Object.defineProperty(warmHiddenGpu, 'done', { get: () => !!_hidWarm.done, set: v => { if (v) _hidWarm.done = true; } });
 function setShopGpu(on) {
   on = !!on;
   const gen = ++_shopGpuGen;
   if (on) {
     const p = loadShop();
-    const apply = () => { if (gen !== _shopGpuGen) return; try { if (shop && shop.gpu) shop.gpu.set(true); } catch (e) {} STREAM.shop = (shop && shop.gpu && shop.gpu.on) ? 'on' : 'off'; try { if (monkey.position.x > WX - 14) warmHiddenGpu(); } catch (e) {} };
+    const apply = () => { if (gen !== _shopGpuGen) return; try { if (shop && shop.gpu) shop.gpu.set(true); } catch (e) {} STREAM.shop = (shop && shop.gpu && shop.gpu.on) ? 'on' : 'off'; try { startWarmHiddenGpu(); } catch (e) {} };
     if (shop && shop.gpu) apply();
     else if (p && p.then) p.then(apply).catch(() => {});
   } else {
@@ -1967,9 +2068,15 @@ const _streamT = { shop: 0, room2: 0 };
 function tickRoomStream(now) {
   const w = streamWant();
   STREAM.wantShop = w.wantShop; STREAM.wantRoom2 = w.wantRoom2;
-  if (w.wantShop) { _streamT.shop = 0; setShopGpu(true); }
+  if (w.wantShop) { _streamT.shop = 0; setShopGpu(true); try { startWarmHiddenGpu(); } catch (e) {} }
   else if (w.evictShop) { if (!_streamT.shop) _streamT.shop = now; else if (now - _streamT.shop >= streamHold('tex')) setShopGpu(false); }
   else _streamT.shop = 0;
+  // t938u/t939u: first-beam hitch was first-time shop/hidden GPU work at the cut. After PLAY (or a few
+  // skipStart frames), warm it in the background; shop textures stay evicted until approach.
+  try {
+    const startGone = !!(window.__skipStart || (window.__start && window.__start.dismissed) || !document.getElementById('start'));
+    if (startGone && shop && stats.frames > 30) startWarmHiddenGpu();
+  } catch (e) {}
   if (w.wantRoom2) { _streamT.room2 = 0; setRoom2Gpu(true); }
   else if (w.evictRoom2) { if (!_streamT.room2) _streamT.room2 = now; else if (now - _streamT.room2 >= streamHold('tex')) setRoom2Gpu(false); }
   else _streamT.room2 = 0;
@@ -2086,6 +2193,7 @@ function frame(now) {
     cullRooms(_frus);
     if (!nbHold) {   // Neon Bricks fullscreen: room is hidden, skip cabinet attract work
     try { tickRoomStream(now); } catch (e) {}
+    try { tickWarmHiddenGpu((tp && tp.locked) ? 10 : 6); } catch (e) {}
     const vis = c => { const sc = c.userData.centre, maxD = PS.on ? PS.cabFar : 18; return (_frus.intersectsSphere(_sph.set(_v.copy(sc).setY(1.2), 1.4)) && camera.position.distanceTo(sc) < maxD) || !!window.__forceDemo; };
     const dts = Math.min(gap / 1000, 0.1);
     if (draw) { tickStrikeDemo(demo, dts, vis(strikeCab)); tickGhostDemo(ghostDemo, dts, vis(ghostCab)); }
@@ -2287,7 +2395,7 @@ const opts = setupOpts({ play, kiosk, shield, st, monkey, setFloor, getFloor: ()
 requestAnimationFrame(frame);
 
 // hooks for tests / future art work
-window.__arcade = { powerSave: PS, tier: TIER, mem: () => memSnapshot({ THREE, renderer, scene, composer, extras: { tier: TIER.name, why: TIER.why, gpu: TIER.gpu, post: !!usePost, cabDemos: !!Q.cabDemos, gapAvg: stats.gapAvg, cpuAvg: stats.cpuAvg } }), setTier: name => { if (name !== 'low' && name !== 'mid' && name !== 'high') return TIER; TIER.name = name; TIER.forced = true; persistTier(name); applyQuality(); return TIER; }, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, floorMats, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, skyTowerCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, joyFrom, joyClear, joyFromPad, applyQuestPad, isQuestPad, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, get neonBricks() { return nb; }, nbFade: dt => nbFade(dt), get playerFade() { return PF.k; }, get pfClones() { return PF.clones; }, nbWarm: () => nbWarm(), warmHiddenGpu: () => warmHiddenGpu(), get randomRoom() { return window.__randomRoom; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow), stream: STREAM };
+window.__arcade = { powerSave: PS, tier: TIER, mem: () => memSnapshot({ THREE, renderer, scene, composer, extras: { tier: TIER.name, why: TIER.why, gpu: TIER.gpu, post: !!usePost, cabDemos: !!Q.cabDemos, gapAvg: stats.gapAvg, cpuAvg: stats.cpuAvg } }), setTier: name => { if (name !== 'low' && name !== 'mid' && name !== 'high') return TIER; TIER.name = name; TIER.forced = true; persistTier(name); applyQuality(); return TIER; }, animateMonkey: dt => animateMonkey(dt), get window() { return windowMode; }, setWindow, get jumping() { return !!st.jump; }, canJump, LAVA, lavaRespawnPoint, get spaceWin() { return spaceWin; }, get kiosk() { return kiosk; }, setFloor, get floor() { return floorMode; }, floorMats, setWalls, get walls() { return wallsMode; }, wallMat, carpet, mirror, shield, room, room2, Z2, hall, DOOR_W, DOOR_H, HALL_L, berserkerCab, monkeyCab, orcCab, cyberCab, novaCab, blasterCab, pipCab, clawCab, bbCab, rockfallCab, skyTowerCab, roadsterCab, dsCab, play, get paused() { return paused; }, simPause: arcadePause, flyCfg: FLY, jetpackOn: jetpackEquipped, wantWide, joyFrom, joyClear, joyFromPad, applyQuestPad, isQuestPad, setDist, loadZoom, saveZoom, defaultDist, zoomHold, tickZoom, zoom: { key: ZOOM_KEY, min: DIST_MIN, max: DIST_MAX, wide: DIST_WIDE, portrait: DIST_PORTRAIT, holdT: ZOOM_HOLD_T }, THREE, scene, camera, renderer, monkey, makeMonkey, makeAlien, setChar: setPlayerChar, tickBot, cabinets, strikeCab, ghostCab, featured, demo, ghostDemo, playables, blockers, st, stats, step, keys, get nearCab() { return nearCab; }, get neonBricks() { return nb; }, nbFade: dt => nbFade(dt), get playerFade() { return PF.k; }, get pfClones() { return PF.clones; }, nbWarm: () => nbWarm(), warmHiddenGpu: () => warmHiddenGpu(), get warmHidden() { return { done: _hidWarm.done, started: _hidWarm.started, i: _hidWarm.i, n: _hidWarm.items ? _hidWarm.items.length : 0, ms: +_hidWarm.ms.toFixed(1), slices: _hidWarm.slices }; }, get randomRoom() { return window.__randomRoom; }, setArt: (i, part, tex, glow) => cabinets[i].userData.setArt(part, tex, glow), stream: STREAM };
 const mp = setupMP({ scene, camera, monkey, makeMonkey, makeAlien, st, play, getTp: () => tp, HALF, Z2, HALL_L, WX: 80 }); window.__arcade.mp = mp;   // multiplayer step 1: public room, 10 players
 // after the first room frames: pull in the shop, then the window scenery, off the critical path
 { const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 1500 }) : setTimeout(f, 200));
