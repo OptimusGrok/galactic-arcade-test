@@ -73,6 +73,13 @@ export function setupTeleport({ scene, monkey, st, HALF, H, Z2 }) {
   // ---- monkey clipping plane (feet-up dissolve / reassembly) ----
   const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 100); let clipOn = false;
   function clip() { if (clipOn) return; clipOn = true; monkey.traverse(o => { if (o.material) for (const m of [].concat(o.material)) { m.clippingPlanes = [plane]; m.needsUpdate = true; } }); }
+  // t940u: compile the remat clip-plane programs under the start screen so first PLAY does not hitch on them.
+  function warmRemat(renderFn) {
+    clip();
+    const nx = plane.normal.x, ny = plane.normal.y, nz = plane.normal.z, c = plane.constant;
+    plane.normal.set(0, -1, 0); plane.constant = 1.0;
+    try { if (typeof renderFn === 'function') renderFn(); } finally { plane.normal.set(nx, ny, nz); plane.constant = c; }
+  }
   // ---- sound (WebAudio; mute.js gates every destination) ----
   function zap(up, vol) { try { if (window.__muted || (window.__mute && window.__mute.on)) return; const ac = window.__unlockAC || (zap.ac ||= new (window.AudioContext || window.webkitAudioContext)()); const t = ac.currentTime;
     const o = ac.createOscillator(), o2 = ac.createOscillator(), gg = ac.createGain(); o.type = 'sawtooth'; o2.type = 'sine';
@@ -101,7 +108,7 @@ export function setupTeleport({ scene, monkey, st, HALF, H, Z2 }) {
   const btn = document.createElement('button'); btn.id = 'tpBtn'; document.body.appendChild(btn);
   const menu = { classList: { toggle() {}, remove() {} } };   // t236: WARP TO menu removed (Dave: shop and back only)
   const fl = document.createElement('div'); fl.id = 'tpFl'; document.body.appendChild(fl);
-  const api = { where: 1, state: 'idle', t: 0, near: 0, pads, plane, whiteRoom: W, PAD1, PAD2, R, get locked() { return api.state !== 'idle'; }, go, dest: null, DEST, ISLE, ROOM2, fxAt };
+  const api = { where: 1, state: 'idle', t: 0, near: 0, pads, plane, whiteRoom: W, PAD1, PAD2, R, get locked() { return api.state !== 'idle'; }, go, dest: null, DEST, ISLE, ROOM2, fxAt, warmRemat };
   // back from the shop (Dave t220u 'when the player returns from the shop to the arcade have this view'): on the pad, facing into room 1,
   // camera low + close straight behind him. Pure st values, so the follow camera keeps it until the player moves or drags.
   api.ARRIVE = { face: 0.70, pitch: 0.18, dist: 2.6 };   // tuned in Playwright (phone) against ref/shop_return_view_t220.jpg
