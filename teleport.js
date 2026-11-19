@@ -119,7 +119,7 @@ export function setupTeleport({ scene, monkey, st, HALF, H, Z2 }) {
   btn.addEventListener('pointerup', e => { stop(e); go(); }); btn.addEventListener('click', stop);
   if (0) for (const b of []) { b.addEventListener('pointerdown', stop); b.addEventListener('touchstart', stop, { passive: false }); b.addEventListener('click', stop); b.addEventListener('pointerup', e => { stop(e); go(b.dataset.d); }); }
   // go(): from room 1 -> 'shop' (default) | 'room2' | 'island'; from the shop always back to the room-1 pad ('arcade')
-  function go(dest) { if (api.state !== 'idle') return; api.dest = api.where === 2 ? 'arcade' : 'shop'; api.state = 'walk'; api.t = 0; btn.classList.remove('on'); menu.classList.remove('on'); }
+  function go(dest) { if (api.state !== 'idle') return; api.dest = api.where === 2 ? 'arcade' : 'shop'; api.state = 'walk'; api.t = 0; api._beamT0 = performance.now(); btn.classList.remove('on'); menu.classList.remove('on'); }
   // other players' beams (mp.js): swirl + sparkles where they stand; out = beaming away, else arriving
   function fxAt(x, z, out) { swirlAt(x, z, out ? 2.8 : 2.0); for (let i = 0; i < 3; i++) emit(10, 2, 0.05, x, z); }
   // t282u START BEAM-IN (Dave: 'teleport in at the start of the game but not on a pad'): a free-standing light column + the pad's
@@ -133,7 +133,7 @@ export function setupTeleport({ scene, monkey, st, HALF, H, Z2 }) {
   function colStep(dt) { for (const c of cols) { if (!c.busy) continue; c.t += dt; const u = c.t / c.life; if (u >= 1) { c.busy = false; c.m.visible = false; continue; }
     c.m.material.opacity = Math.min(1, u * 6) * (1 - u) * 0.75 * DB * (0.85 + 0.15 * Math.sin(c.t * 40)); const w = 1 - u * 0.5; c.m.scale.set(w, 2.1, w); } }
   function beamIn(x, z) { if (api.state !== 'idle') return false; monkey.position.set(x, 0, z); st.vel.set(0, 0, 0); st.speed = 0; st.camInit = false;
-    clip(); plane.normal.set(0, -1, 0); plane.constant = -0.05; arrPad = null; api.beaming = true; api.state = 'remat'; api.t = 0; api.beamIns = (api.beamIns || 0) + 1;
+    clip(); plane.normal.set(0, -1, 0); plane.constant = -0.05; arrPad = null; api.beaming = true; api.state = 'remat'; api.t = 0; api._beamT0 = api._beamT0 || performance.now(); api.beamIns = (api.beamIns || 0) + 1;
     beamAt(x, z, 1.9); zapIn(); zap(false, 0.05); return true; }
   Object.assign(api, { beamIn, beamAt, beaming: false });
   // t290u start-screen preview beam (player.js builds TP.fx in its own scene; patched once from here, player.js untouched):
@@ -176,7 +176,7 @@ export function setupTeleport({ scene, monkey, st, HALF, H, Z2 }) {
         if (T >= D) { fl.style.opacity = '0'; api.cut = 0; api.state = 'remat'; api.t = 0; zapIn(); zap(false, 0.05); } }
       else if (api.state === 'remat') { const D = 1.5, f = Math.min(1, T / D), h = -0.05 + f * (MH + 0.1);
         plane.normal.set(0, -1, 0); plane.constant = h; if (arrPad) power(arrPad, Math.min(1, (D + 0.4 - T) * 2), T); if (f < 1) { emit(Math.round(dt * 240), 1, h, mp.x, mp.z); emit(Math.round(dt * 50), 2, 0.05, mp.x, mp.z); }
-        if (T >= D + 0.4) { plane.normal.set(0, 1, 0); plane.constant = 100; if (arrPad) power(arrPad, 0, 0); api.state = 'idle'; api.t = 0; if (api.beaming) api.beaming = false; else api.trips = (api.trips || 0) + 1; } }
+        if (T >= D + 0.4) { plane.normal.set(0, 1, 0); plane.constant = 100; if (arrPad) power(arrPad, 0, 0); if (api._beamT0) { api.lastBeamMs = Math.round(performance.now() - api._beamT0); api._beamT0 = 0; } api.state = 'idle'; api.t = 0; if (api.beaming) api.beaming = false; else api.trips = (api.trips || 0) + 1; } }
     }
     swirlStep(dt); colStep(dt);
     // pixels

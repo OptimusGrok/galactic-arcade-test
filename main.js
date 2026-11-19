@@ -2328,6 +2328,7 @@ function frame(now) {
   const cpu = performance.now() - t0;
   if (DEV.badges) for (const b of DEV.badges) if (b.visible !== !!DEV.numbers) b.visible = !!DEV.numbers;
   stats.frames++; stats.cpu = cpu; stats.cpuAvg += (cpu - stats.cpuAvg) * 0.05; stats.gapAvg += (gap - stats.gapAvg) * 0.05; if (!(stats.cpuMax > cpu)) stats.cpuMax = cpu; if (!(stats.gapMax > gap)) stats.gapMax = gap;
+  try { if (window.__gaDebug) window.__gaDebug.frame(gap); } catch (e) {}
   if (!window.__noAdapt) {
     if (stats.gapAvg > 24) { if (++slow > 90 && dpr > 0.75) { dpr = Math.max(0.75, dpr - 0.25); resize(); slow = 0; } } else slow = 0;
     if (!PS.on && TIER.name === 'high' && stats.gapAvg < 14) { if (++fast > 400 && dpr < Math.min(devicePixelRatio || 1, Q.dpr)) { dpr += 0.25; resize(); fast = 0; } } else fast = 0;
@@ -2512,4 +2513,7 @@ const mp = setupMP({ scene, camera, monkey, makeMonkey, makeAlien, st, play, get
 // after the first room frames: pull in the shop, then the window scenery, off the critical path
 { const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 1500 }) : setTimeout(f, 200));
   const t = setInterval(() => { if (stats.frames < 2) return; clearInterval(t); idle(() => { loadShop(); idle(() => loadWindows()); }); }, 100);
+if (window.__GA_TEST || String(window.__GA_VER || '').indexOf('test-') === 0) {
+  import('./debug.js').then(m => { try { m.installDebug(); } catch (e) {} }).catch(() => {});
+}
   window.__arcade.shopReady = { then: (a, b) => loadShop().then(a, b) }; window.__arcade.loadShop = loadShop; window.__arcade.windowsReady = { then: (a, b) => loadWindows().then(a, b) }; }   // AUTOSAVE: restore bought prizes + held plush from this device on load (shop.js reads neonarcade.prizes / .held)

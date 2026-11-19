@@ -99,6 +99,7 @@ export function setupOpts({ play, kiosk, shield, st, monkey, setFloor, getFloor,
     roomSel(); roomNote(false);
     $('opMute').querySelector('span').textContent = window.__mute && window.__mute.on ? 'ON' : 'OFF'; $('opMute').classList.toggle('sel', !!(window.__mute && window.__mute.on));
     if ($('opCool') && window.__powerSave) { $('opCool').querySelector('span').textContent = window.__powerSave.on ? 'ON' : 'OFF'; $('opCool').classList.toggle('sel', !!window.__powerSave.on); }
+    try { if (window.__gaDebug) window.__gaDebug.syncButtons(); } catch (e) {}
     slots.querySelectorAll('.opSl').forEach(r => { const s = read(r.dataset.i);
       r.querySelector('.opSs').textContent = s ? `${fmt(s.at)} · 🎟${s.tickets} · ⚔${s.viking || 0} · $${s.cash ? s.cash.bal : 5} · ${s.room}` : 'EMPTY';
       r.classList.toggle('full', !!s); r.querySelector('.sv').disabled = g; r.querySelector('.ld').disabled = g || !s; r.querySelector('.dl').disabled = !s; }); }
